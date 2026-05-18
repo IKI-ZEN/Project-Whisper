@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aether-Lite Playground</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0c0c0f;
+      --surface:  #141418;
+      --border:   #252530;
+      --muted:    #4a4a60;
+      --text:     #d8d8e8;
+      --accent:   #7c3aed;
+      --accent2:  #a78bfa;
+      --green:    #34d399;
+      --red:      #f87171;
+      --radius:   8px;
+      --mono:     "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--text);
+      height: 100dvh; display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 20px; height: 52px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 15px; font-weight: 600; color: var(--accent2); letter-spacing: 0.03em; }
+    .pill { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: #7c3aed22; color: var(--accent2); font-weight: 500; }
+    .tabs { display: flex; gap: 2px; margin-left: auto; }
+    .tab {
+      font-size: 12px; padding: 5px 14px; border-radius: var(--radius);
+      background: none; border: 1px solid transparent;
+      color: var(--muted); cursor: pointer; transition: all 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* ── Panels ── */
+    .panels { flex: 1; display: none; overflow: hidden; }
+    .panels.active { display: flex; }
+
+    /* ── Vibe Builder panel ── */
+    #panel-vibe { gap: 0; }
+    .vibe-left {
+      width: 380px; flex-shrink: 0;
+      background: var(--surface); border-right: 1px solid var(--border);
+      padding: 20px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .vibe-right { flex: 1; display: flex; flex-direction: column; }
+
+    /* ── Sandbox Chat panel ── */
+    #panel-chat { gap: 0; }
+    .chat-sidebar {
+      width: 280px; flex-shrink: 0;
+      background: var(--surface); border-right: 1px solid var(--border);
+      padding: 16px; display: flex; flex-direction: column; gap: 12px;
+      overflow-y: auto;
+    }
+    .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #messages {
+      flex: 1; overflow-y: auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .msg { max-width: 78%; padding: 10px 14px; border-radius: var(--radius); font-size: 13.5px; line-height: 1.55; }
+    .msg.user      { align-self: flex-end;   background: #7c3aed28; border: 1px solid #7c3aed44; }
+    .msg.assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); }
+    .msg.system    { align-self: center; color: var(--muted); font-size: 12px; font-style: italic; border: none; }
+    .msg.error     { align-self: center; color: var(--red); font-size: 12px; }
+    .typing        { opacity: 0.5; }
+    .chat-input-row { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .chat-input-row textarea { flex: 1; resize: none; }
+
+    /* ── Workbench panel ── */
+    #panel-bench { display: none; flex-direction: column; gap: 0; }
+    #panel-bench.active { display: flex; }
+    .bench-layout { display: flex; flex: 1; overflow: hidden; gap: 0; }
+    .bench-sidebar {
+      width: 200px; flex-shrink: 0;
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    .bench-nav button {
+      width: 100%; text-align: left; padding: 10px 16px;
+      background: none; border: none; color: var(--muted);
+      font-size: 13px; cursor: pointer; border-left: 3px solid transparent;
+    }
+    .bench-nav button.active, .bench-nav button:hover { color: var(--text); background: var(--bg); }
+    .bench-nav button.active { border-left-color: var(--accent); }
+    .bench-pane { flex: 1; display: none; flex-direction: column; padding: 20px; gap: 12px; overflow-y: auto; }
+    .bench-pane.active { display: flex; }
+
+    /* ── Shared form elements ── */
+    label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    input, textarea, select {
+      width: 100%; padding: 8px 10px;
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: var(--radius);
+      font-size: 13px; font-family: inherit; outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 72px; }
+    textarea.mono { font-family: var(--mono); font-size: 12px; }
+    select option { background: var(--surface); }
+
+    button {
+      padding: 8px 16px; border-radius: var(--radius);
+      background: var(--accent); color: #fff; border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    button:hover:not(:disabled) { background: #6d28d9; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.outline { background: none; border: 1px solid var(--border); color: var(--text); }
+    button.outline:hover:not(:disabled) { border-color: var(--accent2); color: var(--accent2); background: none; }
+    button.danger { background: #7f1d1d22; border: 1px solid var(--red); color: var(--red); }
+    button.full { width: 100%; }
+
+    /* ── Output areas ── */
+    .output {
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px;
+      font-family: var(--mono); font-size: 12px; line-height: 1.6;
+      overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+      min-height: 120px;
+    }
+    .output.img-out { display: flex; align-items: center; justify-content: center; min-height: 200px; }
+    .output.img-out img { max-width: 100%; max-height: 400px; border-radius: var(--radius); }
+
+    /* ── Misc ── */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .row   { display: flex; gap: 8px; align-items: flex-end; }
+    .row > * { flex: 1; }
+    hr { border: none; border-top: 1px solid var(--border); }
+    .sandbox-meta {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 12px;
+      font-size: 11px; color: var(--muted); font-family: var(--mono);
+      word-break: break-all;
+    }
+    .badge-model {
+      display: inline-block; font-size: 10px; padding: 2px 7px;
+      border-radius: 99px; background: #22234a; color: var(--accent2);
+      font-family: var(--mono);
+    }
+    .status { font-size: 12px; padding: 6px 10px; border-radius: var(--radius); }
+    .status.ok  { background: #052e1a; color: var(--green); }
+    .status.err { background: #2e0505; color: var(--red);   }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Aether-Lite</h1>
+  <span class="pill">Playground</span>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('vibe')">Vibe Builder</button>
+    <button class="tab" onclick="switchTab('chat')">Sandbox Chat</button>
+    <button class="tab" onclick="switchTab('bench')">AI Workbench</button>
+  </div>
+</header>
+
+<!-- ── Vibe Builder ── -->
+<div id="panel-vibe" class="panels active" style="display:flex">
+  <div class="vibe-left">
+    <div class="field">
+      <label>Describe your app</label>
+      <textarea id="vibe-desc" rows="5" placeholder="e.g. A customer support agent that helps users troubleshoot login issues, escalates billing problems, and always responds in a friendly, concise tone."></textarea>
+    </div>
+    <div class="field">
+      <label>Name (optional)</label>
+      <input id="vibe-name" type="text" placeholder="Auto-generated if blank" />
+    </div>
+    <button id="vibe-btn" class="full" onclick="doVibe()">Generate Sandbox →</button>
+    <hr />
+    <label style="margin-bottom:4px">Starter templates</label>
+    <div id="templates" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+  <div class="vibe-right" style="padding:20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto">
+    <label>Generated sandbox config</label>
+    <div id="vibe-out" class="output" style="flex:1;min-height:300px">Describe your app and click "Generate Sandbox" to get started.</div>
+    <div id="vibe-status" style="display:none"></div>
+    <div id="vibe-actions" style="display:none;gap:8px" class="row">
+      <button id="goto-chat-btn" class="outline" onclick="gotoChatFromVibe()">Open in Chat →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sandbox Chat ── -->
+<div id="panel-chat" class="panels" style="display:none">
+  <div class="chat-sidebar">
+    <div class="field">
+      <label>Sandbox ID</label>
+      <input id="chat-id" type="text" placeholder="Paste a sandbox UUID" />
+    </div>
+    <button class="full outline" onclick="loadSandbox()">Load</button>
+    <hr />
+    <div id="sandbox-meta" class="sandbox-meta" style="display:none"></div>
+    <div style="margin-top:auto;display:flex;flex-direction:column;gap:6px">
+      <button class="full outline danger" onclick="deleteSandbox()" id="del-btn" disabled>Delete sandbox</button>
+    </div>
+  </div>
+  <div class="chat-main">
+    <div id="messages">
+      <div class="msg system">Load or create a sandbox to start chatting.</div>
+    </div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" rows="2" disabled></textarea>
+      <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── AI Workbench ── -->
+<div id="panel-bench" class="panels" style="display:none">
+  <div class="bench-layout">
+    <div class="bench-sidebar">
+      <div class="bench-nav" style="padding-top:8px">
+        <button class="active" onclick="switchBench('complete', this)">Complete</button>
+        <button onclick="switchBench('stream', this)">Stream</button>
+        <button onclick="switchBench('embed', this)">Embed</button>
+        <button onclick="switchBench('image', this)">Image Gen</button>
+        <button onclick="switchBench('transcribe', this)">Transcribe</button>
+      </div>
+    </div>
+
+    <!-- Complete -->
+    <div id="bench-complete" class="bench-pane active">
+      <div class="field"><label>Model</label><input id="bc-model" placeholder="@cf/meta/llama-3.1-8b-instruct" /></div>
+      <div class="field"><label>System Prompt</label><textarea id="bc-sys" rows="3" class="mono" placeholder="You are a helpful assistant."></textarea></div>
+      <div class="field"><label>Prompt</label><textarea id="bc-prompt" rows="4" class="mono" placeholder="What is the capital of France?"></textarea></div>
+      <div class="row">
+        <div class="field"><label>Temperature</label><input id="bc-temp" type="number" value="0.7" min="0" max="2" step="0.1" /></div>
+        <div class="field"><label>Max Tokens</label><input id="bc-tokens" type="number" value="512" min="1" max="8192" /></div>
+      </div>
+      <button class="full" onclick="doComplete()">Run</button>
+      <label>Response</label>
+      <div id="bc-out" class="output"></div>
+    </div>
+
+    <!-- Stream -->
+    <div id="bench-stream" class="bench-pane">
+      <div class="field"><label>Model</label><input id="bs-model" placeholder="@cf/meta/llama-3.1-8b-instruct" /></div>
+      <div class="field"><label>System Prompt</label><textarea id="bs-sys" rows="2" class="mono" placeholder="You are a helpful assistant."></textarea></div>
+      <div class="field"><label>Prompt</label><textarea id="bs-prompt" rows="4" class="mono" placeholder="Write a haiku about Cloudflare Workers."></textarea></div>
+      <button class="full" onclick="doStream()">Stream</button>
+      <label>Output (streamed)</label>
+      <div id="bs-out" class="output"></div>
+    </div>
+
+    <!-- Embed -->
+    <div id="bench-embed" class="bench-pane">
+      <div class="field"><label>Text (one per line)</label><textarea id="be-text" rows="5" class="mono" placeholder="Hello world&#10;Cloudflare Workers&#10;Embeddings rock"></textarea></div>
+      <button class="full" onclick="doEmbed()">Generate Embeddings</button>
+      <label>Vectors</label>
+      <div id="be-out" class="output"></div>
+    </div>
+
+    <!-- Image -->
+    <div id="bench-image" class="bench-pane">
+      <div class="field"><label>Prompt</label><textarea id="bi-prompt" rows="3" class="mono" placeholder="A futuristic city floating in purple clouds, cinematic lighting"></textarea></div>
+      <div class="field"><label>Steps (1–20)</label><input id="bi-steps" type="number" value="4" min="1" max="20" /></div>
+      <button class="full" onclick="doImage()">Generate Image</button>
+      <div id="bi-out" class="output img-out">Image will appear here.</div>
+    </div>
+
+    <!-- Transcribe -->
+    <div id="bench-transcribe" class="bench-pane">
+      <div class="field">
+        <label>Audio file (wav / mp3 / m4a)</label>
+        <input id="bt-file" type="file" accept="audio/*" style="padding:6px" />
+      </div>
+      <button class="full" onclick="doTranscribe()">Transcribe</button>
+      <label>Transcript</label>
+      <div id="bt-out" class="output"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Config ───────────────────────────────────────────────────────────────────
+  const API = ''  // same origin
+  let activeSandboxId = null
+  let vibeResult = null
+
+  // ── Tab switching ────────────────────────────────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', ['vibe','chat','bench'][i] === name)
+    })
+    document.querySelectorAll('.panels').forEach(p => {
+      p.style.display = p.id === `panel-${name}` ? 'flex' : 'none'
+      p.classList.toggle('active', p.id === `panel-${name}`)
+    })
+  }
+
+  // ── Workbench tab switching ──────────────────────────────────────────────────
+  function switchBench(name, btn) {
+    document.querySelectorAll('.bench-pane').forEach(p => {
+      p.classList.toggle('active', p.id === `bench-${name}`)
+    })
+    document.querySelectorAll('.bench-nav button').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+  }
+
+  // ── Load templates ────────────────────────────────────────────────────────────
+  async function loadTemplates() {
+    try {
+      const r = await fetch(`${API}/api/vibes`)
+      const d = await r.json()
+      if (!d.ok) return
+      const el = document.getElementById('templates')
+      el.innerHTML = ''
+      for (const t of d.data.templates) {
+        const btn = document.createElement('button')
+        btn.className = 'outline full'
+        btn.style.cssText = 'text-align:left;font-size:12px;padding:7px 10px'
+        btn.textContent = t.name
+        btn.title = t.description
+        btn.onclick = () => {
+          document.getElementById('vibe-desc').value = t.description
+          document.getElementById('vibe-name').value = t.name
+        }
+        el.appendChild(btn)
+      }
+    } catch {}
+  }
+  loadTemplates()
+
+  // ── Vibe builder ─────────────────────────────────────────────────────────────
+  async function doVibe() {
+    const desc = document.getElementById('vibe-desc').value.trim()
+    if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
+    const name = document.getElementById('vibe-name').value.trim() || undefined
+    const btn  = document.getElementById('vibe-btn')
+    const out  = document.getElementById('vibe-out')
+    btn.disabled = true; btn.textContent = 'Generating…'
+    out.textContent = 'Asking AI to design your sandbox…'
+    setStatus('vibe', null)
+
+    try {
+      const res = await fetch(`${API}/api/vibes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: desc, name }),
+      })
+      const d = await res.json()
+      if (!d.ok) { out.textContent = d.error; setStatus('vibe', d.error, true); return }
+      vibeResult = d.data
+      out.textContent = JSON.stringify(d.data, null, 2)
+      setStatus('vibe', `Sandbox created: ${d.data.name}`)
+      document.getElementById('vibe-actions').style.display = 'flex'
+    } catch (e) {
+      out.textContent = `Network error: ${e}`
+      setStatus('vibe', String(e), true)
+    } finally {
+      btn.disabled = false; btn.textContent = 'Generate Sandbox →'
+    }
+  }
+
+  function gotoChatFromVibe() {
+    if (!vibeResult) return
+    document.getElementById('chat-id').value = vibeResult.sandboxId
+    switchTab('chat')
+    loadSandbox()
+  }
+
+  // ── Sandbox chat ──────────────────────────────────────────────────────────────
+  async function loadSandbox() {
+    const id = document.getElementById('chat-id').value.trim()
+    if (!id) return
+    try {
+      const r = await fetch(`${API}/api/sandbox/${id}`)
+      const d = await r.json()
+      if (!d.ok) { addMsg('error', `Not found: ${d.error}`); return }
+      activeSandboxId = id
+      document.getElementById('sandbox-meta').style.display = 'block'
+      document.getElementById('sandbox-meta').innerHTML =
+        `<strong>${escHtml(d.data.name)}</strong><br>` +
+        `<span class="badge-model">${escHtml(d.data.model)}</span><br>` +
+        `<span style="opacity:0.6;font-size:10px">${escHtml(id)}</span>`
+      document.getElementById('chat-input').disabled = false
+      document.getElementById('send-btn').disabled = false
+      document.getElementById('del-btn').disabled = false
+      addMsg('system', `Loaded: ${d.data.name}`)
+    } catch (e) { addMsg('error', String(e)) }
+  }
+
+  function addMsg(role, text) {
+    const el = document.createElement('div')
+    el.className = `msg ${role}`
+    el.textContent = text
+    const msgs = document.getElementById('messages')
+    msgs.appendChild(el)
+    msgs.scrollTop = msgs.scrollHeight
+    return el
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('chat-input')
+    const text = input.value.trim()
+    if (!text || !activeSandboxId) return
+    input.value = ''
+    document.getElementById('send-btn').disabled = true
+    addMsg('user', text)
+
+    const typingEl = addMsg('assistant', '…')
+    typingEl.classList.add('typing')
+    typingEl.textContent = ''
+
+    try {
+      const res = await fetch(`${API}/api/sandbox/${activeSandboxId}/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      })
+
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        const parts = buf.split('\n\n')
+        buf = parts.pop() ?? ''
+        for (const part of parts) {
+          for (const line of part.split('\n')) {
+            if (!line.startsWith('data:')) continue
+            const raw = line.slice(5).trim()
+            if (raw === '[DONE]') continue
+            try {
+              const ev = JSON.parse(raw)
+              if (ev.done) continue
+              if (ev.error) { typingEl.textContent += ` [Error: ${ev.error}]`; break }
+              if (typeof ev.response === 'string') {
+                typingEl.textContent += ev.response
+                typingEl.classList.remove('typing')
+                const msgs = document.getElementById('messages')
+                msgs.scrollTop = msgs.scrollHeight
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (e) {
+      typingEl.textContent = `Error: ${e}`
+      typingEl.className = 'msg error'
+    } finally {
+      document.getElementById('send-btn').disabled = false
+      input.focus()
+    }
+  }
+
+  async function deleteSandbox() {
+    if (!activeSandboxId || !confirm('Delete this sandbox?')) return
+    await fetch(`${API}/api/sandbox/${activeSandboxId}`, { method: 'DELETE' })
+    addMsg('system', 'Sandbox deleted.')
+    activeSandboxId = null
+    document.getElementById('sandbox-meta').style.display = 'none'
+    document.getElementById('chat-input').disabled = true
+    document.getElementById('send-btn').disabled = true
+    document.getElementById('del-btn').disabled = true
+  }
+
+  document.getElementById('chat-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  })
+
+  // ── Workbench ─────────────────────────────────────────────────────────────────
+  async function doComplete() {
+    const out = document.getElementById('bc-out')
+    out.textContent = '…'
+    const body = {
+      prompt:       document.getElementById('bc-prompt').value,
+      systemPrompt: document.getElementById('bc-sys').value || undefined,
+      model:        document.getElementById('bc-model').value || undefined,
+      temperature:  parseFloat(document.getElementById('bc-temp').value),
+      maxTokens:    parseInt(document.getElementById('bc-tokens').value),
+    }
+    try {
+      const r = await fetch(`${API}/api/ai/complete`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      const d = await r.json()
+      out.textContent = d.ok ? d.data.response : `Error: ${d.error}`
+    } catch (e) { out.textContent = String(e) }
+  }
+
+  async function doStream() {
+    const out = document.getElementById('bs-out')
+    out.textContent = ''
+    const body = {
+      prompt:       document.getElementById('bs-prompt').value,
+      systemPrompt: document.getElementById('bs-sys').value || undefined,
+      model:        document.getElementById('bs-model').value || undefined,
+    }
+    try {
+      const res = await fetch(`${API}/api/ai/stream`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = dec.decode(value, { stream: true })
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data:')) continue
+          const raw = line.slice(5).trim()
+          if (raw === '[DONE]') continue
+          try {
+            const ev = JSON.parse(raw)
+            if (typeof ev.response === 'string') out.textContent += ev.response
+          } catch {}
+        }
+      }
+    } catch (e) { out.textContent = String(e) }
+  }
+
+  async function doEmbed() {
+    const out = document.getElementById('be-out')
+    out.textContent = '…'
+    const lines = document.getElementById('be-text').value.split('\n').filter(Boolean)
+    try {
+      const r = await fetch(`${API}/api/ai/embed`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: lines }),
+      })
+      const d = await r.json()
+      if (!d.ok) { out.textContent = `Error: ${d.error}`; return }
+      const vecs = d.data.embeddings
+      out.textContent = vecs.map((v, i) =>
+        `[${i}] dim=${v.length}  [${v.slice(0,4).map(x => x.toFixed(4)).join(', ')} …]`
+      ).join('\n')
+    } catch (e) { out.textContent = String(e) }
+  }
+
+  async function doImage() {
+    const out = document.getElementById('bi-out')
+    out.innerHTML = '<span style="opacity:0.5">Generating…</span>'
+    const body = {
+      prompt: document.getElementById('bi-prompt').value,
+      steps:  parseInt(document.getElementById('bi-steps').value),
+    }
+    try {
+      const r = await fetch(`${API}/api/ai/image`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      const d = await r.json()
+      if (!d.ok) { out.textContent = `Error: ${d.error}`; return }
+      const img = document.createElement('img')
+      img.src = `data:image/png;base64,${d.data.image}`
+      out.innerHTML = ''
+      out.appendChild(img)
+    } catch (e) { out.textContent = String(e) }
+  }
+
+  async function doTranscribe() {
+    const fileInput = document.getElementById('bt-file')
+    const out = document.getElementById('bt-out')
+    if (!fileInput.files?.length) { out.textContent = 'Select an audio file first.'; return }
+    out.textContent = 'Transcribing…'
+    const form = new FormData()
+    form.append('audio', fileInput.files[0])
+    try {
+      const r = await fetch(`${API}/api/ai/transcribe`, { method: 'POST', body: form })
+      const d = await r.json()
+      out.textContent = d.ok ? d.data.text : `Error: ${d.error}`
+    } catch (e) { out.textContent = String(e) }
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────────────────────
+  function setStatus(panel, msg, isErr = false) {
+    const el = document.getElementById(`${panel}-status`)
+    if (!el) return
+    if (!msg) { el.style.display = 'none'; return }
+    el.style.display = 'block'
+    el.className = `status ${isErr ? 'err' : 'ok'}`
+    el.textContent = msg
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  }
+</script>
+</body>
+</html>
