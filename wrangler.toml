@@ -1,0 +1,67 @@
+name = "project-aether-lite"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Static Assets (playground UI) ────────────────────────────────────────────
+[assets]
+directory = "./public"
+
+# ── Workers AI ────────────────────────────────────────────────────────────────
+[ai]
+binding = "AI"
+
+# ── Durable Objects ───────────────────────────────────────────────────────────
+[[durable_objects.bindings]]
+name = "SANDBOX"
+class_name = "SandboxDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SandboxDO"]
+
+# ── KV Namespaces ─────────────────────────────────────────────────────────────
+# Run: wrangler kv:namespace create SANDBOX_REGISTRY
+# Then replace the placeholder ids below
+[[kv_namespaces]]
+binding = "SANDBOX_REGISTRY"
+id = "00000000000000000000000000000001"
+preview_id = "00000000000000000000000000000002"
+
+# ── D1 Database ───────────────────────────────────────────────────────────────
+# Run: wrangler d1 create aether-lite
+# Then replace the placeholder database_id below
+[[d1_databases]]
+binding = "DB"
+database_name = "aether-lite"
+database_id = "00000000-0000-0000-0000-000000000001"
+
+# ── R2 Bucket ─────────────────────────────────────────────────────────────────
+# Run: wrangler r2 bucket create aether-lite-files
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "aether-lite-files"
+
+# ── Queues ────────────────────────────────────────────────────────────────────
+# Run: wrangler queues create aether-lite-jobs
+[[queues.producers]]
+binding = "JOB_QUEUE"
+queue = "aether-lite-jobs"
+
+[[queues.consumers]]
+queue = "aether-lite-jobs"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+# ── Vectorize ─────────────────────────────────────────────────────────────────
+# Run: wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
+[[vectorize]]
+binding = "VECTORS"
+index_name = "aether-lite-vectors"
+
+# ── Environment Variables ─────────────────────────────────────────────────────
+[vars]
+ENVIRONMENT = "development"
+# AI_GATEWAY_ID is optional: set it to route flagship models through Cloudflare AI Gateway
+# AI_GATEWAY_ID = "your-gateway-id"
