@@ -4,6 +4,7 @@ import { json, ok, err, readJson } from '../lib/http'
 import { generateVibeConfig } from '../lib/ai'
 import { parseVibeRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
+import { registerSandbox } from './sandbox'
 
 const TEMPLATES = [
   { id: 'customer-support',  name: 'Customer Support Bot',   tags: ['support', 'chat'],    description: 'Handles FAQs and routes issues to the right team' },
@@ -38,33 +39,42 @@ const createVibe: Handler = async (req, env) => {
   const config: SandboxConfig = { ...vibeConfig, id, memory: [], createdAt: ts, updatedAt: ts }
 
   // Initialise the Durable Object
-  const doId = env.SANDBOX.idFromName(id)
-  const s = env.SANDBOX.get(doId)
+  const s = env.SANDBOX.get(env.SANDBOX.idFromName(id))
   await s.fetch('https://do/init', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   })
 
-  // Register in KV
-  await env.SANDBOX_REGISTRY.put(
-    `sandbox:${id}`,
-    JSON.stringify({ id, name: config.name, createdAt: ts, fromVibe: true }),
-    { expirationTtl: 604800 },
-  )
+  // Register in KV with rich metadata for gallery listing
+  await registerSandbox(env, {
+    id,
+    name:        config.name,
+    description: config.description.slice(0, 200),
+    model:       config.model,
+    createdAt:   ts,
+    fromVibe:    true,
+  })
 
   // Audit log
   await env.DB.prepare(
     'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
   ).bind(id, 'vibe_created', JSON.stringify({ description: parsed.description.slice(0, 256) }), ts).run()
 
+  const embedCode = `<iframe src="/app/${id}" width="420" height="640" frameborder="0" allow="microphone"></iframe>`
+
   return json(ok({
-    sandboxId: id,
-    name:      config.name,
+    sandboxId:  id,
+    name:       config.name,
     description: config.description,
-    model:     config.model,
-    run:       `/api/sandbox/${id}/run`,
-    stream:    `/api/sandbox/${id}/stream`,
+    model:      config.model,
+    appUrl:     `/app/${id}`,
+    shortLink:  `/s/${id}`,
+    embedCode,
+    shortApi: {
+      run:    `/s/${id}/run`,
+      stream: `/s/${id}/stream`,
+    },
     config: {
       systemPrompt: config.systemPrompt,
       temperature:  config.temperature,
