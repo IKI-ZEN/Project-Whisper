@@ -4,9 +4,20 @@ import { json, ok, err, readJson } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
 
+// ── KV metadata shape (stored with each sandbox key) ─────────────────────────
+
+export interface SandboxMeta {
+  id: string
+  name: string
+  description: string
+  model: string
+  createdAt: number
+  fromVibe?: boolean
+}
+
 // ── Internal DO dispatch ──────────────────────────────────────────────────────
 
-function stub(env: Env, sandboxId: string): DurableObjectStub {
+export function stub(env: Env, sandboxId: string): DurableObjectStub {
   return env.SANDBOX.get(env.SANDBOX.idFromName(sandboxId))
 }
 
@@ -23,11 +34,33 @@ async function doFetch(
   })
 }
 
-async function exists(env: Env, id: string): Promise<boolean> {
+export async function sandboxExists(env: Env, id: string): Promise<boolean> {
   return (await env.SANDBOX_REGISTRY.get(`sandbox:${id}`)) !== null
 }
 
+// ── KV helper — stores rich metadata for gallery listing ──────────────────────
+
+export async function registerSandbox(
+  env: Env,
+  meta: SandboxMeta,
+): Promise<void> {
+  await env.SANDBOX_REGISTRY.put(
+    `sandbox:${meta.id}`,
+    meta.id,   // value is the id — existence check remains simple
+    { expirationTtl: 604800, metadata: meta },
+  )
+}
+
 // ── Handlers ──────────────────────────────────────────────────────────────────
+
+const list: Handler = async (_req, env) => {
+  const result = await env.SANDBOX_REGISTRY.list<SandboxMeta>({ prefix: 'sandbox:' })
+  const apps = result.keys
+    .filter(k => k.metadata != null)
+    .map(k => k.metadata as SandboxMeta)
+    .sort((a, b) => b.createdAt - a.createdAt)
+  return json(ok({ apps, total: apps.length, complete: result.list_complete }))
+}
 
 const create: Handler = async (req, env) => {
   let body: unknown
@@ -40,41 +73,46 @@ const create: Handler = async (req, env) => {
 
   const config: SandboxConfig = { ...parsed, id, memory: [], createdAt: ts, updatedAt: ts }
 
-  // Initialise the Durable Object
   await doFetch(stub(env, id), 'init', 'POST', config)
 
-  // Register in KV (7-day TTL)
-  await env.SANDBOX_REGISTRY.put(
-    `sandbox:${id}`,
-    JSON.stringify({ id, name: config.name, createdAt: ts }),
-    { expirationTtl: 604800 },
-  )
+  await registerSandbox(env, {
+    id,
+    name:        config.name,
+    description: config.description,
+    model:       config.model,
+    createdAt:   ts,
+  })
 
-  // Audit log
   await env.DB.prepare(
     'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
   ).bind(id, 'created', JSON.stringify({ name: config.name }), ts).run()
 
-  return json(ok({ id, name: config.name, endpoint: `/api/sandbox/${id}` }), 201)
+  return json(ok({
+    id,
+    name:      config.name,
+    appUrl:    `/app/${id}`,
+    shortLink: `/s/${id}`,
+    api:       { run: `/s/${id}/run`, stream: `/s/${id}/stream` },
+  }), 201)
 }
 
 const getConfig: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
-  if (!await exists(env, id)) return json(err('Sandbox not found'), 404)
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   return doFetch(stub(env, id), 'config', 'GET')
 }
 
 const patchConfig: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
-  if (!await exists(env, id)) return json(err('Sandbox not found'), 404)
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   let body: unknown
   try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
   return doFetch(stub(env, id), 'config', 'PATCH', body)
 }
 
-const run: Handler = async (req, env, params: Params) => {
+export const runHandler: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
-  if (!await exists(env, id)) return json(err('Sandbox not found'), 404)
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   let body: unknown
   try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
   let parsed
@@ -89,15 +127,14 @@ const run: Handler = async (req, env, params: Params) => {
   return res
 }
 
-const stream: Handler = async (req, env, params: Params) => {
+export const streamHandler: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
-  if (!await exists(env, id)) return json(err('Sandbox not found'), 404)
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   let body: unknown
   try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
   let parsed
   try { parsed = parseRunSandboxRequest(body) } catch (e) { return json(err(String(e)), 422) }
 
-  // Forward the SSE stream from the DO directly
   const doRes = await stub(env, id).fetch(`https://do/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -116,13 +153,13 @@ const stream: Handler = async (req, env, params: Params) => {
 
 const history: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
-  if (!await exists(env, id)) return json(err('Sandbox not found'), 404)
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   return doFetch(stub(env, id), 'history', 'GET')
 }
 
 const del: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
-  if (!await exists(env, id)) return json(err('Sandbox not found'), 404)
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   await doFetch(stub(env, id), '/', 'DELETE')
   await env.SANDBOX_REGISTRY.delete(`sandbox:${id}`)
   await env.DB.prepare(
@@ -132,11 +169,12 @@ const del: Handler = async (_req, env, params: Params) => {
 }
 
 export const sandboxRoutes: Array<[string, string, Handler]> = [
+  ['GET',    '/api/sandbox',              list],
   ['POST',   '/api/sandbox',              create],
   ['GET',    '/api/sandbox/:id',          getConfig],
   ['PATCH',  '/api/sandbox/:id',          patchConfig],
-  ['POST',   '/api/sandbox/:id/run',      run],
-  ['POST',   '/api/sandbox/:id/stream',   stream],
+  ['POST',   '/api/sandbox/:id/run',      runHandler],
+  ['POST',   '/api/sandbox/:id/stream',   streamHandler],
   ['GET',    '/api/sandbox/:id/history',  history],
   ['DELETE', '/api/sandbox/:id',          del],
 ]

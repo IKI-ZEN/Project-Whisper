@@ -1,8 +1,9 @@
 import type { Env, AetherJob } from './types/env'
 import { Router, json, ok } from './lib/http'
-import { aiRoutes }      from './routes/ai'
-import { sandboxRoutes } from './routes/sandbox'
-import { vibeRoutes }    from './routes/vibes'
+import { aiRoutes }              from './routes/ai'
+import { sandboxRoutes, runHandler, streamHandler } from './routes/sandbox'
+import { vibeRoutes }            from './routes/vibes'
+import { pageRoutes }            from './routes/pages'
 
 // Required: Wrangler binds the DO class via the export from this entry file.
 export { SandboxDO } from './durable/SandboxDO'
@@ -14,18 +15,25 @@ const router = new Router()
 // Health / discovery
 router.get('/', (_req, _env) => Promise.resolve(json(ok({
   name:    'Project Aether-Lite',
-  version: '0.1.0',
+  version: '0.2.0',
   status:  'operational',
   api: {
-    ai:       { complete: 'POST /api/ai/complete', stream: 'POST /api/ai/stream', embed: 'POST /api/ai/embed', image: 'POST /api/ai/image', transcribe: 'POST /api/ai/transcribe' },
-    sandbox:  { create: 'POST /api/sandbox', run: 'POST /api/sandbox/:id/run', stream: 'POST /api/sandbox/:id/stream' },
-    vibes:    { list: 'GET /api/vibes', generate: 'POST /api/vibes' },
-    playground: '/playground.html',
+    ai:      { complete: 'POST /api/ai/complete', stream: 'POST /api/ai/stream', embed: 'POST /api/ai/embed', image: 'POST /api/ai/image', transcribe: 'POST /api/ai/transcribe' },
+    sandbox: { list: 'GET /api/sandbox', create: 'POST /api/sandbox', run: 'POST /api/sandbox/:id/run', stream: 'POST /api/sandbox/:id/stream' },
+    vibes:   { list: 'GET /api/vibes', generate: 'POST /api/vibes' },
+    platform: { apps: '/apps', app: '/app/:id', shortApi: '/s/:id/run' },
   },
 }))))
 
+// Short public API — stable clean URLs for integrations and embeds
+router.get('/s/:id', (_req, _env, params) =>
+  Promise.resolve(new Response(null, { status: 302, headers: { Location: `/app/${params.id ?? ''}` } }))
+)
+router.post('/s/:id/run',    runHandler)
+router.post('/s/:id/stream', streamHandler)
+
 // Mount route groups
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes]) {
+for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...pageRoutes]) {
   router.on(method, path, handler)
 }
 
@@ -38,7 +46,6 @@ export default {
 
   async queue(batch: MessageBatch<AetherJob>, _env: Env): Promise<void> {
     for (const msg of batch.messages) {
-      // Async job processing hook — extend per job type as needed
       console.log('[queue]', msg.body.type, msg.body.sandboxId)
       msg.ack()
     }

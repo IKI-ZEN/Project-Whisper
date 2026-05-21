@@ -173,6 +173,9 @@
     <button class="tab" onclick="switchTab('chat')">Sandbox Chat</button>
     <button class="tab" onclick="switchTab('bench')">AI Workbench</button>
   </div>
+  <a href="/apps" style="margin-left:auto;text-decoration:none">
+    <button style="padding:5px 14px;border-radius:8px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;cursor:pointer" onmouseover="this.style.borderColor='var(--accent2)';this.style.color='var(--accent2)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">My Apps ↗</button>
+  </a>
 </header>
 
 <!-- ── Vibe Builder ── -->
@@ -195,8 +198,24 @@
     <label>Generated sandbox config</label>
     <div id="vibe-out" class="output" style="flex:1;min-height:300px">Describe your app and click "Generate Sandbox" to get started.</div>
     <div id="vibe-status" style="display:none"></div>
-    <div id="vibe-actions" style="display:none;gap:8px" class="row">
-      <button id="goto-chat-btn" class="outline" onclick="gotoChatFromVibe()">Open in Chat →</button>
+    <div id="vibe-actions" style="display:none;flex-direction:column;gap:10px">
+      <div class="row">
+        <a id="launch-app-link" href="#" target="_blank" style="flex:1;text-decoration:none">
+          <button class="full" style="background:var(--green);color:#000;font-weight:600">Launch App ↗</button>
+        </a>
+        <button id="goto-chat-btn" class="outline" onclick="gotoChatFromVibe()" style="flex:1">Open in Chat</button>
+      </div>
+      <div class="field">
+        <label>Embed code</label>
+        <div style="display:flex;gap:6px">
+          <input id="embed-out" type="text" readonly style="flex:1;font-family:var(--mono);font-size:11px" />
+          <button class="outline" style="flex-shrink:0;padding:6px 12px" onclick="copyEmbed()">Copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Short API</label>
+        <input id="short-api-out" type="text" readonly style="font-family:var(--mono);font-size:11px" />
+      </div>
     </div>
   </div>
 </div>
@@ -365,6 +384,10 @@
       vibeResult = d.data
       out.textContent = JSON.stringify(d.data, null, 2)
       setStatus('vibe', `Sandbox created: ${d.data.name}`)
+      // Populate platform links
+      document.getElementById('launch-app-link').href = d.data.appUrl || '#'
+      document.getElementById('embed-out').value = d.data.embedCode || ''
+      document.getElementById('short-api-out').value = d.data.shortApi?.run || ''
       document.getElementById('vibe-actions').style.display = 'flex'
     } catch (e) {
       out.textContent = `Network error: ${e}`
@@ -379,6 +402,15 @@
     document.getElementById('chat-id').value = vibeResult.sandboxId
     switchTab('chat')
     loadSandbox()
+  }
+
+  function copyEmbed() {
+    const val = document.getElementById('embed-out').value
+    navigator.clipboard?.writeText(val).catch(() => {})
+    const btn = event.target
+    const prev = btn.textContent
+    btn.textContent = 'Copied!'
+    setTimeout(() => { btn.textContent = prev }, 1500)
   }
 
   // ── Sandbox chat ──────────────────────────────────────────────────────────────
