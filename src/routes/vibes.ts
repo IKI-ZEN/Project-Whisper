@@ -25,7 +25,7 @@ const createVibe: Handler = async (req, env) => {
 
   let vibeConfig
   try {
-    vibeConfig = await generateVibeConfig(env.AI, parsed.description, parsed.name)
+    vibeConfig = await generateVibeConfig(env.AI, env, parsed.description, parsed.name)
   } catch (e) {
     return json(err('Vibe generation failed — try a more detailed description', String(e)), 500)
   }
