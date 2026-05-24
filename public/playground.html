@@ -193,6 +193,10 @@
     <hr />
     <label style="margin-bottom:4px">Starter templates</label>
     <div id="templates" style="display:flex;flex-direction:column;gap:6px"></div>
+    <hr />
+    <label style="margin-bottom:4px">Import sandbox</label>
+    <textarea id="import-json" rows="4" class="mono" placeholder="Paste exported config JSON from another instance…"></textarea>
+    <button id="import-btn" class="full outline" onclick="doImport()">Import →</button>
   </div>
   <div class="vibe-right" style="padding:20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto">
     <label>Generated sandbox config</label>
@@ -215,6 +219,13 @@
       <div class="field">
         <label>Short API</label>
         <input id="short-api-out" type="text" readonly style="font-family:var(--mono);font-size:11px" />
+      </div>
+      <div class="field">
+        <label>Export config (paste into another instance to clone this app)</label>
+        <div style="display:flex;gap:6px">
+          <input id="export-out" type="text" readonly style="flex:1;font-family:var(--mono);font-size:11px" />
+          <button class="outline" style="flex-shrink:0;padding:6px 12px" onclick="copyExport()">Copy</button>
+        </div>
       </div>
     </div>
   </div>
@@ -379,6 +390,16 @@
       document.getElementById('launch-app-link').href = vibeResult.appUrl
       document.getElementById('embed-out').value = vibeResult.embedCode
       document.getElementById('short-api-out').value = vibeResult.shortApi.run
+      document.getElementById('export-out').value = JSON.stringify({
+        version: 1,
+        name:        vibeResult.name,
+        description: vibeResult.description,
+        model:       vibeResult.model,
+        systemPrompt: vibeResult.config.systemPrompt,
+        temperature:  vibeResult.config.temperature,
+        maxTokens:    vibeResult.config.maxTokens,
+        tools: [],
+      })
       document.getElementById('vibe-actions').style.display = 'flex'
     } catch (e) {
       out.textContent = `Error: ${e}`
@@ -402,6 +423,43 @@
     const prev = btn.textContent
     btn.textContent = 'Copied!'
     setTimeout(() => { btn.textContent = prev }, 1500)
+  }
+
+  function copyExport() {
+    const val = document.getElementById('export-out').value
+    navigator.clipboard?.writeText(val).catch(() => {})
+    const btn = event.target
+    const prev = btn.textContent
+    btn.textContent = 'Copied!'
+    setTimeout(() => { btn.textContent = prev }, 1500)
+  }
+
+  async function doImport() {
+    const raw = document.getElementById('import-json').value.trim()
+    if (!raw) { alert('Paste exported sandbox JSON first.'); return }
+    const btn = document.getElementById('import-btn')
+    btn.disabled = true; btn.textContent = 'Importing…'
+    try {
+      const config = JSON.parse(raw)
+      const sandbox = await client.sandbox.import(config)
+      activeSandbox = sandbox
+      document.getElementById('chat-id').value = sandbox.id
+      document.getElementById('import-json').value = ''
+      document.getElementById('sandbox-meta').style.display = 'block'
+      document.getElementById('sandbox-meta').innerHTML =
+        `<strong>${escHtml(sandbox.name)}</strong><br>` +
+        `<span class="badge-model">${escHtml(sandbox.model)}</span><br>` +
+        `<span style="opacity:0.6;font-size:10px">${escHtml(sandbox.id)}</span>`
+      document.getElementById('chat-input').disabled = false
+      document.getElementById('send-btn').disabled = false
+      document.getElementById('del-btn').disabled = false
+      switchTab('chat')
+      addMsg('system', `Imported: ${sandbox.name}`)
+    } catch (e) {
+      alert(`Import failed: ${e}`)
+    } finally {
+      btn.disabled = false; btn.textContent = 'Import →'
+    }
   }
 
   // ── Sandbox chat ──────────────────────────────────────────────────────────────
@@ -557,7 +615,7 @@
   // ── Expose to inline onclick handlers ────────────────────────────────────────
   Object.assign(window, {
     switchTab, switchBench, doVibe, gotoChatFromVibe,
-    copyEmbed, loadSandbox, sendMessage, deleteSandbox,
+    copyEmbed, copyExport, loadSandbox, sendMessage, deleteSandbox, doImport,
     doComplete, doStream, doEmbed, doImage, doTranscribe,
   })
 </script>

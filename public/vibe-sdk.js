@@ -242,6 +242,17 @@ export class SandboxHandle {
   async delete() {
     await apiRequest(this.#base, `/api/sandbox/${this.id}`, 'DELETE')
   }
+
+  /**
+   * Export this sandbox's configuration as a portable object that can be
+   * imported into any Aether-Lite instance via SandboxClient.import().
+   * @returns {Promise<{ version: 1, name: string, description: string, systemPrompt: string, tools: object[], model: string, temperature: number, maxTokens: number }>}
+   */
+  async export() {
+    return /** @type {any} */ (
+      await apiRequest(this.#base, `/api/sandbox/${this.id}/export`, 'GET')
+    )
+  }
 }
 
 // ── SandboxClient ─────────────────────────────────────────────────────────────
@@ -291,6 +302,19 @@ export class SandboxClient {
    */
   async delete(id) {
     await apiRequest(this._base, `/api/sandbox/${id}`, 'DELETE')
+  }
+
+  /**
+   * Import a sandbox from a previously exported config object.
+   * Creates a new sandbox on this instance with a fresh ID.
+   * @param {{ version?: number, name: string, description?: string, systemPrompt: string, tools?: object[], model: string, temperature: number, maxTokens: number }} config
+   * @returns {Promise<SandboxHandle>}
+   */
+  async import(config) {
+    const data = /** @type {{ id: string, name: string, appUrl: string, shortLink: string }} */ (
+      await apiRequest(this._base, '/api/sandbox/import', 'POST', config)
+    )
+    return new SandboxHandle(this._base, data)
   }
 }
 

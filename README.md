@@ -25,12 +25,14 @@ GET  /api/vibes                starter templates
 POST /api/vibes                describe app → live sandbox + appUrl + embedCode
 
 GET  /api/sandbox              list all sandboxes
+POST /api/sandbox/import       create sandbox from exported config
 POST /api/sandbox              create sandbox
 GET  /api/sandbox/:id          config (no memory)
 PATCH /api/sandbox/:id         update config fields
 POST /api/sandbox/:id/run      blocking turn (persists to memory)
 POST /api/sandbox/:id/stream   SSE stream (preview, no memory write)
 GET  /api/sandbox/:id/history  full conversation history
+GET  /api/sandbox/:id/export   portable config JSON (no history)
 DELETE /api/sandbox/:id        delete sandbox + KV entry
 
 GET  /app/:id                  standalone chat UI

@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, readJson, sseResponse } from '../lib/http'
+import { json, ok, err, readJson, sseResponse, parseBody } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
@@ -157,10 +157,52 @@ const del: Handler = async (_req, env, params: Params) => {
   return json(ok({ deleted: true }))
 }
 
+const exportConfig: Handler = async (_req, env, params: Params) => {
+  const id = params.id ?? ''
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+  const res = await doFetch(stub(env, id), 'config', 'GET')
+  const body = await res.json() as { ok: boolean; data: Omit<SandboxConfig, 'memory'> }
+  if (!body.ok) return json(err('Failed to load config'), 500)
+  const { name, description, systemPrompt, tools, model, temperature, maxTokens } = body.data
+  return json(ok({ version: 1 as const, name, description, systemPrompt, tools, model, temperature, maxTokens }))
+}
+
+const importConfig: Handler = async (req, env) => {
+  const p = await parseBody(req, parseCreateSandboxRequest)
+  if (!p.ok) return p.response
+
+  const id = newId()
+  const ts = now()
+  const config: SandboxConfig = { ...p.data, id, memory: [], createdAt: ts, updatedAt: ts }
+
+  await doFetch(stub(env, id), 'init', 'POST', config)
+  await registerSandbox(env, {
+    id,
+    name:        config.name,
+    description: config.description,
+    model:       config.model,
+    createdAt:   ts,
+  })
+
+  await env.DB.prepare(
+    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+  ).bind(id, 'imported', JSON.stringify({ name: config.name }), ts).run()
+
+  return json(ok({
+    id,
+    name:      config.name,
+    appUrl:    `/app/${id}`,
+    shortLink: `/s/${id}`,
+    api:       { run: `/s/${id}/run`, stream: `/s/${id}/stream` },
+  }), 201)
+}
+
 export const sandboxRoutes: Array<[string, string, Handler]> = [
   ['GET',    '/api/sandbox',              list],
   ['POST',   '/api/sandbox',              create],
+  ['POST',   '/api/sandbox/import',       importConfig],
   ['GET',    '/api/sandbox/:id',          getConfig],
+  ['GET',    '/api/sandbox/:id/export',   exportConfig],
   ['PATCH',  '/api/sandbox/:id',          patchConfig],
   ['POST',   '/api/sandbox/:id/run',      runHandler],
   ['POST',   '/api/sandbox/:id/stream',   streamHandler],
