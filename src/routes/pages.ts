@@ -60,6 +60,7 @@ footer a:hover{color:var(--accent2)}
   <span id="app-desc"></span>
   <span id="model-badge" class="badge" style="display:none"></span>
   <button class="hbtn" onclick="document.getElementById('embed-panel').classList.add('open')">Embed ↗</button>
+  <button class="hbtn" onclick="shareConfig(this)">Share config</button>
   <a href="/apps" style="text-decoration:none"><button class="hbtn">All Apps</button></a>
 </header>
 <div id="messages">
@@ -186,6 +187,18 @@ function copyEmbed() {
   const btn = event.target
   btn.textContent = 'Copied!'
   setTimeout(() => { btn.textContent = 'Copy code' }, 1500)
+}
+
+async function shareConfig(btn) {
+  const prev = btn.textContent
+  try {
+    const r = await fetch(API + '/api/sandbox/' + SANDBOX_ID + '/export')
+    const d = await r.json()
+    if (!d.ok) return
+    await navigator.clipboard?.writeText(JSON.stringify(d.data, null, 2)).catch(() => {})
+    btn.textContent = 'Copied!'
+    setTimeout(() => { btn.textContent = prev }, 1500)
+  } catch {}
 }
 
 document.getElementById('send-btn').addEventListener('click', send)

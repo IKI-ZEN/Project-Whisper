@@ -34,6 +34,17 @@ export interface SandboxMeta {
   fromVibe?: boolean
 }
 
+export interface SandboxExport {
+  version: 1
+  name: string
+  description: string
+  systemPrompt: string
+  tools: object[]
+  model: string
+  temperature: number
+  maxTokens: number
+}
+
 export interface CreateSandboxOpts {
   name: string
   description: string
@@ -84,6 +95,7 @@ export class SandboxHandle {
   history(): Promise<Message[]>
   update(patch: Partial<CreateSandboxOpts>): Promise<void>
   delete(): Promise<void>
+  export(): Promise<SandboxExport>
 }
 
 // ── SandboxClient ─────────────────────────────────────────────────────────────
@@ -93,6 +105,7 @@ export class SandboxClient {
   create(opts: CreateSandboxOpts): Promise<SandboxHandle>
   get(id: string): Promise<SandboxHandle>
   delete(id: string): Promise<void>
+  import(config: SandboxExport | CreateSandboxOpts): Promise<SandboxHandle>
 }
 
 // ── VibeResult ────────────────────────────────────────────────────────────────
