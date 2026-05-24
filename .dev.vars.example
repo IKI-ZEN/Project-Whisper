@@ -1,0 +1,14 @@
+# Copy this file to .dev.vars and fill in real values.
+# All variables except ENVIRONMENT are optional for local dev using Workers AI.
+
+ENVIRONMENT=development
+
+# Required to use OpenAI, Anthropic, or Google models via Cloudflare AI Gateway.
+# Without these, only @cf/... Workers AI models will work.
+CLOUDFLARE_ACCOUNT_ID=
+AI_GATEWAY_ID=
+
+# API keys for flagship models (only needed if AI_GATEWAY_ID is set)
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_AI_KEY=

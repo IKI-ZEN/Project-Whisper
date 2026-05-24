@@ -174,22 +174,28 @@ export class SandboxHandle {
   /** @type {string} */ name
   /** @type {string} */ description
   /** @type {string} */ model
+  /** @type {string} */ systemPrompt
+  /** @type {number} */ temperature
+  /** @type {number} */ maxTokens
   /** @type {string} */ appUrl
   /** @type {string} */ shortLink
   /** @type {string} */ #base
 
   /**
    * @param {string} base
-   * @param {{ id: string, name: string, description?: string, model?: string, appUrl?: string, shortLink?: string }} meta
+   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string }} meta
    */
   constructor(base, meta) {
-    this.#base       = base
-    this.id          = meta.id
-    this.name        = meta.name
-    this.description = meta.description ?? ''
-    this.model       = meta.model       ?? ''
-    this.appUrl      = meta.appUrl      ?? `/app/${meta.id}`
-    this.shortLink   = meta.shortLink   ?? `/s/${meta.id}`
+    this.#base        = base
+    this.id           = meta.id
+    this.name         = meta.name
+    this.description  = meta.description  ?? ''
+    this.model        = meta.model        ?? ''
+    this.systemPrompt = meta.systemPrompt ?? ''
+    this.temperature  = meta.temperature  ?? 0.7
+    this.maxTokens    = meta.maxTokens    ?? 1024
+    this.appUrl       = meta.appUrl       ?? `/app/${meta.id}`
+    this.shortLink    = meta.shortLink    ?? `/s/${meta.id}`
   }
 
   /**
@@ -290,7 +296,7 @@ export class SandboxClient {
    * @returns {Promise<SandboxHandle>}
    */
   async get(id) {
-    const data = /** @type {{ id: string, name: string, description?: string, model?: string }} */ (
+    const data = /** @type {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number }} */ (
       await apiRequest(this._base, `/api/sandbox/${id}`, 'GET')
     )
     return new SandboxHandle(this._base, data)
