@@ -75,7 +75,7 @@ export class SandboxDO extends DurableObject<Env> {
     const config = await this.load()
     const ts = now()
 
-    const reply = await runInSandbox(this.env.AI, config, message)
+    const reply = await runInSandbox(this.env.AI, this.env, config, message)
 
     const userMsg: Message  = { role: 'user',      content: message, timestamp: ts }
     const asstMsg: Message  = { role: 'assistant', content: reply,   timestamp: now() }
@@ -91,7 +91,7 @@ export class SandboxDO extends DurableObject<Env> {
     const config = await this.load()
 
     // Stream is preview-only — use /run to persist to memory
-    return sseResponse(streamInSandbox(this.env.AI, config, message))
+    return sseResponse(streamInSandbox(this.env.AI, this.env, config, message))
   }
 
   private async handleHistory(): Promise<Response> {

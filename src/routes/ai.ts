@@ -19,7 +19,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     try { parsed = parseCompleteRequest(body) } catch (e) { return json(err(String(e)), 422) }
 
     try {
-      const response = await complete(env.AI, parsed)
+      const response = await complete(env.AI, env, parsed)
       return json(ok({ response }))
     } catch (e) {
       return json(err('AI completion failed', String(e)), 500)
@@ -33,7 +33,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     let parsed
     try { parsed = parseCompleteRequest(body) } catch (e) { return json(err(String(e)), 422) }
 
-    return sseResponse(completeStream(env.AI, parsed))
+    return sseResponse(completeStream(env.AI, env, parsed))
   }],
 
   // POST /api/ai/embed — generate embeddings
