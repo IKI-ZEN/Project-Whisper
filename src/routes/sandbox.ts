@@ -1,8 +1,9 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, readJson } from '../lib/http'
+import { json, ok, err, readJson, sseResponse } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
+import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
 
 // ── KV metadata shape (stored with each sandbox key) ─────────────────────────
 
@@ -21,7 +22,7 @@ export function stub(env: Env, sandboxId: string): DurableObjectStub {
   return env.SANDBOX.get(env.SANDBOX.idFromName(sandboxId))
 }
 
-async function doFetch(
+export async function doFetch(
   s: DurableObjectStub,
   path: string,
   method: string,
@@ -35,7 +36,7 @@ async function doFetch(
 }
 
 export async function sandboxExists(env: Env, id: string): Promise<boolean> {
-  return (await env.SANDBOX_REGISTRY.get(`sandbox:${id}`)) !== null
+  return (await env.SANDBOX_REGISTRY.get(`${SANDBOX_KEY_PREFIX}${id}`)) !== null
 }
 
 // ── KV helper — stores rich metadata for gallery listing ──────────────────────
@@ -45,16 +46,16 @@ export async function registerSandbox(
   meta: SandboxMeta,
 ): Promise<void> {
   await env.SANDBOX_REGISTRY.put(
-    `sandbox:${meta.id}`,
+    `${SANDBOX_KEY_PREFIX}${meta.id}`,
     meta.id,   // value is the id — existence check remains simple
-    { expirationTtl: 604800, metadata: meta },
+    { expirationTtl: SANDBOX_TTL, metadata: meta },
   )
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const list: Handler = async (_req, env) => {
-  const result = await env.SANDBOX_REGISTRY.list<SandboxMeta>({ prefix: 'sandbox:' })
+  const result = await env.SANDBOX_REGISTRY.list<SandboxMeta>({ prefix: SANDBOX_KEY_PREFIX })
   const apps = result.keys
     .filter(k => k.metadata != null)
     .map(k => k.metadata as SandboxMeta)
@@ -135,20 +136,8 @@ export const streamHandler: Handler = async (req, env, params: Params) => {
   let parsed
   try { parsed = parseRunSandboxRequest(body) } catch (e) { return json(err(String(e)), 422) }
 
-  const doRes = await stub(env, id).fetch(`https://do/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: parsed.message }),
-  })
-
-  return new Response(doRes.body, {
-    status: doRes.status,
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'X-Accel-Buffering': 'no',
-    },
-  })
+  const doRes = await doFetch(stub(env, id), 'stream', 'POST', { message: parsed.message })
+  return sseResponse(doRes.body as ReadableStream)
 }
 
 const history: Handler = async (_req, env, params: Params) => {
@@ -161,7 +150,7 @@ const del: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   await doFetch(stub(env, id), '/', 'DELETE')
-  await env.SANDBOX_REGISTRY.delete(`sandbox:${id}`)
+  await env.SANDBOX_REGISTRY.delete(`${SANDBOX_KEY_PREFIX}${id}`)
   await env.DB.prepare(
     'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
   ).bind(id, 'deleted', '{}', now()).run()

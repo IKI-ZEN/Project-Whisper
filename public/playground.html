@@ -312,13 +312,14 @@
   </div>
 </div>
 
-<script>
-  // ── Config ───────────────────────────────────────────────────────────────────
-  const API = ''  // same origin
-  let activeSandboxId = null
-  let vibeResult = null
+<script type="module">
+  import { VibeClient } from '/vibe-sdk.js'
 
-  // ── Tab switching ────────────────────────────────────────────────────────────
+  const client = new VibeClient()
+  let activeSandbox = null   // SandboxHandle | null
+  let vibeResult    = null   // VibeResult | null
+
+  // ── Tab switching ─────────────────────────────────────────────────────────────
   function switchTab(name) {
     document.querySelectorAll('.tab').forEach((t, i) => {
       t.classList.toggle('active', ['vibe','chat','bench'][i] === name)
@@ -329,7 +330,7 @@
     })
   }
 
-  // ── Workbench tab switching ──────────────────────────────────────────────────
+  // ── Workbench tab switching ───────────────────────────────────────────────────
   function switchBench(name, btn) {
     document.querySelectorAll('.bench-pane').forEach(p => {
       p.classList.toggle('active', p.id === `bench-${name}`)
@@ -341,12 +342,10 @@
   // ── Load templates ────────────────────────────────────────────────────────────
   async function loadTemplates() {
     try {
-      const r = await fetch(`${API}/api/vibes`)
-      const d = await r.json()
-      if (!d.ok) return
+      const templates = await client.vibes.templates()
       const el = document.getElementById('templates')
       el.innerHTML = ''
-      for (const t of d.data.templates) {
+      for (const t of templates) {
         const btn = document.createElement('button')
         btn.className = 'outline full'
         btn.style.cssText = 'text-align:left;font-size:12px;padding:7px 10px'
@@ -362,7 +361,7 @@
   }
   loadTemplates()
 
-  // ── Vibe builder ─────────────────────────────────────────────────────────────
+  // ── Vibe builder ──────────────────────────────────────────────────────────────
   async function doVibe() {
     const desc = document.getElementById('vibe-desc').value.trim()
     if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
@@ -374,23 +373,15 @@
     setStatus('vibe', null)
 
     try {
-      const res = await fetch(`${API}/api/vibes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: desc, name }),
-      })
-      const d = await res.json()
-      if (!d.ok) { out.textContent = d.error; setStatus('vibe', d.error, true); return }
-      vibeResult = d.data
-      out.textContent = JSON.stringify(d.data, null, 2)
-      setStatus('vibe', `Sandbox created: ${d.data.name}`)
-      // Populate platform links
-      document.getElementById('launch-app-link').href = d.data.appUrl || '#'
-      document.getElementById('embed-out').value = d.data.embedCode || ''
-      document.getElementById('short-api-out').value = d.data.shortApi?.run || ''
+      vibeResult = await client.vibes.create(desc, name)
+      out.textContent = JSON.stringify(vibeResult, null, 2)
+      setStatus('vibe', `Sandbox created: ${vibeResult.name}`)
+      document.getElementById('launch-app-link').href = vibeResult.appUrl
+      document.getElementById('embed-out').value = vibeResult.embedCode
+      document.getElementById('short-api-out').value = vibeResult.shortApi.run
       document.getElementById('vibe-actions').style.display = 'flex'
     } catch (e) {
-      out.textContent = `Network error: ${e}`
+      out.textContent = `Error: ${e}`
       setStatus('vibe', String(e), true)
     } finally {
       btn.disabled = false; btn.textContent = 'Generate Sandbox →'
@@ -418,19 +409,16 @@
     const id = document.getElementById('chat-id').value.trim()
     if (!id) return
     try {
-      const r = await fetch(`${API}/api/sandbox/${id}`)
-      const d = await r.json()
-      if (!d.ok) { addMsg('error', `Not found: ${d.error}`); return }
-      activeSandboxId = id
+      activeSandbox = await client.sandbox.get(id)
       document.getElementById('sandbox-meta').style.display = 'block'
       document.getElementById('sandbox-meta').innerHTML =
-        `<strong>${escHtml(d.data.name)}</strong><br>` +
-        `<span class="badge-model">${escHtml(d.data.model)}</span><br>` +
+        `<strong>${escHtml(activeSandbox.name)}</strong><br>` +
+        `<span class="badge-model">${escHtml(activeSandbox.model)}</span><br>` +
         `<span style="opacity:0.6;font-size:10px">${escHtml(id)}</span>`
       document.getElementById('chat-input').disabled = false
       document.getElementById('send-btn').disabled = false
       document.getElementById('del-btn').disabled = false
-      addMsg('system', `Loaded: ${d.data.name}`)
+      addMsg('system', `Loaded: ${activeSandbox.name}`)
     } catch (e) { addMsg('error', String(e)) }
   }
 
@@ -447,50 +435,20 @@
   async function sendMessage() {
     const input = document.getElementById('chat-input')
     const text = input.value.trim()
-    if (!text || !activeSandboxId) return
+    if (!text || !activeSandbox) return
     input.value = ''
     document.getElementById('send-btn').disabled = true
     addMsg('user', text)
 
-    const typingEl = addMsg('assistant', '…')
+    const typingEl = addMsg('assistant', '')
     typingEl.classList.add('typing')
-    typingEl.textContent = ''
 
     try {
-      const res = await fetch(`${API}/api/sandbox/${activeSandboxId}/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
-      })
-
-      const reader = res.body.getReader()
-      const dec = new TextDecoder()
-      let buf = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += dec.decode(value, { stream: true })
-        const parts = buf.split('\n\n')
-        buf = parts.pop() ?? ''
-        for (const part of parts) {
-          for (const line of part.split('\n')) {
-            if (!line.startsWith('data:')) continue
-            const raw = line.slice(5).trim()
-            if (raw === '[DONE]') continue
-            try {
-              const ev = JSON.parse(raw)
-              if (ev.done) continue
-              if (ev.error) { typingEl.textContent += ` [Error: ${ev.error}]`; break }
-              if (typeof ev.response === 'string') {
-                typingEl.textContent += ev.response
-                typingEl.classList.remove('typing')
-                const msgs = document.getElementById('messages')
-                msgs.scrollTop = msgs.scrollHeight
-              }
-            } catch {}
-          }
-        }
+      for await (const token of activeSandbox.stream(text)) {
+        typingEl.textContent += token
+        typingEl.classList.remove('typing')
+        const msgs = document.getElementById('messages')
+        msgs.scrollTop = msgs.scrollHeight
       }
     } catch (e) {
       typingEl.textContent = `Error: ${e}`
@@ -502,10 +460,10 @@
   }
 
   async function deleteSandbox() {
-    if (!activeSandboxId || !confirm('Delete this sandbox?')) return
-    await fetch(`${API}/api/sandbox/${activeSandboxId}`, { method: 'DELETE' })
+    if (!activeSandbox || !confirm('Delete this sandbox?')) return
+    await activeSandbox.delete()
     addMsg('system', 'Sandbox deleted.')
-    activeSandboxId = null
+    activeSandbox = null
     document.getElementById('sandbox-meta').style.display = 'none'
     document.getElementById('chat-input').disabled = true
     document.getElementById('send-btn').disabled = true
@@ -520,49 +478,27 @@
   async function doComplete() {
     const out = document.getElementById('bc-out')
     out.textContent = '…'
-    const body = {
-      prompt:       document.getElementById('bc-prompt').value,
-      systemPrompt: document.getElementById('bc-sys').value || undefined,
-      model:        document.getElementById('bc-model').value || undefined,
-      temperature:  parseFloat(document.getElementById('bc-temp').value),
-      maxTokens:    parseInt(document.getElementById('bc-tokens').value),
-    }
     try {
-      const r = await fetch(`${API}/api/ai/complete`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      out.textContent = await client.ai.complete({
+        prompt:       document.getElementById('bc-prompt').value,
+        systemPrompt: document.getElementById('bc-sys').value || undefined,
+        model:        document.getElementById('bc-model').value || undefined,
+        temperature:  parseFloat(document.getElementById('bc-temp').value),
+        maxTokens:    parseInt(document.getElementById('bc-tokens').value),
       })
-      const d = await r.json()
-      out.textContent = d.ok ? d.data.response : `Error: ${d.error}`
     } catch (e) { out.textContent = String(e) }
   }
 
   async function doStream() {
     const out = document.getElementById('bs-out')
     out.textContent = ''
-    const body = {
-      prompt:       document.getElementById('bs-prompt').value,
-      systemPrompt: document.getElementById('bs-sys').value || undefined,
-      model:        document.getElementById('bs-model').value || undefined,
-    }
     try {
-      const res = await fetch(`${API}/api/ai/stream`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-      const reader = res.body.getReader()
-      const dec = new TextDecoder()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = dec.decode(value, { stream: true })
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data:')) continue
-          const raw = line.slice(5).trim()
-          if (raw === '[DONE]') continue
-          try {
-            const ev = JSON.parse(raw)
-            if (typeof ev.response === 'string') out.textContent += ev.response
-          } catch {}
-        }
+      for await (const token of client.ai.stream({
+        prompt:       document.getElementById('bs-prompt').value,
+        systemPrompt: document.getElementById('bs-sys').value || undefined,
+        model:        document.getElementById('bs-model').value || undefined,
+      })) {
+        out.textContent += token
       }
     } catch (e) { out.textContent = String(e) }
   }
@@ -572,13 +508,7 @@
     out.textContent = '…'
     const lines = document.getElementById('be-text').value.split('\n').filter(Boolean)
     try {
-      const r = await fetch(`${API}/api/ai/embed`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: lines }),
-      })
-      const d = await r.json()
-      if (!d.ok) { out.textContent = `Error: ${d.error}`; return }
-      const vecs = d.data.embeddings
+      const vecs = await client.ai.embed(lines)
       out.textContent = vecs.map((v, i) =>
         `[${i}] dim=${v.length}  [${v.slice(0,4).map(x => x.toFixed(4)).join(', ')} …]`
       ).join('\n')
@@ -588,18 +518,13 @@
   async function doImage() {
     const out = document.getElementById('bi-out')
     out.innerHTML = '<span style="opacity:0.5">Generating…</span>'
-    const body = {
-      prompt: document.getElementById('bi-prompt').value,
-      steps:  parseInt(document.getElementById('bi-steps').value),
-    }
     try {
-      const r = await fetch(`${API}/api/ai/image`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-      const d = await r.json()
-      if (!d.ok) { out.textContent = `Error: ${d.error}`; return }
+      const b64 = await client.ai.image(
+        document.getElementById('bi-prompt').value,
+        { steps: parseInt(document.getElementById('bi-steps').value) },
+      )
       const img = document.createElement('img')
-      img.src = `data:image/png;base64,${d.data.image}`
+      img.src = `data:image/png;base64,${b64}`
       out.innerHTML = ''
       out.appendChild(img)
     } catch (e) { out.textContent = String(e) }
@@ -610,12 +535,8 @@
     const out = document.getElementById('bt-out')
     if (!fileInput.files?.length) { out.textContent = 'Select an audio file first.'; return }
     out.textContent = 'Transcribing…'
-    const form = new FormData()
-    form.append('audio', fileInput.files[0])
     try {
-      const r = await fetch(`${API}/api/ai/transcribe`, { method: 'POST', body: form })
-      const d = await r.json()
-      out.textContent = d.ok ? d.data.text : `Error: ${d.error}`
+      out.textContent = await client.ai.transcribe(fileInput.files[0])
     } catch (e) { out.textContent = String(e) }
   }
 
@@ -630,8 +551,15 @@
   }
 
   function escHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
   }
+
+  // ── Expose to inline onclick handlers ────────────────────────────────────────
+  Object.assign(window, {
+    switchTab, switchBench, doVibe, gotoChatFromVibe,
+    copyEmbed, loadSandbox, sendMessage, deleteSandbox,
+    doComplete, doStream, doEmbed, doImage, doTranscribe,
+  })
 </script>
 </body>
 </html>

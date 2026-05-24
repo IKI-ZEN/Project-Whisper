@@ -1,3 +1,5 @@
+import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, DEFAULT_SYSTEM_PROMPT, DEFAULT_MODEL } from './constants'
+
 // ── Domain types ──────────────────────────────────────────────────────────────
 
 export interface Message {
@@ -104,11 +106,12 @@ export function parseCompleteRequest(body: unknown): CompleteRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   if (!body.prompt && !body.messages) throw new Error('prompt or messages is required')
   return {
-    prompt: body.prompt !== undefined ? str(body.prompt, 'prompt') : undefined,
+    prompt:       body.prompt       !== undefined ? str(body.prompt,       'prompt')       : undefined,
+    messages:     Array.isArray(body.messages)   ? (body.messages as Message[])            : undefined,
     systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
-    model: body.model !== undefined ? str(body.model, 'model') : undefined,
-    temperature: body.temperature !== undefined ? num(body.temperature, 'temperature', 0.7, 0, 2) : undefined,
-    maxTokens: body.maxTokens !== undefined ? num(body.maxTokens, 'maxTokens', 1024, 1, 8192) : undefined,
+    model:        body.model        !== undefined ? str(body.model,        'model')        : undefined,
+    temperature:  body.temperature  !== undefined ? num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2)    : undefined,
+    maxTokens:    body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS,  1, 8192) : undefined,
   }
 }
 
@@ -134,13 +137,13 @@ export function parseImageRequest(body: unknown): ImageRequest {
 export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   return {
-    name: str(body.name, 'name'),
-    description: str(body.description, 'description', ''),
-    systemPrompt: str(body.systemPrompt, 'systemPrompt', 'You are a helpful assistant.'),
-    tools: [],
-    model: str(body.model, 'model', '@cf/meta/llama-3.1-8b-instruct'),
-    temperature: num(body.temperature, 'temperature', 0.7, 0, 2),
-    maxTokens: num(body.maxTokens, 'maxTokens', 1024, 1, 8192),
+    name:         str(body.name,         'name'),
+    description:  str(body.description,  'description',  ''),
+    systemPrompt: str(body.systemPrompt, 'systemPrompt', DEFAULT_SYSTEM_PROMPT),
+    tools:        [],
+    model:        str(body.model,        'model',        DEFAULT_MODEL),
+    temperature:  num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2),
+    maxTokens:    num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS,  1, 8192),
   }
 }
 

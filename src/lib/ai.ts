@@ -1,6 +1,7 @@
 import type { Env } from '../types/env'
 import type { Message, SandboxConfig } from './schema'
 import { sseEvent } from './http'
+import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS } from './constants'
 
 // ── Model registry ────────────────────────────────────────────────────────────
 
@@ -84,8 +85,8 @@ async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Pr
     body: JSON.stringify({
       model,
       messages: buildMessages(opts),
-      temperature: opts.temperature ?? 0.7,
-      max_tokens: opts.maxTokens ?? 1024,
+      temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     }),
   })
   if (!res.ok) throw new Error(`OpenAI gateway error ${res.status}: ${await res.text()}`)
@@ -106,8 +107,8 @@ async function completeAnthropic(env: Env, model: string, opts: CompletionOpts):
       model,
       messages,
       ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
-      max_tokens: opts.maxTokens ?? 1024,
-      temperature: opts.temperature ?? 0.7,
+      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
     }),
   })
   if (!res.ok) throw new Error(`Anthropic gateway error ${res.status}: ${await res.text()}`)
@@ -123,7 +124,7 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
     .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
   const body: Record<string, unknown> = {
     contents,
-    generationConfig: { temperature: opts.temperature ?? 0.7, maxOutputTokens: opts.maxTokens ?? 1024 },
+    generationConfig: { temperature: opts.temperature ?? DEFAULT_TEMPERATURE, maxOutputTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS },
     ...(system ? { systemInstruction: { parts: [{ text: system.content }] } } : {}),
   }
   const res = await fetch(
@@ -135,147 +136,101 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
   return data.candidates[0]?.content?.parts[0]?.text ?? ''
 }
 
+// ── SSE streaming helpers ─────────────────────────────────────────────────────
+
+// Fetches a streaming endpoint and yields decoded SSE response tokens.
+async function* streamSSEFetch(
+  url: string,
+  init: RequestInit,
+  extractToken: (parsed: unknown) => string | undefined,
+): AsyncGenerator<string> {
+  const res = await fetch(url, init)
+  if (!res.ok || !res.body) throw new Error(`HTTP error ${res.status}`)
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      const lines = buf.split('\n'); buf = lines.pop() ?? ''
+      for (const line of lines) {
+        const payload = line.trim().replace(/^data:\s*/, '')
+        if (!payload || payload === '[DONE]') continue
+        try {
+          const text = extractToken(JSON.parse(payload))
+          if (text) yield text
+        } catch { /* skip malformed chunks */ }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+// Wraps an async generator into a Workers-compatible ReadableStream of SSE events.
+function toReadableStream(gen: () => AsyncGenerator<string>): ReadableStream {
+  const encoder = new TextEncoder()
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const text of gen()) {
+          controller.enqueue(encoder.encode(sseEvent({ response: text })))
+        }
+        controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
+      } catch (e) {
+        controller.enqueue(encoder.encode(sseEvent({ error: String(e) }, 'error')))
+      } finally {
+        controller.close()
+      }
+    },
+  })
+}
+
 // ── Provider streaming (gateway) ──────────────────────────────────────────────
 
 function streamOpenAI(env: Env, model: string, opts: CompletionOpts): ReadableStream {
-  const encoder = new TextEncoder()
-  return new ReadableStream({
-    async start(controller) {
-      try {
-        const res = await fetch(`${gatewayBase(env)}/openai/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${env.OPENAI_API_KEY ?? ''}`,
-          },
-          body: JSON.stringify({
-            model, messages: buildMessages(opts),
-            temperature: opts.temperature ?? 0.7, max_tokens: opts.maxTokens ?? 1024, stream: true,
-          }),
-        })
-        if (!res.ok || !res.body) throw new Error(`OpenAI stream error ${res.status}`)
-        const reader = res.body.getReader()
-        const dec = new TextDecoder()
-        let buf = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buf += dec.decode(value, { stream: true })
-          const lines = buf.split('\n'); buf = lines.pop() ?? ''
-          for (const line of lines) {
-            const payload = line.trim().replace(/^data:\s*/, '')
-            if (!payload || payload === '[DONE]') continue
-            try {
-              const chunk = JSON.parse(payload) as { choices: { delta: { content?: string } }[] }
-              const text = chunk.choices[0]?.delta?.content
-              if (text) controller.enqueue(encoder.encode(sseEvent({ response: text })))
-            } catch { /* skip malformed chunks */ }
-          }
-        }
-        controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
-      } catch (e) {
-        controller.enqueue(encoder.encode(sseEvent({ error: String(e) }, 'error')))
-      } finally {
-        controller.close()
-      }
+  return toReadableStream(() => streamSSEFetch(
+    `${gatewayBase(env)}/openai/chat/completions`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY ?? ''}` },
+      body: JSON.stringify({ model, messages: buildMessages(opts), temperature: opts.temperature ?? DEFAULT_TEMPERATURE, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, stream: true }),
     },
-  })
+    (c: unknown) => (c as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content,
+  ))
 }
 
 function streamAnthropic(env: Env, model: string, opts: CompletionOpts): ReadableStream {
-  const encoder = new TextEncoder()
-  return new ReadableStream({
-    async start(controller) {
-      try {
-        const messages = buildMessages(opts).filter(m => m.role !== 'system')
-        const res = await fetch(`${gatewayBase(env)}/anthropic/v1/messages`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': env.ANTHROPIC_API_KEY ?? '',
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model, messages,
-            ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
-            max_tokens: opts.maxTokens ?? 1024, temperature: opts.temperature ?? 0.7, stream: true,
-          }),
-        })
-        if (!res.ok || !res.body) throw new Error(`Anthropic stream error ${res.status}`)
-        const reader = res.body.getReader()
-        const dec = new TextDecoder()
-        let buf = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buf += dec.decode(value, { stream: true })
-          const lines = buf.split('\n'); buf = lines.pop() ?? ''
-          for (const line of lines) {
-            const payload = line.trim().replace(/^data:\s*/, '')
-            if (!payload) continue
-            try {
-              const chunk = JSON.parse(payload) as { type: string; delta?: { text?: string } }
-              if (chunk.type === 'content_block_delta' && chunk.delta?.text)
-                controller.enqueue(encoder.encode(sseEvent({ response: chunk.delta.text })))
-            } catch { /* skip malformed chunks */ }
-          }
-        }
-        controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
-      } catch (e) {
-        controller.enqueue(encoder.encode(sseEvent({ error: String(e) }, 'error')))
-      } finally {
-        controller.close()
-      }
+  const messages = buildMessages(opts).filter(m => m.role !== 'system')
+  return toReadableStream(() => streamSSEFetch(
+    `${gatewayBase(env)}/anthropic/v1/messages`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY ?? '', 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model, messages, ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}), max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, temperature: opts.temperature ?? DEFAULT_TEMPERATURE, stream: true }),
     },
-  })
+    (c: unknown) => { const ch = c as { type?: string; delta?: { text?: string } }; return ch.type === 'content_block_delta' ? ch.delta?.text : undefined },
+  ))
 }
 
 function streamGoogle(env: Env, model: string, opts: CompletionOpts): ReadableStream {
-  const encoder = new TextEncoder()
-  return new ReadableStream({
-    async start(controller) {
-      try {
-        const allMessages = buildMessages(opts)
-        const system = allMessages.find(m => m.role === 'system')
-        const contents = allMessages
-          .filter(m => m.role !== 'system')
-          .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
-        const body: Record<string, unknown> = {
-          contents,
-          generationConfig: { temperature: opts.temperature ?? 0.7, maxOutputTokens: opts.maxTokens ?? 1024 },
-          ...(system ? { systemInstruction: { parts: [{ text: system.content }] } } : {}),
-        }
-        const res = await fetch(
-          `${gatewayBase(env)}/google-ai-studio/v1/models/${model}:streamGenerateContent?alt=sse&key=${env.GOOGLE_AI_KEY ?? ''}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-        )
-        if (!res.ok || !res.body) throw new Error(`Google stream error ${res.status}`)
-        const reader = res.body.getReader()
-        const dec = new TextDecoder()
-        let buf = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buf += dec.decode(value, { stream: true })
-          const lines = buf.split('\n'); buf = lines.pop() ?? ''
-          for (const line of lines) {
-            const payload = line.trim().replace(/^data:\s*/, '')
-            if (!payload) continue
-            try {
-              const chunk = JSON.parse(payload) as { candidates: { content: { parts: { text: string }[] } }[] }
-              const text = chunk.candidates[0]?.content?.parts[0]?.text
-              if (text) controller.enqueue(encoder.encode(sseEvent({ response: text })))
-            } catch { /* skip malformed chunks */ }
-          }
-        }
-        controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
-      } catch (e) {
-        controller.enqueue(encoder.encode(sseEvent({ error: String(e) }, 'error')))
-      } finally {
-        controller.close()
-      }
-    },
-  })
+  const allMessages = buildMessages(opts)
+  const system = allMessages.find(m => m.role === 'system')
+  const contents = allMessages
+    .filter(m => m.role !== 'system')
+    .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+  const body: Record<string, unknown> = {
+    contents,
+    generationConfig: { temperature: opts.temperature ?? DEFAULT_TEMPERATURE, maxOutputTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS },
+    ...(system ? { systemInstruction: { parts: [{ text: system.content }] } } : {}),
+  }
+  return toReadableStream(() => streamSSEFetch(
+    `${gatewayBase(env)}/google-ai-studio/v1/models/${model}:streamGenerateContent?alt=sse&key=${env.GOOGLE_AI_KEY ?? ''}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    (c: unknown) => (c as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.[0]?.text,
+  ))
 }
 
 // ── Public complete ───────────────────────────────────────────────────────────
@@ -289,8 +244,8 @@ export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<
   }
   const response = await run(ai)(opts.model ?? MODELS.text, {
     messages: buildMessages(opts),
-    temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 1024,
+    temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
   })
   const r = response as { response?: string }
   return r.response ?? String(response)
@@ -312,8 +267,8 @@ export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): Readable
       try {
         const aiStream = await run(ai)(opts.model ?? MODELS.text, {
           messages: buildMessages(opts),
-          temperature: opts.temperature ?? 0.7,
-          max_tokens: opts.maxTokens ?? 1024,
+          temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+          max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
           stream: true,
         }) as ReadableStream
 
@@ -467,7 +422,7 @@ User description: "${description}"`
     systemPrompt: typeof parsed.systemPrompt === 'string' ? parsed.systemPrompt : 'You are a helpful assistant.',
     tools:        [],
     model:        typeof parsed.model === 'string'        ? parsed.model        : MODELS.text,
-    temperature:  typeof parsed.temperature === 'number'  ? parsed.temperature  : 0.7,
-    maxTokens:    typeof parsed.maxTokens === 'number'    ? parsed.maxTokens    : 1024,
+    temperature:  typeof parsed.temperature === 'number'  ? parsed.temperature  : DEFAULT_TEMPERATURE,
+    maxTokens:    typeof parsed.maxTokens === 'number'    ? parsed.maxTokens    : DEFAULT_MAX_TOKENS,
   }
 }

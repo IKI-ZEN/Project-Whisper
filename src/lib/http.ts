@@ -41,6 +41,17 @@ export function sseResponse(stream: ReadableStream): Response {
   })
 }
 
+// ── Body parsing helper ───────────────────────────────────────────────────────
+
+export async function parseBody<T>(
+  req: Request,
+  parse: (body: unknown) => T,
+): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
+  let raw: unknown
+  try { raw = await readJson(req) } catch (e) { return { ok: false, response: json(err(String(e)), 400) } }
+  try { return { ok: true, data: parse(raw) } } catch (e) { return { ok: false, response: json(err(String(e)), 422) } }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 import type { Env } from '../types/env'
