@@ -74,6 +74,8 @@ export class AiClient {
 export class SandboxHandle {
   readonly id: string
   readonly name: string
+  readonly description: string
+  readonly model: string
   readonly appUrl: string
   readonly shortLink: string
 

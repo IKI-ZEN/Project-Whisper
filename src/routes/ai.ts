@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, sseResponse, readJson } from '../lib/http'
+import { json, ok, err, sseResponse, parseBody } from '../lib/http'
 import {
   complete, completeStream, embed, generateImage, transcribe,
 } from '../lib/ai'
@@ -13,13 +13,10 @@ export const aiRoutes: Array<[string, string, Handler]> = [
 
   // POST /api/ai/complete — blocking text completion
   ['POST', '/api/ai/complete', async (req: Request, env: Env) => {
-    let body: unknown
-    try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-    let parsed
-    try { parsed = parseCompleteRequest(body) } catch (e) { return json(err(String(e)), 422) }
-
+    const p = await parseBody(req, parseCompleteRequest)
+    if (!p.ok) return p.response
     try {
-      const response = await complete(env.AI, env, parsed)
+      const response = await complete(env.AI, env, p.data)
       return json(ok({ response }))
     } catch (e) {
       return json(err('AI completion failed', String(e)), 500)
@@ -28,23 +25,17 @@ export const aiRoutes: Array<[string, string, Handler]> = [
 
   // POST /api/ai/stream — SSE token stream
   ['POST', '/api/ai/stream', async (req: Request, env: Env) => {
-    let body: unknown
-    try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-    let parsed
-    try { parsed = parseCompleteRequest(body) } catch (e) { return json(err(String(e)), 422) }
-
-    return sseResponse(completeStream(env.AI, env, parsed))
+    const p = await parseBody(req, parseCompleteRequest)
+    if (!p.ok) return p.response
+    return sseResponse(completeStream(env.AI, env, p.data))
   }],
 
   // POST /api/ai/embed — generate embeddings
   ['POST', '/api/ai/embed', async (req: Request, env: Env) => {
-    let body: unknown
-    try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-    let parsed
-    try { parsed = parseEmbedRequest(body) } catch (e) { return json(err(String(e)), 422) }
-
+    const p = await parseBody(req, parseEmbedRequest)
+    if (!p.ok) return p.response
     try {
-      const embeddings = await embed(env.AI, parsed.text, parsed.model)
+      const embeddings = await embed(env.AI, p.data.text, p.data.model)
       return json(ok({ embeddings, count: embeddings.length }))
     } catch (e) {
       return json(err('Embedding failed', String(e)), 500)
@@ -53,13 +44,10 @@ export const aiRoutes: Array<[string, string, Handler]> = [
 
   // POST /api/ai/image — generate image, returns base64 PNG
   ['POST', '/api/ai/image', async (req: Request, env: Env) => {
-    let body: unknown
-    try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-    let parsed
-    try { parsed = parseImageRequest(body) } catch (e) { return json(err(String(e)), 422) }
-
+    const p = await parseBody(req, parseImageRequest)
+    if (!p.ok) return p.response
     try {
-      const bytes = await generateImage(env.AI, parsed.prompt, parsed.model, parsed.steps)
+      const bytes = await generateImage(env.AI, p.data.prompt, p.data.model, p.data.steps)
       return json(ok({ image: toBase64(bytes), format: 'png' }))
     } catch (e) {
       return json(err('Image generation failed', String(e)), 500)

@@ -4,7 +4,8 @@ import { json, ok, err, readJson } from '../lib/http'
 import { generateVibeConfig } from '../lib/ai'
 import { parseVibeRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
-import { registerSandbox } from './sandbox'
+import { registerSandbox, stub, doFetch } from './sandbox'
+import { EMBED_WIDTH, EMBED_HEIGHT } from '../lib/constants'
 
 const TEMPLATES = [
   { id: 'customer-support',  name: 'Customer Support Bot',   tags: ['support', 'chat'],    description: 'Handles FAQs and routes issues to the right team' },
@@ -39,12 +40,7 @@ const createVibe: Handler = async (req, env) => {
   const config: SandboxConfig = { ...vibeConfig, id, memory: [], createdAt: ts, updatedAt: ts }
 
   // Initialise the Durable Object
-  const s = env.SANDBOX.get(env.SANDBOX.idFromName(id))
-  await s.fetch('https://do/init', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  })
+  await doFetch(stub(env, id), 'init', 'POST', config)
 
   // Register in KV with rich metadata for gallery listing
   await registerSandbox(env, {
@@ -61,7 +57,7 @@ const createVibe: Handler = async (req, env) => {
     'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
   ).bind(id, 'vibe_created', JSON.stringify({ description: parsed.description.slice(0, 256) }), ts).run()
 
-  const embedCode = `<iframe src="/app/${id}" width="420" height="640" frameborder="0" allow="microphone"></iframe>`
+  const embedCode = `<iframe src="/app/${id}" width="${EMBED_WIDTH}" height="${EMBED_HEIGHT}" frameborder="0" allow="microphone"></iframe>`
 
   return json(ok({
     sandboxId:  id,

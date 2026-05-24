@@ -4,9 +4,7 @@ import type { SandboxConfig, Message } from '../lib/schema'
 import { runInSandbox, streamInSandbox } from '../lib/ai'
 import { json, sseResponse } from '../lib/http'
 import { now } from '../lib/utils'
-
-const STORAGE_KEY = 'config'
-const MAX_MEMORY = 100 // 50 turns
+import { DO_STORAGE_KEY, MAX_MESSAGES } from '../lib/constants'
 
 export class SandboxDO extends DurableObject<Env> {
   private config: SandboxConfig | null = null
@@ -15,7 +13,7 @@ export class SandboxDO extends DurableObject<Env> {
 
   private async load(): Promise<SandboxConfig> {
     if (this.config) return this.config
-    const stored = await this.ctx.storage.get<SandboxConfig>(STORAGE_KEY)
+    const stored = await this.ctx.storage.get<SandboxConfig>(DO_STORAGE_KEY)
     if (!stored) throw new Error('Sandbox not initialized')
     this.config = stored
     return stored
@@ -23,7 +21,7 @@ export class SandboxDO extends DurableObject<Env> {
 
   private async save(config: SandboxConfig): Promise<void> {
     this.config = config
-    await this.ctx.storage.put(STORAGE_KEY, config)
+    await this.ctx.storage.put(DO_STORAGE_KEY, config)
   }
 
   // ── Fetch router ──────────────────────────────────────────────────────────
@@ -79,7 +77,7 @@ export class SandboxDO extends DurableObject<Env> {
 
     const userMsg: Message  = { role: 'user',      content: message, timestamp: ts }
     const asstMsg: Message  = { role: 'assistant', content: reply,   timestamp: now() }
-    const memory = [...config.memory, userMsg, asstMsg].slice(-MAX_MEMORY)
+    const memory = [...config.memory, userMsg, asstMsg].slice(-MAX_MESSAGES)
 
     await this.save({ ...config, memory, updatedAt: now() })
 

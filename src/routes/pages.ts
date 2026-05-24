@@ -7,6 +7,9 @@ import { sandboxExists } from './sandbox'
 
 function appPageHtml(sandboxId: string): string {
   const id = JSON.stringify(sandboxId)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\//g, '\\u002f')
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -290,7 +293,10 @@ load()
 
 // ── Route handlers ────────────────────────────────────────────────────────────
 
-const htmlHeaders = { 'Content-Type': 'text/html; charset=utf-8' }
+const htmlHeaders = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:",
+}
 
 export const appPageRoute: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
