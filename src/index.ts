@@ -12,16 +12,16 @@ export { SandboxDO } from './durable/SandboxDO'
 
 const router = new Router()
 
-// Health / discovery
-router.get('/', (_req, _env) => Promise.resolve(json(ok({
+// Health / discovery (JSON)
+router.get('/api', (_req, _env) => Promise.resolve(json(ok({
   name:    'Project Aether-Lite',
   version: '0.2.0',
   status:  'operational',
   api: {
-    ai:      { complete: 'POST /api/ai/complete', stream: 'POST /api/ai/stream', embed: 'POST /api/ai/embed', image: 'POST /api/ai/image', transcribe: 'POST /api/ai/transcribe' },
-    sandbox: { list: 'GET /api/sandbox', create: 'POST /api/sandbox', run: 'POST /api/sandbox/:id/run', stream: 'POST /api/sandbox/:id/stream' },
-    vibes:   { list: 'GET /api/vibes', generate: 'POST /api/vibes' },
-    platform: { apps: '/apps', app: '/app/:id', shortApi: '/s/:id/run' },
+    ai:       { complete: 'POST /api/ai/complete', stream: 'POST /api/ai/stream', embed: 'POST /api/ai/embed', image: 'POST /api/ai/image', transcribe: 'POST /api/ai/transcribe' },
+    sandbox:  { list: 'GET /api/sandbox', create: 'POST /api/sandbox', import: 'POST /api/sandbox/import', run: 'POST /api/sandbox/:id/run', stream: 'POST /api/sandbox/:id/stream', export: 'GET /api/sandbox/:id/export' },
+    vibes:    { list: 'GET /api/vibes', generate: 'POST /api/vibes' },
+    platform: { landing: '/', apps: '/apps', app: '/app/:id', shortApi: '/s/:id/run' },
   },
 }))))
 

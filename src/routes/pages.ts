@@ -322,7 +322,118 @@ export const appPageRoute: Handler = async (_req, env, params: Params) => {
 export const appsGalleryRoute: Handler = (_req, _env) =>
   Promise.resolve(new Response(appsGalleryHtml, { headers: htmlHeaders }))
 
+// ── Landing page ──────────────────────────────────────────────────────────────
+
+const landingHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Project Aether-Lite</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--green:#34d399;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:10px;padding:0 32px;height:54px;background:var(--surface);border-bottom:1px solid var(--border)}
+header h1{font-size:15px;font-weight:600;color:var(--accent2)}
+.pill{font-size:10px;padding:2px 8px;border-radius:99px;background:#7c3aed22;color:var(--accent2)}
+header nav{margin-left:auto;display:flex;gap:8px}
+header nav a{font-size:12px;color:var(--muted);text-decoration:none;padding:5px 12px;border-radius:var(--radius);border:1px solid transparent;transition:all .15s}
+header nav a:hover{border-color:var(--border);color:var(--text)}
+header nav a.cta{background:var(--accent);color:#fff;border-color:var(--accent)}
+header nav a.cta:hover{background:#6d28d9;border-color:#6d28d9}
+main{flex:1;max-width:960px;margin:0 auto;padding:72px 24px 48px;width:100%}
+.hero{text-align:center;margin-bottom:64px}
+.hero h2{font-size:42px;font-weight:800;line-height:1.15;letter-spacing:-0.02em;background:linear-gradient(135deg,var(--accent2) 0%,#c4b5fd 50%,var(--accent2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:16px}
+.hero p{font-size:17px;color:var(--muted);max-width:520px;margin:0 auto 32px;line-height:1.6}
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-block;padding:11px 28px;border-radius:var(--radius);font-size:14px;font-weight:600;text-decoration:none;transition:all .15s;cursor:pointer;border:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#6d28d9}
+.btn-outline{background:none;border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{border-color:var(--accent2);color:var(--accent2)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-bottom:56px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:10px}
+.card-icon{font-size:24px;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#7c3aed18;flex-shrink:0}
+.card h3{font-size:14px;font-weight:600}
+.card p{font-size:12px;color:var(--muted);line-height:1.55;flex:1}
+.code-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text);overflow-x:auto;margin-bottom:56px}
+.code-block .c{color:var(--muted)}
+.code-block .s{color:#86efac}
+.code-block .k{color:var(--accent2)}
+.section-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:16px}
+footer{text-align:center;padding:24px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+footer a{color:var(--muted);text-decoration:none}
+footer a:hover{color:var(--accent2)}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Aether-Lite</h1>
+  <span class="pill">v0.2.0</span>
+  <nav>
+    <a href="/apps">Apps Gallery</a>
+    <a href="/playground.html" class="cta">Open Playground →</a>
+  </nav>
+</header>
+<main>
+  <div class="hero">
+    <h2>Build AI apps<br>in plain English</h2>
+    <p>Describe your app, and Aether-Lite designs, configures, and launches a live AI assistant — instantly, with no backend required.</p>
+    <div class="hero-btns">
+      <a href="/playground.html" class="btn btn-primary">Open Playground →</a>
+      <a href="/apps" class="btn btn-outline">Browse Apps</a>
+    </div>
+  </div>
+
+  <p class="section-label">What you can do</p>
+  <div class="cards">
+    <div class="card">
+      <div class="card-icon">✦</div>
+      <h3>Vibe Builder</h3>
+      <p>Describe your app in a sentence. The platform designs a complete AI assistant — system prompt, model, and settings — and launches it instantly.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">◈</div>
+      <h3>Apps Gallery</h3>
+      <p>Every sandbox gets a shareable URL, an embeddable iframe widget, and a stable short API. Browse and open all your apps from one place.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⬡</div>
+      <h3>vibeSDK</h3>
+      <p>A zero-dependency browser SDK and <code style="font-size:11px;color:var(--accent2)">&lt;vibe-chat&gt;</code> web component for embedding any sandbox anywhere with one line of HTML.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⊕</div>
+      <h3>Multi-provider AI</h3>
+      <p>Use free Workers AI models out of the box, or route to GPT-4o, Claude, and Gemini via Cloudflare AI Gateway with your own API keys.</p>
+    </div>
+  </div>
+
+  <p class="section-label">Quick start</p>
+  <div class="code-block"><span class="c">// Embed a sandbox anywhere with the SDK</span>
+<span class="k">import</span> { VibeClient } <span class="k">from</span> <span class="s">'/vibe-sdk.js'</span>
+<span class="k">const</span> client = <span class="k">new</span> VibeClient()
+
+<span class="c">// Create an AI app from a description</span>
+<span class="k">const</span> vibe = <span class="k">await</span> client.vibes.create(<span class="s">'A friendly cooking assistant'</span>)
+document.body.innerHTML = vibe.embedCode   <span class="c">// instant &lt;iframe&gt; embed</span>
+
+<span class="c">// Or drop in the web component</span>
+<span class="c">// &lt;vibe-chat sandbox-id="abc123"&gt;&lt;/vibe-chat&gt;</span></div>
+</main>
+<footer>
+  <a href="/playground.html">Playground</a> · <a href="/apps">Apps</a> · <a href="/api">API</a>
+</footer>
+</body>
+</html>`
+
+export const landingRoute: Handler = (_req, _env) =>
+  Promise.resolve(new Response(landingHtml, { headers: htmlHeaders }))
+
 export const pageRoutes: Array<[string, string, Handler]> = [
+  ['GET', '/',        landingRoute],
   ['GET', '/app/:id', appPageRoute],
   ['GET', '/apps',    appsGalleryRoute],
 ]

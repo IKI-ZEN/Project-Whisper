@@ -241,7 +241,21 @@
     <button class="full outline" onclick="loadSandbox()">Load</button>
     <hr />
     <div id="sandbox-meta" class="sandbox-meta" style="display:none"></div>
+    <div id="config-editor" style="display:none;flex-direction:column;gap:8px;margin-top:8px">
+      <hr/>
+      <label>Edit config</label>
+      <div class="field"><label>Name</label><input id="cfg-name" type="text"/></div>
+      <div class="field"><label>System Prompt</label><textarea id="cfg-sys" rows="4" class="mono"></textarea></div>
+      <div class="field"><label>Model</label><input id="cfg-model" type="text"/></div>
+      <div class="row">
+        <div class="field"><label>Temperature</label><input id="cfg-temp" type="number" min="0" max="2" step="0.1"/></div>
+        <div class="field"><label>Max Tokens</label><input id="cfg-tokens" type="number" min="1" max="8192"/></div>
+      </div>
+      <button id="cfg-save-btn" class="full outline" onclick="saveConfig()">Save changes</button>
+      <div id="cfg-status" style="display:none"></div>
+    </div>
     <div style="margin-top:auto;display:flex;flex-direction:column;gap:6px">
+      <button id="history-btn" class="full outline" onclick="loadHistory()" disabled>Load history</button>
       <button class="full outline danger" onclick="deleteSandbox()" id="del-btn" disabled>Delete sandbox</button>
     </div>
   </div>
@@ -445,14 +459,7 @@
       activeSandbox = sandbox
       document.getElementById('chat-id').value = sandbox.id
       document.getElementById('import-json').value = ''
-      document.getElementById('sandbox-meta').style.display = 'block'
-      document.getElementById('sandbox-meta').innerHTML =
-        `<strong>${escHtml(sandbox.name)}</strong><br>` +
-        `<span class="badge-model">${escHtml(sandbox.model)}</span><br>` +
-        `<span style="opacity:0.6;font-size:10px">${escHtml(sandbox.id)}</span>`
-      document.getElementById('chat-input').disabled = false
-      document.getElementById('send-btn').disabled = false
-      document.getElementById('del-btn').disabled = false
+      populateSandboxUI(sandbox)
       switchTab('chat')
       addMsg('system', `Imported: ${sandbox.name}`)
     } catch (e) {
@@ -463,19 +470,31 @@
   }
 
   // ── Sandbox chat ──────────────────────────────────────────────────────────────
+  function populateSandboxUI(sandbox) {
+    document.getElementById('sandbox-meta').style.display = 'block'
+    document.getElementById('sandbox-meta').innerHTML =
+      `<strong>${escHtml(sandbox.name)}</strong><br>` +
+      `<span class="badge-model">${escHtml(sandbox.model)}</span><br>` +
+      `<span style="opacity:0.6;font-size:10px">${escHtml(sandbox.id)}</span>`
+    document.getElementById('cfg-name').value          = sandbox.name
+    document.getElementById('cfg-sys').value           = sandbox.systemPrompt
+    document.getElementById('cfg-model').value         = sandbox.model
+    document.getElementById('cfg-temp').value          = sandbox.temperature
+    document.getElementById('cfg-tokens').value        = sandbox.maxTokens
+    document.getElementById('config-editor').style.display = 'flex'
+    document.getElementById('chat-input').disabled  = false
+    document.getElementById('send-btn').disabled    = false
+    document.getElementById('del-btn').disabled     = false
+    document.getElementById('history-btn').disabled = false
+    setStatus('cfg', null)
+  }
+
   async function loadSandbox() {
     const id = document.getElementById('chat-id').value.trim()
     if (!id) return
     try {
       activeSandbox = await client.sandbox.get(id)
-      document.getElementById('sandbox-meta').style.display = 'block'
-      document.getElementById('sandbox-meta').innerHTML =
-        `<strong>${escHtml(activeSandbox.name)}</strong><br>` +
-        `<span class="badge-model">${escHtml(activeSandbox.model)}</span><br>` +
-        `<span style="opacity:0.6;font-size:10px">${escHtml(id)}</span>`
-      document.getElementById('chat-input').disabled = false
-      document.getElementById('send-btn').disabled = false
-      document.getElementById('del-btn').disabled = false
+      populateSandboxUI(activeSandbox)
       addMsg('system', `Loaded: ${activeSandbox.name}`)
     } catch (e) { addMsg('error', String(e)) }
   }
@@ -523,9 +542,11 @@
     addMsg('system', 'Sandbox deleted.')
     activeSandbox = null
     document.getElementById('sandbox-meta').style.display = 'none'
-    document.getElementById('chat-input').disabled = true
-    document.getElementById('send-btn').disabled = true
-    document.getElementById('del-btn').disabled = true
+    document.getElementById('config-editor').style.display = 'none'
+    document.getElementById('chat-input').disabled  = true
+    document.getElementById('send-btn').disabled    = true
+    document.getElementById('del-btn').disabled     = true
+    document.getElementById('history-btn').disabled = true
   }
 
   document.getElementById('chat-input').addEventListener('keydown', e => {
@@ -598,6 +619,53 @@
     } catch (e) { out.textContent = String(e) }
   }
 
+  // ── Config editor ─────────────────────────────────────────────────────────────
+  async function saveConfig() {
+    if (!activeSandbox) return
+    const patch = {
+      name:         document.getElementById('cfg-name').value,
+      systemPrompt: document.getElementById('cfg-sys').value,
+      model:        document.getElementById('cfg-model').value,
+      temperature:  parseFloat(document.getElementById('cfg-temp').value),
+      maxTokens:    parseInt(document.getElementById('cfg-tokens').value, 10),
+    }
+    const btn = document.getElementById('cfg-save-btn')
+    btn.disabled = true; btn.textContent = 'Saving…'
+    try {
+      await activeSandbox.update(patch)
+      activeSandbox = await client.sandbox.get(activeSandbox.id)
+      populateSandboxUI(activeSandbox)
+      setStatus('cfg', 'Saved')
+    } catch (e) {
+      setStatus('cfg', String(e), true)
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save changes'
+    }
+  }
+
+  // ── History viewer ────────────────────────────────────────────────────────────
+  async function loadHistory() {
+    if (!activeSandbox) return
+    const msgs = document.getElementById('messages')
+    msgs.innerHTML = ''
+    const btn = document.getElementById('history-btn')
+    btn.disabled = true; btn.textContent = 'Loading…'
+    try {
+      const history = await activeSandbox.history()
+      if (!history.length) {
+        addMsg('system', 'No conversation history yet.')
+      } else {
+        for (const m of history) {
+          if (m.role !== 'system') addMsg(m.role, m.content)
+        }
+      }
+    } catch (e) {
+      addMsg('error', String(e))
+    } finally {
+      btn.disabled = false; btn.textContent = 'Load history'
+    }
+  }
+
   // ── Utils ─────────────────────────────────────────────────────────────────────
   function setStatus(panel, msg, isErr = false) {
     const el = document.getElementById(`${panel}-status`)
@@ -616,6 +684,7 @@
   Object.assign(window, {
     switchTab, switchBench, doVibe, gotoChatFromVibe,
     copyEmbed, copyExport, loadSandbox, sendMessage, deleteSandbox, doImport,
+    saveConfig, loadHistory,
     doComplete, doStream, doEmbed, doImage, doTranscribe,
   })
 </script>

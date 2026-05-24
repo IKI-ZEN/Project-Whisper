@@ -87,6 +87,9 @@ export class SandboxHandle {
   readonly name: string
   readonly description: string
   readonly model: string
+  readonly systemPrompt: string
+  readonly temperature: number
+  readonly maxTokens: number
   readonly appUrl: string
   readonly shortLink: string
 
