@@ -27,3 +27,14 @@ ALLOWED_ORIGINS=
 # remain public. Set up your Access application at dash.cloudflare.com → Access.
 CF_ACCESS_AUD=             # Application Audience (AUD) tag from the Access app settings
 CF_ACCESS_TEAM_DOMAIN=     # e.g. yourteam.cloudflareaccess.com
+
+# Optional: Cloudflare Pages deployment.
+# Requires a token with Pages:Edit permission. Generate at dash.cloudflare.com → My Profile → API Tokens.
+# CLOUDFLARE_ACCOUNT_ID is already used for AI Gateway — set it once for both.
+CLOUDFLARE_API_TOKEN=      # Bearer token for Pages Direct Upload API
+
+# Optional: Email sending via Cloudflare Email Routing.
+# Requires Email Routing to be configured on your domain at dash.cloudflare.com → Email → Email Routing.
+# Create the [[send_email]] binding in wrangler.toml with your verified from-address.
+# The from address used by the API is: noreply@aether-lite.app (change in src/routes/appstate.ts)
+# SEND_EMAIL binding is automatically available when configured in wrangler.toml.

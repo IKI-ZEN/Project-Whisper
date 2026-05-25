@@ -404,6 +404,18 @@ export class VibesClient {
   create(description: string, name?: string): Promise<VibeBuilderResult>
 }
 
+// ── AppStateHandle ────────────────────────────────────────────────────────────
+
+/** Persistent key-value store for a generated app. Backed by a Durable Object. */
+export class AppStateHandle {
+  constructor(base: string, buildId: string)
+  get(key: string): Promise<{ key: string; value: string } | null>
+  set(key: string, value: string): Promise<void>
+  list(): Promise<Array<{ key: string; value: string }>>
+  delete(key: string): Promise<void>
+  clear(): Promise<void>
+}
+
 // ── AppHandle ─────────────────────────────────────────────────────────────────
 
 /** Handle to a completed (or in-progress) app build. */
@@ -415,8 +427,12 @@ export class AppHandle {
   readonly files: string[]
   /** URL where the generated app is served. */
   readonly appUrl: string
+  /** Persistent key-value state store for this app. */
+  readonly state: AppStateHandle
 
   getFile(filename: string): Promise<string>
+  /** Deploy to Cloudflare Pages. Requires CLOUDFLARE_API_TOKEN server-side. */
+  deploy(): Promise<{ deploymentUrl: string; deploymentId?: string; projectName: string }>
   delete(): Promise<void>
 }
 

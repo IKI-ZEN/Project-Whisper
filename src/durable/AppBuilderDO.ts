@@ -14,7 +14,7 @@ interface BlueprintFile {
 
 interface Blueprint {
   name: string
-  techStack: 'vanilla' | 'alpine' | 'react' | 'vue' | 'svelte'
+  techStack: 'vanilla' | 'alpine' | 'react' | 'vue' | 'svelte' | 'worker'
   cdnDependencies: string[]
   files: BlueprintFile[]
   sandboxIntegration: boolean
@@ -89,6 +89,38 @@ function mimeType(filename: string): string {
 
 function stripCodeFences(text: string): string {
   return text.replace(/^```[^\n]*\n?/, '').replace(/\n?```\s*$/, '').trim()
+}
+
+function escSvg(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function generateBuildThumbnail(state: BuildState): string {
+  const stackColors: Record<string, string> = {
+    vanilla: '#f59e0b', alpine: '#10b981', react: '#61dafb',
+    vue: '#42d392', svelte: '#ff3e00', worker: '#f6821f',
+  }
+  const stack  = state.blueprint?.techStack ?? 'vanilla'
+  const color  = stackColors[stack] ?? '#7c3aed'
+  const name   = escSvg((state.name ?? 'App').slice(0, 36))
+  const files  = (state.files ?? []).slice(0, 5)
+  const badgeW = Math.min(stack.length * 7 + 20, 90)
+
+  const fileLines = files.map((f, i) =>
+    `<text x="20" y="${136 + i * 16}" font-family="monospace" font-size="10" fill="#94a3b8">${escSvg(f)}</text>`,
+  ).join('\n  ')
+
+  const n = state.files.length
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <rect width="320" height="200" rx="8" fill="#0c0c0f"/>
+  <rect x="0" y="0" width="320" height="3" rx="1" fill="${color}"/>
+  <text x="20" y="38" font-family="-apple-system,sans-serif" font-size="17" font-weight="700" fill="#d8d8e8">${name}</text>
+  <rect x="20" y="48" width="${badgeW}" height="16" rx="8" fill="${color}22"/>
+  <text x="28" y="60" font-family="monospace" font-size="10" fill="${color}">${escSvg(stack)}</text>
+  <text x="20" y="96" font-family="-apple-system,sans-serif" font-size="9" letter-spacing="0.06em" fill="#4a4a60">FILES</text>
+  ${fileLines}
+  <text x="20" y="192" font-family="-apple-system,sans-serif" font-size="9" fill="#252530">Aether-Lite · ${n} file${n !== 1 ? 's' : ''}</text>
+</svg>`
 }
 
 // ── AppBuilderDO ──────────────────────────────────────────────────────────────
@@ -226,6 +258,7 @@ Tech stack options:
 - "alpine": Alpine.js for reactive UI without a build step
 - "react": React 18 via CDN ESM (complex UIs with many interactive components)
 - "vue": Vue 3 via CDN ESM
+- "worker": vanilla HTML + a Cloudflare Worker companion (worker.js) for server-side logic, form handling, secrets, or scheduled tasks
 
 CDN pattern: https://esm.sh/react@18, https://esm.sh/vue@3 etc.
 When loading scripts or stylesheets from a CDN, always include integrity and crossorigin attributes for Subresource Integrity (SRI):
@@ -233,8 +266,12 @@ When loading scripts or stylesheets from a CDN, always include integrity and cro
 index.html MUST always be included as the entry file.
 Maximum ${MAX_BUILD_FILES} files total. Aim for 2-3. Keep it minimal and self-contained.
 
+If techStack is "worker", include a "worker.js" file with role "logic":
+  export default { async fetch(request, env) { ... } }
+  The worker.js is a deployable Cloudflare Worker script that handles fetch events.
+
 Output exactly this JSON structure (no other text):
-{"name":"string","techStack":"vanilla|alpine|react|vue","cdnDependencies":["url"],"files":[{"filename":"index.html","description":"what it does","role":"entry"}],"sandboxIntegration":false}`
+{"name":"string","techStack":"vanilla|alpine|react|vue|worker","cdnDependencies":["url"],"files":[{"filename":"index.html","description":"what it does","role":"entry"}],"sandboxIntegration":false}`
 
     const userContent = (initialState.sandboxId
       ? '[This app integrates with an Aether-Lite AI sandbox backend. Set sandboxIntegration:true]\n'
@@ -261,7 +298,7 @@ Output exactly this JSON structure (no other text):
       const jsonMatch = blueprintText.match(/\{[\s\S]*\}/)
       if (!jsonMatch) throw new Error('No JSON found in blueprint')
       const parsed = JSON.parse(jsonMatch[0]) as Partial<Blueprint>
-      const validStacks = ['vanilla', 'alpine', 'react', 'vue', 'svelte']
+      const validStacks = ['vanilla', 'alpine', 'react', 'vue', 'svelte', 'worker']
       blueprint = {
         name:               typeof parsed.name === 'string' ? parsed.name : initialState.name,
         techStack:          validStacks.includes(parsed.techStack ?? '') ? parsed.techStack! : 'vanilla',
@@ -323,11 +360,37 @@ Purpose: ${file.description}`,
         timestamp: Date.now(),
       }]
 
+      const stateApiHint = `
+Persistent key-value storage (survives reloads):
+  GET    /api/app/__BUILD_ID__/state          → { entries: [{key, value}] }
+  GET    /api/app/__BUILD_ID__/state/:key     → { key, value }
+  PUT    /api/app/__BUILD_ID__/state/:key     body: {"value":"<string>"} → { key, value }
+  DELETE /api/app/__BUILD_ID__/state/:key
+  DELETE /api/app/__BUILD_ID__/state          (clear all)
+Replace __BUILD_ID__ with the literal string "__BUILD_ID__" — it is injected at serve time.
+
+Image upload and display:
+  POST /api/app/__BUILD_ID__/images  multipart, field "file" (png/jpeg/gif/webp, max 5 MB) → { imageId, url }
+  GET  /api/app/__BUILD_ID__/images/:imageId → serves image
+
+For date/time formatting, use native browser APIs — no library needed:
+  new Intl.DateTimeFormat('en-AU', {dateStyle:'medium',timeStyle:'short'}).format(new Date())
+  new Intl.RelativeTimeFormat('en',{numeric:'auto'}).format(-3,'day')  // "3 days ago"
+  Date.now()                // milliseconds since epoch
+  new Date(ts).toISOString() // ISO 8601 string
+Never import date-fns, dayjs, moment, or luxon.`
+
+      const workerHint = blueprint.techStack === 'worker' && file.filename === 'worker.js' ? `
+Worker companion format: export default { async fetch(request, env) { ... } }
+This worker.js is a deployable Cloudflare Worker script (not auto-deployed — copy to your own Worker project).
+It receives fetch requests and can use Cloudflare bindings via env.` : ''
+
       const fileStream = completeStream(this.env.AI, this.env, {
         model:       initialState.model,
         systemPrompt: `You are writing source code for a web app file.
 Output ONLY the raw file content. No markdown fences, no explanation, no surrounding text.
-The output is written directly to ${file.filename}.`,
+The output is written directly to ${file.filename}.
+${stateApiHint}${workerHint}`,
         messages:    fileMessages,
         maxTokens:   4096,
         temperature: 0.1,
@@ -359,9 +422,24 @@ The output is written directly to ${file.filename}.`,
       finalState.files       = generatedFiles
       finalState.completedAt = Date.now()
       await this.state.storage.put('state', finalState)
+
+      // E3: generate metadata SVG thumbnail and store in R2
+      try {
+        const svg = generateBuildThumbnail(finalState)
+        const enc = new TextEncoder()
+        await this.env.FILES.put(`apps/${finalState.id}/.thumbnail.svg`, enc.encode(svg), {
+          httpMetadata: { contentType: 'image/svg+xml' },
+        })
+      } catch { /* non-fatal */ }
     }
 
-    wsend({ type: 'build_complete', buildId: initialState.id, appUrl: `/build/${initialState.id}`, files: generatedFiles })
+    wsend({
+      type:         'build_complete',
+      buildId:      initialState.id,
+      appUrl:       `/build/${initialState.id}`,
+      thumbnailUrl: `/api/v2/build/${initialState.id}/thumbnail`,
+      files:        generatedFiles,
+    })
     ws.close(1000, 'Build complete')
   }
 }

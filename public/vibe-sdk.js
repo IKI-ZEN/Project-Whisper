@@ -682,6 +682,62 @@ export class VibesClient {
   }
 }
 
+// ── AppStateHandle ────────────────────────────────────────────────────────────
+
+/**
+ * Persistent key-value store for a generated app build.
+ * Data survives reloads — backed by a Durable Object per build.
+ */
+export class AppStateHandle {
+  #base
+  #buildId
+
+  /** @param {string} base @param {string} buildId */
+  constructor(base, buildId) {
+    this.#base    = base
+    this.#buildId = buildId
+  }
+
+  /** Get a value by key. Returns null if not found. @param {string} key */
+  async get(key) {
+    try {
+      return /** @type {{value:string}} */ (
+        await apiRequest(this.#base, `/api/app/${this.#buildId}/state/${encodeURIComponent(key)}`, 'GET')
+      )
+    } catch (e) {
+      if (/** @type {any} */ (e).status === 404) return null
+      throw e
+    }
+  }
+
+  /**
+   * Set a value.
+   * @param {string} key
+   * @param {string} value
+   */
+  async set(key, value) {
+    await apiRequest(this.#base, `/api/app/${this.#buildId}/state/${encodeURIComponent(key)}`, 'PUT', { value: String(value) })
+  }
+
+  /** List all key-value pairs. @returns {Promise<{key:string,value:string}[]>} */
+  async list() {
+    const data = /** @type {{entries:{key:string,value:string}[]}} */ (
+      await apiRequest(this.#base, `/api/app/${this.#buildId}/state`, 'GET')
+    )
+    return data.entries
+  }
+
+  /** Delete a key. @param {string} key */
+  async delete(key) {
+    await apiRequest(this.#base, `/api/app/${this.#buildId}/state/${encodeURIComponent(key)}`, 'DELETE')
+  }
+
+  /** Clear all key-value pairs. */
+  async clear() {
+    await apiRequest(this.#base, `/api/app/${this.#buildId}/state`, 'DELETE')
+  }
+}
+
 // ── AppHandle ─────────────────────────────────────────────────────────────────
 
 /**
@@ -694,6 +750,7 @@ export class AppHandle {
   /** @type {'idle'|'blueprinting'|'generating'|'complete'|'error'} */ status
   /** @type {string|undefined} */ errorMessage
   /** @type {string[]} */ files
+  /** @type {AppStateHandle} */ state
   /** @type {string} */ #base
 
   /**
@@ -701,9 +758,10 @@ export class AppHandle {
    * @param {object} data
    */
   constructor(base, data) {
-    this.#base        = base
+    this.#base  = base
     Object.assign(this, data)
-    this.files        = data.files ?? []
+    this.files  = data.files ?? []
+    this.state  = new AppStateHandle(base, data.id)
   }
 
   /** URL where the generated app is served. */
@@ -718,6 +776,17 @@ export class AppHandle {
     const res = await fetch(`${this.#base}/api/v2/build/${this.id}/files/${encodeURIComponent(filename)}`)
     if (!res.ok) throw new VibeError(`File not found: ${filename}`, res.status)
     return res.text()
+  }
+
+  /**
+   * Deploy this build to Cloudflare Pages.
+   * Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID to be configured server-side.
+   * @returns {Promise<{ deploymentUrl: string, deploymentId?: string, projectName: string }>}
+   */
+  async deploy() {
+    return /** @type {any} */ (
+      await apiRequest(this.#base, `/api/v2/build/${this.id}/deploy`, 'POST')
+    )
   }
 
   /** Permanently delete this build and its R2 files. */
@@ -910,6 +979,50 @@ export const VibeClient = AetherLiteClient
 
 // ── <vibe-chat> Web Component ─────────────────────────────────────────────────
 
+// ── Zero-dep markdown renderer (used by VibeChatElement) ─────────────────────
+
+function _escMd(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+function _ilMd(s) {
+  s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  s = s.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>')
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    (_, t, u) => `<a href="${u}" rel="noopener noreferrer" target="_blank">${t}</a>`)
+  return s
+}
+function _renderMd(text) {
+  const lines = text.split('\n'), out = []; let i = 0
+  while (i < lines.length) {
+    const raw = lines[i]
+    if (raw.startsWith('```')) {
+      const code = []; i++
+      while (i < lines.length && !lines[i].startsWith('```')) { code.push(_escMd(lines[i])); i++ }
+      i++; out.push(`<pre><code>${code.join('\n')}</code></pre>`); continue
+    }
+    const hm = raw.match(/^(#{1,3})\s+(.+)/)
+    if (hm) { out.push(`<h${hm[1].length}>${_ilMd(_escMd(hm[2]))}</h${hm[1].length}>`); i++; continue }
+    if (raw.startsWith('> ')) { out.push(`<blockquote>${_ilMd(_escMd(raw.slice(2)))}</blockquote>`); i++; continue }
+    if (raw.startsWith('- ') || raw.startsWith('* ')) {
+      const it = []
+      while (i < lines.length && (lines[i].startsWith('- ') || lines[i].startsWith('* '))) {
+        it.push(`<li>${_ilMd(_escMd(lines[i].slice(2)))}</li>`); i++
+      }
+      out.push(`<ul>${it.join('')}</ul>`); continue
+    }
+    if (/^\d+\.\s/.test(raw)) {
+      const it = []
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        const m = lines[i].match(/^\d+\.\s+(.+)/); it.push(`<li>${_ilMd(_escMd(m?.[1] ?? ''))}</li>`); i++
+      }
+      out.push(`<ol>${it.join('')}</ol>`); continue
+    }
+    if (raw.trim() === '') { out.push(''); i++; continue }
+    out.push(`<p>${_ilMd(_escMd(raw))}</p>`); i++
+  }
+  return out.join('\n')
+}
+
 const _CSS = /* css */`
 :host {
   display: block;
@@ -1084,8 +1197,10 @@ class VibeChatElement extends HTMLElement {
     const botEl = this._msg('bot', '')
 
     try {
+      let buf = ''
       for await (const token of this._handle.stream(text)) {
-        botEl.textContent += token
+        buf += token
+        botEl.innerHTML = _renderMd(buf)
         this._scroll()
       }
     } catch (e) {
