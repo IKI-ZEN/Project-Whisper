@@ -20,6 +20,32 @@ export interface CompleteOpts {
   maxTokens?: number
 }
 
+export interface CompareResult {
+  model: string
+  response: string | null
+  latencyMs: number
+  error: string | null
+}
+
+export interface SweepResult {
+  temperature: number
+  responses: string[]
+  latencyMs: number
+}
+
+export interface CompareOpts {
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+export interface SweepOpts {
+  model?: string
+  systemPrompt?: string
+  maxTokens?: number
+  samples?: number
+}
+
 export interface ImageOpts {
   model?: string
   steps?: number
@@ -78,6 +104,10 @@ export class AiClient {
   embed(text: string | string[], model?: string): Promise<number[][]>
   image(prompt: string, opts?: ImageOpts): Promise<string>
   transcribe(audio: File | Blob, model?: string): Promise<string>
+  /** Run the same prompt across multiple models in parallel. Returns results with latency. */
+  compare(models: string[], prompt: string, opts?: CompareOpts): Promise<{ ok: boolean; data: { results: CompareResult[] } }>
+  /** Run the same prompt at multiple temperatures to map attractor basin behavior. */
+  sweep(prompt: string, temperatures: number[], opts?: SweepOpts): Promise<{ ok: boolean; data: { results: SweepResult[]; model: string } }>
 }
 
 // ── SandboxHandle ─────────────────────────────────────────────────────────────
@@ -96,6 +126,8 @@ export class SandboxHandle {
   readonly integrityHash: string | null
   /** True if stored hash doesn't match live config — indicates out-of-band tampering. */
   readonly tampered: boolean
+  /** Guard mode for this sandbox: 'strict' blocks injections, 'audit' logs only, 'off' disables scanning. */
+  readonly guardMode: 'strict' | 'audit' | 'off'
 
   run(message: string): Promise<string>
   stream(message: string): AsyncGenerator<string>
