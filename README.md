@@ -25,6 +25,13 @@ POST /api/ai/image             image generation (flux-1-schnell) → base64 PNG
 POST /api/ai/transcribe        multipart audio → transcript (whisper)
 POST /api/ai/compare           parallel multi-model comparison with latency
 POST /api/ai/sweep             temperature gradient sampling (attractor basin analysis)
+POST /api/ai/sensitivity       prompt variant analysis — paraphrase + similarity matrix
+POST /api/ai/cluster           k-means semantic clustering of text embeddings
+POST /api/ai/cot               chain-of-thought probing (4 reasoning styles in parallel)
+POST /api/ai/entropy           attractor stability — sample diversity + entropy measurement
+POST /api/ai/archaeology       reverse-engineer candidate system prompts from a response
+POST /api/ai/pipeline          declarative node-graph executor with per-node model routing
+POST /api/ai/think             extended thinking — explicit reasoning trace before answer
 
 GET  /api/vibes                starter templates
 POST /api/vibes                describe app → live sandbox + appUrl + embedCode
@@ -34,12 +41,28 @@ POST /api/sandbox/import       create sandbox from exported config (verifies HMA
 POST /api/sandbox              create sandbox
 GET  /api/sandbox/:id          config (no memory) + integrityHash + tampered flag
 PATCH /api/sandbox/:id         update config fields (including guardMode)
-POST /api/sandbox/:id/run      blocking turn (persists to memory)
-POST /api/sandbox/:id/stream   SSE stream (preview, no memory write)
-GET  /api/sandbox/:id/history  full conversation history
+POST /api/sandbox/:id/run      blocking turn (persists to memory); ?sessionId= for isolated threads
+POST /api/sandbox/:id/stream   SSE stream (preview, no memory write); ?sessionId= supported
+GET  /api/sandbox/:id/history  full conversation history; ?sessionId= for a specific thread
+WS   /api/sandbox/:id/ws       bidirectional WebSocket with tool call support; ?sessionId= supported
 GET  /api/sandbox/:id/export   portable config JSON — includes HMAC signature if SIGNING_SECRET set
 GET  /api/sandbox/:id/fingerprint  integrity check only (no config fields exposed)
+GET  /api/sandbox/:id/metrics  usage totals: runs, tokens in/out, avg latency, per-model breakdown
 DELETE /api/sandbox/:id        delete sandbox + KV entry
+
+POST /api/sandbox/:id/documents         upload file for RAG (text, PDF, markdown, CSV, JSON; max 10 MB)
+GET  /api/sandbox/:id/documents         list uploaded documents
+DELETE /api/sandbox/:id/documents/:docId  delete document + best-effort vector cleanup
+
+POST /api/v2/build             create app build → { buildId, wsUrl, appUrl }
+GET  /api/v2/build/:id         build status + blueprint + file list
+GET  /api/v2/build/:id/files   list generated filenames
+GET  /api/v2/build/:id/files/:filename  fetch generated file content
+WS   /api/v2/build/:id/ws      stream build progress events in real time
+DELETE /api/v2/build/:id       delete build + R2 files
+
+GET  /build/:id                serve generated app (index.html)
+GET  /build/:id/:filename      serve any file from a generated app
 
 GET  /app/:id                  standalone chat UI
 GET  /apps                     apps gallery
@@ -96,10 +119,10 @@ Each sandbox allows 20 `run`/`stream` calls per 60-second sliding window. Excess
 
 ```html
 <script type="module">
-  import { VibeClient } from '/vibe-sdk.js'
-  const client = new VibeClient()   // '' = same origin; pass URL for cross-origin
+  import { AetherLiteClient } from '/vibe-sdk.js'
+  const client = new AetherLiteClient()   // '' = same origin; pass URL for cross-origin
 
-  // Create a vibe from a description
+  // Create a quick AI assistant from a description
   const vibe = await client.vibes.create('A friendly cooking assistant')
   document.body.innerHTML = vibe.embedCode   // instant iframe embed
 
@@ -107,6 +130,12 @@ Each sandbox allows 20 `run`/`stream` calls per 60-second sliding window. Excess
   for await (const token of vibe.sandbox().stream('What should I cook tonight?')) {
     el.textContent += token
   }
+
+  // Build a full multi-file app
+  const session = client.builder.session('A to-do list with local storage')
+    .onBlueprintReady(bp => console.log('stack:', bp.techStack))
+    .onComplete(r => window.open(r.appUrl))
+  await session.start()
 
   // Compare the same prompt across multiple models
   const { data } = await client.ai.compare(
@@ -124,10 +153,10 @@ Each sandbox allows 20 `run`/`stream` calls per 60-second sliding window. Excess
   )
 </script>
 
-<!-- Drop-in chat widget (Shadow DOM) -->
+<!-- Drop-in chat widget (Shadow DOM) — three registered aliases -->
 <script type="module" src="/vibe-sdk.js"></script>
-<vibe-chat sandbox-id="abc123"></vibe-chat>
-<vibe-chat sandbox-id="xyz" theme="dark" placeholder="Ask me anything…"></vibe-chat>
+<aether-lite-chat sandbox-id="abc123"></aether-lite-chat>
+<aether-lite-chat sandbox-id="xyz" theme="dark" placeholder="Ask me anything…"></aether-lite-chat>
 ```
 
 ### SandboxHandle properties

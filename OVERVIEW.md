@@ -86,10 +86,10 @@ The export includes the name, description, system prompt, model, temperature, an
 
 ## Embedding apps anywhere
 
-The `<vibe-chat>` widget lets you embed any sandbox as a chat box on any webpage — no backend changes needed, just a single line of HTML:
+The `<aether-lite-chat>` widget lets you embed any sandbox as a chat box on any webpage — no backend changes needed, just a single line of HTML:
 
 ```html
-<vibe-chat sandbox-id="your-sandbox-id"></vibe-chat>
+<aether-lite-chat sandbox-id="your-sandbox-id"></aether-lite-chat>
 ```
 
 It works in light or dark mode and is fully self-contained — it won't interfere with the rest of your page.
@@ -101,8 +101,8 @@ It works in light or dark mode and is fully self-contained — it won't interfer
 If you want to integrate a sandbox into your own application, the **vibeSDK** (`/vibe-sdk.js`) is a JavaScript library that wraps the entire platform in a clean, fluent API:
 
 ```javascript
-import { VibeClient } from '/vibe-sdk.js'
-const client = new VibeClient()
+import { AetherLiteClient } from '/vibe-sdk.js'
+const client = new AetherLiteClient()
 
 // Create a new AI app from a description
 const app = await client.vibes.create('A friendly cooking assistant')
@@ -164,7 +164,73 @@ const { data } = await client.ai.sweep(
 // data.results: [{ temperature, responses: string[], latencyMs }]
 ```
 
-The **Whisperer** tab in the Playground provides a UI for both of these — a checkbox grid for model selection and a temperature table with configurable sampling depth.
+The **Whisperer** tab in the Playground provides a UI for all of these tools — a checkbox grid for model selection, a temperature table with configurable sampling depth, and dedicated panels for each analysis type.
+
+### Prompt sensitivity analysis
+
+Generate paraphrases of a prompt and measure how much the model's responses vary. Returns a similarity matrix across all variant pairs — useful for finding prompts that are stable (low variance) or fragile (high variance):
+
+```javascript
+const result = await client.ai.sensitivity('Explain recursion simply', { variants: 5 })
+// result.variants: [{ prompt, response }]
+// result.similarityMatrix: number[][] (cosine similarities)
+```
+
+### Semantic clustering
+
+Embed a set of texts and group them with k-means clustering. Useful for categorising model outputs or finding natural groupings in a response set:
+
+```javascript
+const result = await client.ai.cluster(responses, { k: 3 })
+// result.clusters: [{ label, items: string[] }]
+```
+
+### Chain-of-thought probing
+
+Run the same prompt through four different reasoning styles in parallel (`plain`, `step-by-step`, `xml-structured`, `self-consistency`) and compare the outputs:
+
+```javascript
+const { results } = await client.ai.cot('Is it ever ethical to break a promise?')
+results.forEach(r => console.log(r.style, r.response))
+```
+
+### Token entropy / attractor stability
+
+Sample the model multiple times at a given temperature and measure response diversity (entropy + average cosine similarity). Low entropy = strong attractor. High entropy = diffuse distribution:
+
+```javascript
+const result = await client.ai.entropy('Name a colour', { samples: 10, temperature: 1.5 })
+// result.entropy: number (bits), result.avgCosineSimilarity: number
+```
+
+### Prompt archaeology
+
+Given a target response, reverse-engineer candidate system prompts that could have produced it. Useful for understanding the implicit prior a model is reasoning from:
+
+```javascript
+const { candidates } = await client.ai.archaeology(targetResponse, { candidates: 5 })
+candidates.forEach(c => console.log(c.similarity, c.candidate))
+```
+
+### Pipeline executor
+
+Build a declarative node graph of AI steps — each node can classify, complete, guard, transform, or fan out to parallel branches. Output routes to the next node based on content:
+
+```javascript
+const result = await client.ai.pipeline(userInput, nodes, 'entry-node-id')
+// result.output: final string, result.trace: per-node execution log
+```
+
+### Extended thinking
+
+Request an explicit reasoning trace before the final answer. Uses Anthropic's native extended thinking for `anthropic:*` models, and XML-structured chain-of-thought for others:
+
+```javascript
+const { thinking, response } = await client.ai.think('Solve this step by step: …', {
+  model: 'anthropic:claude-sonnet-4-6',
+  budgetTokens: 4000,
+})
+```
 
 ### Integrity verification
 
@@ -195,4 +261,4 @@ The Playground (`/playground.html`) is an in-browser developer interface with fo
 | **Vibe Builder** | Create a new AI app from a description, export/import configs |
 | **Sandbox Chat** | Load any sandbox by ID, chat, edit config (including `guardMode`), view integrity badge |
 | **AI Workbench** | Test raw AI capabilities: text generation, streaming, embeddings, image generation, audio transcription |
-| **Whisperer** | Model comparison (checkbox grid, parallel results with latency) and temperature sweep (gradient table with multi-sample support) |
+| **Whisperer** | Full AI analysis suite: model comparison, temperature sweep, sensitivity analysis, semantic clustering, chain-of-thought probing, entropy measurement, prompt archaeology, pipeline executor, and extended thinking |
