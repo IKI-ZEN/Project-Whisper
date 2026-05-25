@@ -915,6 +915,7 @@ export interface VibeConfig {
   model: string
   temperature: number
   maxTokens: number
+  appHtml?: string   // custom HTML page served at /app/:id; uses __SANDBOX_ID__ as placeholder
 }
 
 export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string): Promise<VibeConfig> {
@@ -933,7 +934,7 @@ Flagship via AI Gateway (requires API keys):
     : `- "@cf/meta/llama-3.1-8b-instruct" — fast, efficient
 - "@cf/meta/llama-3.3-70b-instruct-fp8-fast" — large, complex tasks`
 
-  const metaPrompt = `You are an AI assistant configuration generator. Given a description of an AI app, output ONLY a valid JSON object — no markdown, no explanation, no code fences.
+  const metaPrompt = `You are an AI app generator. Given a description, output ONLY a valid JSON object — no markdown, no explanation, no code fences.
 
 The JSON must have exactly these fields:
 {
@@ -943,10 +944,21 @@ The JSON must have exactly these fields:
   "tools": [<optional array — define tools ONLY if the app description implies the AI needs to call external functions. Each tool: { "name": "snake_case_name", "description": "what this tool does", "parameters": { "param_name": { "type": "string|number|boolean", "description": "...", "required": true|false } } }>],
   "model": "<choose the most appropriate model from the options below>",
   "temperature": <number 0-2: 0.2 for factual, 0.7 for balanced, 1.2 for creative>,
-  "maxTokens": <integer 256-4096>
+  "maxTokens": <integer 256-4096>,
+  "appHtml": "<complete single-file HTML app — see requirements below>"
 }
 
-Tool guidelines: define tools ONLY when the description explicitly requires calling external APIs or services (e.g. "check the weather", "search the web", "look up prices"). For knowledge-based or conversational apps, tools should be an empty array [].
+Tool guidelines: define tools ONLY when the description explicitly requires calling external APIs or services. For knowledge-based or conversational apps, tools should be an empty array [].
+
+App HTML requirements:
+- Generate a COMPLETE, self-contained HTML page (DOCTYPE, head, body, styles, scripts all inline)
+- Use __SANDBOX_ID__ (double underscore each side) as the sandbox ID placeholder — it will be replaced at runtime
+- Load the SDK: <script type="module"> ... import { VibeClient } from '/vibe-sdk.js'; const client = new VibeClient(); ...
+- For simple chat apps: use the <vibe-chat sandbox-id="__SANDBOX_ID__"> web component
+- For richer apps (dashboards, tools, multi-step flows): build a full custom UI using client.sandbox.get('__SANDBOX_ID__') and client.ai.*
+- Style with inline CSS — dark theme (#0c0c0f background, #d8d8e8 text, #7c3aed accent)
+- All script tags must be type="module" — no inline event handlers (use addEventListener)
+- The page must be fully functional with no external CDN dependencies (only /vibe-sdk.js from same origin)
 
 Available models:
 ${modelOptions}
@@ -988,6 +1000,8 @@ User description: "${description}"`
     } catch { return [] }
   })
 
+  const rawAppHtml = typeof parsed.appHtml === 'string' ? parsed.appHtml.trim() : ''
+
   return {
     name:         typeof parsed.name === 'string'         ? parsed.name         : name ?? 'Untitled App',
     description:  typeof parsed.description === 'string'  ? parsed.description  : description.slice(0, 256),
@@ -996,5 +1010,6 @@ User description: "${description}"`
     model:        typeof parsed.model === 'string'        ? parsed.model        : MODELS.text,
     temperature:  typeof parsed.temperature === 'number'  ? parsed.temperature  : DEFAULT_TEMPERATURE,
     maxTokens:    typeof parsed.maxTokens === 'number'    ? parsed.maxTokens    : DEFAULT_MAX_TOKENS,
+    appHtml:      rawAppHtml.length > 0 && rawAppHtml.length <= 51_200 ? rawAppHtml : undefined,
   }
 }

@@ -238,6 +238,22 @@
       <label>Sandbox ID</label>
       <input id="chat-id" type="text" placeholder="Paste a sandbox UUID" />
     </div>
+    <div class="field">
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        Session ID <span style="font-size:10px;font-weight:normal;opacity:0.5;text-transform:none;letter-spacing:normal">persistent per-user thread</span>
+      </label>
+      <div style="display:flex;gap:6px">
+        <input id="chat-session" type="text" placeholder="optional — leave blank for shared memory" style="flex:1;font-family:var(--mono);font-size:11px" />
+        <button style="flex-shrink:0;padding:5px 8px;font-size:11px" onclick="genSessionId()" title="Generate random session ID">↻</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Mode</label>
+      <select id="chat-mode" style="font-size:12px">
+        <option value="http">HTTP (stream)</option>
+        <option value="ws">WebSocket (tools)</option>
+      </select>
+    </div>
     <button class="full outline" onclick="loadSandbox()">Load</button>
     <hr />
     <div id="sandbox-meta" class="sandbox-meta" style="display:none"></div>
@@ -328,6 +344,37 @@
         <div class="field"><label>Temperature</label><input id="bc-temp" type="number" value="0.7" min="0" max="2" step="0.1" /></div>
         <div class="field"><label>Max Tokens</label><input id="bc-tokens" type="number" value="512" min="1" max="8192" /></div>
       </div>
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;opacity:0.6;cursor:pointer;user-select:none;padding:4px 0">Advanced options</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+          <div class="row">
+            <div class="field">
+              <label>Response format</label>
+              <select id="bc-format"><option value="">text (default)</option><option value="json">json</option></select>
+            </div>
+            <div class="field">
+              <label>Reasoning effort <span style="font-size:9px;opacity:0.5">(o-series)</span></label>
+              <select id="bc-reasoning"><option value="">none</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Thinking budget <span style="font-size:9px;opacity:0.5">(Anthropic)</span></label>
+              <input id="bc-thinking" type="number" placeholder="tokens (0 = off)" min="0" max="80000" />
+            </div>
+            <div class="field">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px;margin-top:18px">
+                <input type="checkbox" id="bc-grounding" style="width:auto" /> Google Search grounding
+              </label>
+            </div>
+          </div>
+          <div class="field">
+            <label>Tools (JSON array)</label>
+            <textarea id="bc-tools" rows="3" class="mono" placeholder='[{"name":"get_weather","description":"…","parameters":{…}}]' style="font-size:11px;resize:vertical"></textarea>
+            <div id="bc-tools-err" style="display:none;color:var(--red);font-size:11px;margin-top:2px"></div>
+          </div>
+        </div>
+      </details>
       <button class="full" onclick="doComplete()">Run</button>
       <label>Response</label>
       <div id="bc-out" class="output"></div>
@@ -338,6 +385,24 @@
       <div class="field"><label>Model</label><input id="bs-model" placeholder="@cf/meta/llama-3.1-8b-instruct" /></div>
       <div class="field"><label>System Prompt</label><textarea id="bs-sys" rows="2" class="mono" placeholder="You are a helpful assistant."></textarea></div>
       <div class="field"><label>Prompt</label><textarea id="bs-prompt" rows="4" class="mono" placeholder="Write a haiku about Cloudflare Workers."></textarea></div>
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;opacity:0.6;cursor:pointer;user-select:none;padding:4px 0">Advanced options</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+          <div class="row">
+            <div class="field">
+              <label>Temperature</label><input id="bs-temp" type="number" value="0.7" min="0" max="2" step="0.1" />
+            </div>
+            <div class="field">
+              <label>Max Tokens</label><input id="bs-tokens" type="number" value="512" min="1" max="8192" />
+            </div>
+          </div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px">
+              <input type="checkbox" id="bs-grounding" style="width:auto" /> Google Search grounding
+            </label>
+          </div>
+        </div>
+      </details>
       <button class="full" onclick="doStream()">Stream</button>
       <label>Output (streamed)</label>
       <div id="bs-out" class="output"></div>
@@ -749,6 +814,10 @@
     return el
   }
 
+  function genSessionId() {
+    document.getElementById('chat-session').value = crypto.randomUUID()
+  }
+
   async function sendMessage() {
     const input = document.getElementById('chat-input')
     const text = input.value.trim()
@@ -757,11 +826,23 @@
     document.getElementById('send-btn').disabled = true
     addMsg('user', text)
 
+    const sessionId = document.getElementById('chat-session').value.trim() || undefined
+    const mode = document.getElementById('chat-mode').value
+
+    if (mode === 'ws') {
+      await sendMessageWS(text, sessionId)
+    } else {
+      await sendMessageHTTP(text, sessionId)
+    }
+    document.getElementById('send-btn').disabled = false
+    document.getElementById('chat-input').focus()
+  }
+
+  async function sendMessageHTTP(text, sessionId) {
     const typingEl = addMsg('assistant', '')
     typingEl.classList.add('typing')
-
     try {
-      for await (const token of activeSandbox.stream(text)) {
+      for await (const token of activeSandbox.stream(text, sessionId)) {
         typingEl.textContent += token
         typingEl.classList.remove('typing')
         const msgs = document.getElementById('messages')
@@ -770,10 +851,66 @@
     } catch (e) {
       typingEl.textContent = `Error: ${e}`
       typingEl.className = 'msg error'
-    } finally {
-      document.getElementById('send-btn').disabled = false
-      input.focus()
     }
+  }
+
+  async function sendMessageWS(text, sessionId) {
+    return new Promise(resolve => {
+      const conn = activeSandbox.connect(sessionId)
+      const typingEl = addMsg('assistant', '')
+      typingEl.classList.add('typing')
+
+      conn.onToken(token => {
+        typingEl.textContent += token
+        typingEl.classList.remove('typing')
+        const msgs = document.getElementById('messages')
+        msgs.scrollTop = msgs.scrollHeight
+      })
+
+      conn.onToolCall(calls => {
+        // Show tool call info in chat
+        const toolEl = addMsg('system', `Tool calls: ${calls.map(c => c.name).join(', ')}`)
+        toolEl.style.fontFamily = 'var(--mono)'
+        toolEl.style.fontSize = '11px'
+        // For run_code: show the code being executed
+        for (const call of calls) {
+          if (call.name === 'run_code' && call.input?.code) {
+            const codeEl = document.createElement('div')
+            codeEl.className = 'msg system'
+            codeEl.style.cssText = 'font-family:var(--mono);font-size:11px;white-space:pre-wrap;background:var(--surface);border:1px solid var(--border);align-self:stretch;max-width:none'
+            codeEl.textContent = '$ ' + call.input.code
+            document.getElementById('messages').appendChild(codeEl)
+          }
+        }
+      })
+
+      conn.onDone(reply => {
+        if (!typingEl.textContent) typingEl.textContent = reply
+        typingEl.classList.remove('typing')
+        conn.close()
+        resolve()
+      })
+
+      conn.onError(err => {
+        typingEl.textContent = `Error: ${err.message}`
+        typingEl.className = 'msg error'
+        conn.close()
+        resolve()
+      })
+
+      conn.onClose(resolve)
+
+      // Open connection then send message on open
+      if (conn.readyState === 'open') {
+        conn.send(text)
+      } else {
+        // Wait for open via a brief poll
+        const check = setInterval(() => {
+          if (conn.readyState === 'open') { clearInterval(check); conn.send(text) }
+          else if (conn.readyState === 'closed') { clearInterval(check); resolve() }
+        }, 50)
+      }
+    })
   }
 
   async function deleteSandbox() {
@@ -851,13 +988,29 @@
   async function doComplete() {
     const out = document.getElementById('bc-out')
     out.textContent = '…'
+    const toolsRaw = document.getElementById('bc-tools').value.trim()
+    const toolsErr = document.getElementById('bc-tools-err')
+    let tools
+    if (toolsRaw) {
+      try { tools = JSON.parse(toolsRaw); toolsErr.style.display = 'none' }
+      catch (e) { toolsErr.textContent = 'Invalid JSON: ' + e.message; toolsErr.style.display = 'block'; return }
+    }
+    const thinking = parseInt(document.getElementById('bc-thinking').value, 10) || undefined
+    const reasoning = document.getElementById('bc-reasoning').value || undefined
+    const format = document.getElementById('bc-format').value || undefined
+    const grounding = document.getElementById('bc-grounding').checked
     try {
       out.textContent = await client.ai.complete({
-        prompt:       document.getElementById('bc-prompt').value,
-        systemPrompt: document.getElementById('bc-sys').value || undefined,
-        model:        document.getElementById('bc-model').value || undefined,
-        temperature:  parseFloat(document.getElementById('bc-temp').value),
-        maxTokens:    parseInt(document.getElementById('bc-tokens').value),
+        prompt:           document.getElementById('bc-prompt').value,
+        systemPrompt:     document.getElementById('bc-sys').value || undefined,
+        model:            document.getElementById('bc-model').value || undefined,
+        temperature:      parseFloat(document.getElementById('bc-temp').value),
+        maxTokens:        parseInt(document.getElementById('bc-tokens').value),
+        tools:            tools,
+        responseFormat:   format,
+        reasoningEffort:  reasoning,
+        thinking:         thinking,
+        groundingEnabled: grounding || undefined,
       })
     } catch (e) { out.textContent = String(e) }
   }
@@ -865,11 +1018,17 @@
   async function doStream() {
     const out = document.getElementById('bs-out')
     out.textContent = ''
+    const grounding = document.getElementById('bs-grounding').checked
+    const bsTemp = parseFloat(document.getElementById('bs-temp').value)
+    const bsTok = parseInt(document.getElementById('bs-tokens').value)
     try {
       for await (const token of client.ai.stream({
-        prompt:       document.getElementById('bs-prompt').value,
-        systemPrompt: document.getElementById('bs-sys').value || undefined,
-        model:        document.getElementById('bs-model').value || undefined,
+        prompt:           document.getElementById('bs-prompt').value,
+        systemPrompt:     document.getElementById('bs-sys').value || undefined,
+        model:            document.getElementById('bs-model').value || undefined,
+        temperature:      isNaN(bsTemp) ? undefined : bsTemp,
+        maxTokens:        isNaN(bsTok)  ? undefined : bsTok,
+        groundingEnabled: grounding || undefined,
       })) {
         out.textContent += token
       }
@@ -1321,7 +1480,7 @@
     switchTab, switchBench, switchWhisper,
     doVibe, gotoChatFromVibe,
     copyEmbed, copyExport, loadSandbox, sendMessage, deleteSandbox, doImport,
-    saveConfig, loadHistory,
+    saveConfig, loadHistory, genSessionId,
     doComplete, doStream, doEmbed, doImage, doTranscribe,
     runCompare, runSweep,
     runSensitivity, runCluster, runCoT, runEntropy, runArchaeology, runPipeline, runThink,

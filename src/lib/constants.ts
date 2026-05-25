@@ -37,3 +37,13 @@ export const MAX_SENSITIVITY_VARIANTS    = 8
 export const MAX_ENTROPY_SAMPLES         = 10
 export const MAX_ARCHAEOLOGY_CANDIDATES  = 6
 export const MAX_CLUSTER_TEXTS           = 50
+
+// Per-user session limits
+export const MAX_SESSION_ID_LEN          = 64
+export const MAX_SESSIONS_PER_SANDBOX    = 100
+
+// Code execution (run_code built-in tool)
+export const CODE_EXEC_TIMEOUT_MS        = 5_000
+
+// Custom app HTML from Vibe Builder
+export const MAX_APP_HTML_LEN            = 51_200   // 50 KB

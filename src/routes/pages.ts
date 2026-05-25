@@ -1,7 +1,8 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
+import type { SandboxConfig } from '../lib/schema'
 import { json, err } from '../lib/http'
-import { sandboxExists } from './sandbox'
+import { sandboxExists, stub, doFetch } from './sandbox'
 
 // ── Standalone app page ───────────────────────────────────────────────────────
 
@@ -327,6 +328,25 @@ export const appPageRoute: Handler = async (_req, env, params: Params) => {
     const nonce = genNonce()
     return new Response('<h1>App not found</h1>', { status: 404, headers: htmlHeaders(nonce) })
   }
+
+  // Serve custom Vibe Builder HTML if present, otherwise fall back to generic chat page
+  try {
+    const res = await doFetch(stub(env, id), 'config', 'GET')
+    const cfg = await res.json() as { ok: boolean; data: Omit<SandboxConfig, 'memory'> }
+    if (cfg.ok && cfg.data.appHtml) {
+      const html = cfg.data.appHtml.replace(/__SANDBOX_ID__/g, JSON.stringify(id).slice(1, -1))
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'strict-origin',
+          // Custom app HTML uses 'self' + unsafe-inline; app pages allow framing
+          'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:",
+        },
+      })
+    }
+  } catch { /* fall through to generic page */ }
+
   const nonce = genNonce()
   return new Response(appPageHtml(id, nonce), { headers: htmlHeaders(nonce, true) })
 }

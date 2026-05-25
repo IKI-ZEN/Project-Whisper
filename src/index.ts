@@ -44,6 +44,11 @@ for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRou
 
 export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    // WebSocket upgrades must bypass the HTTP router — pass directly to the DO
+    if (req.headers.get('Upgrade') === 'websocket') {
+      const match = new URL(req.url).pathname.match(/^\/api\/sandbox\/([^/]+)\/ws$/)
+      if (match) return env.SANDBOX.get(env.SANDBOX.idFromName(match[1])).fetch(req)
+    }
     return router.handle(req, env)
   },
 
