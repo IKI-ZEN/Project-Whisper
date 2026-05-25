@@ -12,6 +12,9 @@ export interface Env {
   // Durable Object namespace — one instance per sandbox
   SANDBOX: DurableObjectNamespace
 
+  // Durable Object namespace — one instance per app build
+  APP_BUILDER: DurableObjectNamespace
+
   // KV — sandbox registry + session state
   SANDBOX_REGISTRY: KVNamespace
 

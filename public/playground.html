@@ -181,6 +181,10 @@
 <!-- ── Vibe Builder ── -->
 <div id="panel-vibe" class="panels active" style="display:flex">
   <div class="vibe-left">
+    <div class="row" style="gap:4px;margin-bottom:2px">
+      <button id="mode-quick-btn" class="tab active" style="flex:1;font-size:11px" onclick="setVibeMode('quick')">Quick Sandbox</button>
+      <button id="mode-app-btn"   class="tab"        style="flex:1;font-size:11px" onclick="setVibeMode('app')">App Builder</button>
+    </div>
     <div class="field">
       <label>Describe your app</label>
       <textarea id="vibe-desc" rows="5" placeholder="e.g. A customer support agent that helps users troubleshoot login issues, escalates billing problems, and always responds in a friendly, concise tone."></textarea>
@@ -189,7 +193,13 @@
       <label>Name (optional)</label>
       <input id="vibe-name" type="text" placeholder="Auto-generated if blank" />
     </div>
-    <button id="vibe-btn" class="full" onclick="doVibe()">Generate Sandbox →</button>
+    <div id="app-builder-opts" style="display:none;flex-direction:column;gap:10px">
+      <div class="field">
+        <label>Sandbox ID (optional — for AI backend integration)</label>
+        <input id="build-sandbox-id" type="text" placeholder="Leave blank for a standalone app" />
+      </div>
+    </div>
+    <button id="vibe-btn" class="full" onclick="doVibeAction()">Generate Sandbox →</button>
     <hr />
     <label style="margin-bottom:4px">Starter templates</label>
     <div id="templates" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -199,8 +209,10 @@
     <button id="import-btn" class="full outline" onclick="doImport()">Import →</button>
   </div>
   <div class="vibe-right" style="padding:20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto">
+    <!-- Quick Sandbox output -->
+    <div id="quick-panel" style="display:flex;flex-direction:column;gap:12px">
     <label>Generated sandbox config</label>
-    <div id="vibe-out" class="output" style="flex:1;min-height:300px">Describe your app and click "Generate Sandbox" to get started.</div>
+    <div id="vibe-out" class="output" style="flex:1;min-height:200px">Describe your app and click "Generate Sandbox" to get started.</div>
     <div id="vibe-status" style="display:none"></div>
     <div id="vibe-actions" style="display:none;flex-direction:column;gap:10px">
       <div class="row">
@@ -226,6 +238,35 @@
           <input id="export-out" type="text" readonly style="flex:1;font-family:var(--mono);font-size:11px" />
           <button class="outline" style="flex-shrink:0;padding:6px 12px" onclick="copyExport()">Copy</button>
         </div>
+      </div>
+    </div>
+    </div><!-- /quick-panel -->
+
+    <!-- App Builder output (hidden until app builder mode) -->
+    <div id="app-panel" style="display:none;flex-direction:column;gap:12px;flex:1">
+      <div id="build-status-bar" style="font-size:12px;color:var(--muted);padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+        Describe your app and click "Build App" to start.
+      </div>
+      <div id="build-log" class="output" style="min-height:120px;font-size:12px;font-family:var(--mono);white-space:pre-wrap;flex:1">
+      </div>
+      <!-- Generated file tabs -->
+      <div id="build-files" style="display:none;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <label>Generated files</label>
+          <span id="build-file-count" style="font-size:10px;color:var(--muted)"></span>
+        </div>
+        <div id="build-file-tabs" class="row" style="flex-wrap:wrap;gap:4px"></div>
+        <pre id="build-file-content" class="output" style="font-size:11px;font-family:var(--mono);white-space:pre;overflow-x:auto;max-height:280px"></pre>
+      </div>
+      <!-- Live preview + actions -->
+      <div id="build-actions" style="display:none;flex-direction:column;gap:10px">
+        <div class="row">
+          <a id="build-open-link" href="#" target="_blank" style="flex:1;text-decoration:none">
+            <button class="full" style="background:var(--green);color:#000;font-weight:600">Open App ↗</button>
+          </a>
+          <button class="outline" onclick="stopBuild()" style="flex:1">Stop Build</button>
+        </div>
+        <iframe id="build-preview-frame" style="width:100%;height:320px;border:1px solid var(--border);border-radius:var(--radius)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
       </div>
     </div>
   </div>
@@ -626,11 +667,14 @@
 </div>
 
 <script type="module">
-  import { VibeClient } from '/vibe-sdk.js'
+  import { AetherLiteClient } from '/vibe-sdk.js'
 
-  const client = new VibeClient()
+  const client = new AetherLiteClient()
   let activeSandbox = null   // SandboxHandle | null
-  let vibeResult    = null   // VibeResult | null
+  let vibeResult    = null   // VibeBuilderResult | null
+  let vibeMode      = 'quick' // 'quick' | 'app'
+  let buildFileContent = {}   // filename → accumulated text
+  let currentSession   = null
 
   // ── Tab switching ─────────────────────────────────────────────────────────────
   function switchTab(name) {
@@ -674,7 +718,23 @@
   }
   loadTemplates()
 
-  // ── Vibe builder ──────────────────────────────────────────────────────────────
+  // ── Mode toggle ───────────────────────────────────────────────────────────────
+  function setVibeMode(mode) {
+    vibeMode = mode
+    document.getElementById('mode-quick-btn').classList.toggle('active', mode === 'quick')
+    document.getElementById('mode-app-btn').classList.toggle('active', mode === 'app')
+    document.getElementById('app-builder-opts').style.display  = mode === 'app'   ? 'flex' : 'none'
+    document.getElementById('quick-panel').style.display        = mode === 'quick' ? 'flex' : 'none'
+    document.getElementById('app-panel').style.display          = mode === 'app'   ? 'flex' : 'none'
+    document.getElementById('vibe-btn').textContent             = mode === 'quick' ? 'Generate Sandbox →' : 'Build App →'
+  }
+
+  function doVibeAction() {
+    if (vibeMode === 'quick') doVibe()
+    else doAppBuild()
+  }
+
+  // ── Quick sandbox creator ─────────────────────────────────────────────────────
   async function doVibe() {
     const desc = document.getElementById('vibe-desc').value.trim()
     if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
@@ -709,6 +769,110 @@
     } finally {
       btn.disabled = false; btn.textContent = 'Generate Sandbox →'
     }
+  }
+
+  // ── App Builder ───────────────────────────────────────────────────────────────
+  async function doAppBuild() {
+    const desc = document.getElementById('vibe-desc').value.trim()
+    if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
+    const name      = document.getElementById('vibe-name').value.trim()      || undefined
+    const sandboxId = document.getElementById('build-sandbox-id').value.trim() || undefined
+
+    const btn = document.getElementById('vibe-btn')
+    btn.disabled = true; btn.textContent = 'Building…'
+
+    // Reset UI
+    buildFileContent = {}
+    document.getElementById('build-log').textContent       = ''
+    document.getElementById('build-status-bar').textContent = 'Initializing build...'
+    document.getElementById('build-files').style.display   = 'none'
+    document.getElementById('build-actions').style.display = 'none'
+    document.getElementById('build-file-tabs').innerHTML   = ''
+    document.getElementById('build-file-content').textContent = ''
+
+    function addLog(line) {
+      const el = document.getElementById('build-log')
+      el.textContent += (el.textContent ? '\n' : '') + line
+      el.scrollTop = el.scrollHeight
+    }
+    function setBuildStatus(text) {
+      document.getElementById('build-status-bar').textContent = text
+    }
+
+    currentSession = client.builder.session(desc, { name, sandboxId })
+      .onBlueprintStart(() => {
+        setBuildStatus('Generating blueprint...')
+        addLog('◦ Designing app structure...')
+      })
+      .onBlueprintReady(bp => {
+        addLog(`✓ Blueprint: ${bp.name}  [${bp.techStack}, ${bp.files.length} file(s)]`)
+        addLog(`  Files: ${bp.files.map(f => f.filename).join(', ')}`)
+      })
+      .onFileStart(({ filename, index, total }) => {
+        setBuildStatus(`Writing ${index + 1}/${total}: ${filename}`)
+        addLog(`◦ ${filename}`)
+        buildFileContent[filename] = ''
+      })
+      .onFileChunk(({ filename, text }) => {
+        buildFileContent[filename] = (buildFileContent[filename] || '') + text
+      })
+      .onFileComplete(({ filename, bytes }) => {
+        addLog(`  ✓ ${filename}  (${(bytes / 1024).toFixed(1)} KB)`)
+        renderBuildFileTabs()
+      })
+      .onComplete(({ appUrl, files }) => {
+        setBuildStatus(`✓ Build complete — ${files.length} file(s)`)
+        addLog(`\n✓ App is live at ${appUrl}`)
+        document.getElementById('build-open-link').href = appUrl
+        document.getElementById('build-actions').style.display = 'flex'
+        document.getElementById('build-preview-frame').src = appUrl
+        btn.disabled = false; btn.textContent = 'Build App →'
+      })
+      .onError(err => {
+        addLog(`\n✗ Error: ${err.message}`)
+        setBuildStatus('Build failed')
+        btn.disabled = false; btn.textContent = 'Build App →'
+      })
+
+    try { await currentSession.start() }
+    catch (e) { addLog(`✗ Failed to start: ${e}`); btn.disabled = false; btn.textContent = 'Build App →' }
+  }
+
+  function stopBuild() {
+    currentSession?.stop()
+    currentSession = null
+    document.getElementById('vibe-btn').disabled = false
+    document.getElementById('vibe-btn').textContent = 'Build App →'
+  }
+
+  function renderBuildFileTabs() {
+    const tabsEl    = document.getElementById('build-file-tabs')
+    const contentEl = document.getElementById('build-file-content')
+    const filesEl   = document.getElementById('build-files')
+    const filenames = Object.keys(buildFileContent)
+    if (filenames.length === 0) return
+
+    filesEl.style.display = 'flex'
+    document.getElementById('build-file-count').textContent = `(${filenames.length} files)`
+    const prevActive = tabsEl.querySelector('button.active')?.textContent
+
+    tabsEl.innerHTML = ''
+    for (const fname of filenames) {
+      const b = document.createElement('button')
+      b.className = 'outline'
+      b.style.cssText = 'font-size:10px;padding:3px 8px;font-family:var(--mono)'
+      b.textContent = fname
+      b.onclick = () => {
+        contentEl.textContent = buildFileContent[fname]
+        tabsEl.querySelectorAll('button').forEach(x => x.classList.remove('active'))
+        b.classList.add('active')
+      }
+      if (fname === prevActive || (!prevActive && filenames.indexOf(fname) === 0)) b.classList.add('active')
+      tabsEl.appendChild(b)
+    }
+    // Show last active file
+    const activeFile = prevActive || filenames[0]
+    if (buildFileContent[activeFile]) contentEl.textContent = buildFileContent[activeFile]
   }
 
   function gotoChatFromVibe() {

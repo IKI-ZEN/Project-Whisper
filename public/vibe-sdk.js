@@ -1,13 +1,13 @@
 /**
- * vibeSDK — zero-dependency client for Project Aether-Lite
+ * Aether-Lite SDK — zero-dependency client for Project Aether-Lite
  *
  * Usage (ES module):
- *   import { VibeClient } from '/vibe-sdk.js'
- *   const client = new VibeClient()
+ *   import { AetherLiteClient } from '/vibe-sdk.js'
+ *   const client = new AetherLiteClient()
  *
  * Usage (web component):
  *   <script type="module" src="/vibe-sdk.js"></script>
- *   <vibe-chat sandbox-id="abc123"></vibe-chat>
+ *   <aether-chat sandbox-id="abc123"></aether-chat>
  *
  * @module vibe-sdk
  */
@@ -613,9 +613,10 @@ export class SandboxClient {
   }
 }
 
-// ── VibeResult ────────────────────────────────────────────────────────────────
+// ── VibeBuilderResult ─────────────────────────────────────────────────────────
 
-export class VibeResult {
+/** Result of a quick sandbox creation via vibes.create(). */
+export class VibeBuilderResult {
   /** @type {string} */ sandboxId
   /** @type {string} */ name
   /** @type {string} */ description
@@ -652,6 +653,7 @@ export class VibeResult {
 
 // ── VibesClient ───────────────────────────────────────────────────────────────
 
+/** Quick AI-assistant creator (single sandbox + custom HTML). */
 export class VibesClient {
   /** @param {string} baseUrl */
   constructor(baseUrl) { this._base = baseUrl }
@@ -676,23 +678,235 @@ export class VibesClient {
    */
   async create(description, name) {
     const data = await apiRequest(this._base, '/api/vibes', 'POST', { description, name })
-    return new VibeResult(this._base, data)
+    return new VibeBuilderResult(this._base, data)
   }
 }
 
-// ── VibeClient ────────────────────────────────────────────────────────────────
+// ── AppHandle ─────────────────────────────────────────────────────────────────
 
-export class VibeClient {
+/**
+ * Handle to a completed (or in-progress) app build.
+ * Returned by AppBuilder.get() or AppBuilder.list().
+ */
+export class AppHandle {
+  /** @type {string} */ id
+  /** @type {string} */ name
+  /** @type {'idle'|'blueprinting'|'generating'|'complete'|'error'} */ status
+  /** @type {string|undefined} */ errorMessage
+  /** @type {string[]} */ files
+  /** @type {string} */ #base
+
   /**
-   * Create a new client.
+   * @param {string} base
+   * @param {object} data
+   */
+  constructor(base, data) {
+    this.#base        = base
+    Object.assign(this, data)
+    this.files        = data.files ?? []
+  }
+
+  /** URL where the generated app is served. */
+  get appUrl() { return `/build/${this.id}` }
+
+  /**
+   * Fetch the content of a generated file.
+   * @param {string} filename
+   * @returns {Promise<string>}
+   */
+  async getFile(filename) {
+    const res = await fetch(`${this.#base}/api/v2/build/${this.id}/files/${encodeURIComponent(filename)}`)
+    if (!res.ok) throw new VibeError(`File not found: ${filename}`, res.status)
+    return res.text()
+  }
+
+  /** Permanently delete this build and its R2 files. */
+  async delete() {
+    await apiRequest(this.#base, `/api/v2/build/${this.id}`, 'DELETE')
+  }
+}
+
+// ── AppSession ────────────────────────────────────────────────────────────────
+
+/**
+ * WebSocket-driven build session. Streams real-time progress events
+ * from blueprint generation through file-by-file code generation.
+ *
+ * Protocol (JSON over WS):
+ *   Client → Server: { type: 'start', description, name?, sandboxId?, model? }
+ *   Server → Client: { type: 'connected', buildId }
+ *                    { type: 'blueprint_generating' }
+ *                    { type: 'blueprint_chunk', text }
+ *                    { type: 'blueprint_ready', blueprint }
+ *                    { type: 'file_generating', filename, index, total }
+ *                    { type: 'file_chunk', filename, text }
+ *                    { type: 'file_complete', filename, bytes }
+ *                    { type: 'build_complete', buildId, appUrl, files[] }
+ *                    { type: 'error', message }
+ */
+export class AppSession {
+  #base
+  #description
+  #opts
+  #handlers = {}
+  #ws = null
+  #buildId = null
+  #status = 'idle'
+  #appUrl = null
+
+  /**
+   * @param {string} baseUrl
+   * @param {string} description
+   * @param {{ name?: string, sandboxId?: string, model?: string }} [opts]
+   */
+  constructor(baseUrl, description, opts = {}) {
+    this.#base        = baseUrl
+    this.#description = description
+    this.#opts        = opts
+  }
+
+  // ── Fluent event handlers ──────────────────────────────────────────────────
+
+  /** @param {() => void} fn */
+  onBlueprintStart(fn)  { this.#handlers.blueprintStart  = fn; return this }
+  /** @param {(text: string) => void} fn */
+  onBlueprintChunk(fn)  { this.#handlers.blueprintChunk  = fn; return this }
+  /** @param {(blueprint: object) => void} fn */
+  onBlueprintReady(fn)  { this.#handlers.blueprintReady  = fn; return this }
+  /** @param {(info: { filename: string, index: number, total: number }) => void} fn */
+  onFileStart(fn)       { this.#handlers.fileStart        = fn; return this }
+  /** @param {(info: { filename: string, text: string }) => void} fn */
+  onFileChunk(fn)       { this.#handlers.fileChunk        = fn; return this }
+  /** @param {(info: { filename: string, bytes: number }) => void} fn */
+  onFileComplete(fn)    { this.#handlers.fileComplete     = fn; return this }
+  /** @param {(result: { buildId: string, appUrl: string, files: string[] }) => void} fn */
+  onComplete(fn)        { this.#handlers.complete         = fn; return this }
+  /** @param {(err: VibeError) => void} fn */
+  onError(fn)           { this.#handlers.error            = fn; return this }
+
+  /** Start the build — creates the build record then opens a WebSocket. */
+  async start() {
+    // Create the build record via REST, then connect WS
+    const data = /** @type {{ buildId: string, wsUrl: string }} */ (
+      await apiRequest(this.#base, '/api/v2/build', 'POST', {
+        description: this.#description,
+        ...this.#opts,
+      })
+    )
+    this.#buildId = data.buildId
+    this.#status  = 'connecting'
+    this.#appUrl  = `/build/${data.buildId}`
+
+    const wsBase = this.#base.replace(/^http/, 'ws') ||
+      (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host
+    this.#ws = new WebSocket(`${wsBase}/api/v2/build/${data.buildId}/ws`)
+
+    this.#ws.addEventListener('message', ({ data: raw }) => {
+      let msg
+      try { msg = JSON.parse(raw) } catch { return }
+      const h = this.#handlers
+      switch (msg.type) {
+        case 'connected':          this.#status = 'blueprinting'; break
+        case 'blueprint_generating': if (h.blueprintStart) h.blueprintStart(); break
+        case 'blueprint_chunk':    if (h.blueprintChunk) h.blueprintChunk(msg.text); break
+        case 'blueprint_ready':    if (h.blueprintReady) h.blueprintReady(msg.blueprint); break
+        case 'file_generating':    this.#status = 'generating'; if (h.fileStart) h.fileStart({ filename: msg.filename, index: msg.index, total: msg.total }); break
+        case 'file_chunk':         if (h.fileChunk) h.fileChunk({ filename: msg.filename, text: msg.text }); break
+        case 'file_complete':      if (h.fileComplete) h.fileComplete({ filename: msg.filename, bytes: msg.bytes }); break
+        case 'build_complete':     this.#status = 'complete'; this.#appUrl = msg.appUrl; if (h.complete) h.complete({ buildId: msg.buildId, appUrl: msg.appUrl, files: msg.files }); break
+        case 'error':              this.#status = 'error'; if (h.error) h.error(new VibeError(msg.message)); break
+      }
+    })
+
+    this.#ws.addEventListener('open', () => {
+      this.#ws.send(JSON.stringify({ type: 'start', description: this.#description, ...this.#opts }))
+    })
+
+    this.#ws.addEventListener('error', () => {
+      if (this.#handlers.error) this.#handlers.error(new VibeError('WebSocket connection error'))
+    })
+
+    return this
+  }
+
+  /** Stop the build (closes WebSocket). */
+  stop() {
+    try { this.#ws?.send(JSON.stringify({ type: 'stop' })) } catch { /* ignore */ }
+    this.#ws?.close()
+  }
+
+  /** @returns {string|null} Build ID once created. */
+  get buildId() { return this.#buildId }
+
+  /** @returns {'idle'|'connecting'|'blueprinting'|'generating'|'complete'|'error'} */
+  get status()  { return this.#status }
+
+  /** @returns {string|null} App URL once build is complete. */
+  get appUrl()  { return this.#appUrl }
+}
+
+// ── AppBuilder ────────────────────────────────────────────────────────────────
+
+/**
+ * Client for the Aether-Lite App Builder — generates multi-file web apps
+ * from natural language descriptions, stored in R2 and served at /build/:id.
+ *
+ * Inspired by Cloudflare VibeSDK's PhasicClient.
+ */
+export class AppBuilder {
+  /** @param {string} baseUrl */
+  constructor(baseUrl) { this._base = baseUrl }
+
+  /**
+   * Create a new build session (lazy — call .start() to begin).
+   * @param {string} description - Plain-language description of the app to build
+   * @param {{ name?: string, sandboxId?: string, model?: string }} [opts]
+   * @returns {AppSession}
+   */
+  session(description, opts = {}) {
+    return new AppSession(this._base, description, opts)
+  }
+
+  /**
+   * Load an existing build by ID.
+   * @param {string} buildId
+   * @returns {Promise<AppHandle>}
+   */
+  async get(buildId) {
+    const data = await apiRequest(this._base, `/api/v2/build/${buildId}`, 'GET')
+    return new AppHandle(this._base, data)
+  }
+
+  /**
+   * Delete a build and its generated files.
+   * @param {string} buildId
+   */
+  async delete(buildId) {
+    await apiRequest(this._base, `/api/v2/build/${buildId}`, 'DELETE')
+  }
+}
+
+// ── AetherLiteClient ──────────────────────────────────────────────────────────
+
+/**
+ * Main entry point for the Aether-Lite SDK.
+ * Provides access to AI inference, sandbox management, quick vibe creation,
+ * and the full multi-file App Builder.
+ */
+export class AetherLiteClient {
+  /**
    * @param {string} [baseUrl] - Base URL of the Aether-Lite Worker. Defaults to same origin ('').
    */
   constructor(baseUrl = '') {
     /** @type {AiClient} */      this.ai      = new AiClient(baseUrl)
     /** @type {SandboxClient} */ this.sandbox = new SandboxClient(baseUrl)
     /** @type {VibesClient} */   this.vibes   = new VibesClient(baseUrl)
+    /** @type {AppBuilder} */    this.builder = new AppBuilder(baseUrl)
   }
 }
+
+// Backwards-compatibility alias — existing code using VibeClient continues to work.
+export const VibeClient = AetherLiteClient
 
 // ── <vibe-chat> Web Component ─────────────────────────────────────────────────
 
@@ -849,7 +1063,7 @@ class VibeChatElement extends HTMLElement {
     const baseUrl = this.getAttribute('base-url') ?? ''
     if (!id) return
     try {
-      this._handle = await new VibeClient(baseUrl).sandbox.get(id)
+      this._handle = await new AetherLiteClient(baseUrl).sandbox.get(id)
     } catch (e) {
       this._msg('error', `Could not load sandbox: ${e.message}`)
     }
@@ -902,3 +1116,7 @@ class VibeChatElement extends HTMLElement {
 }
 
 customElements.define('vibe-chat', VibeChatElement)
+
+// <aether-chat> — canonical name for the Aether-Lite web component
+class AetherChatElement extends VibeChatElement {}
+customElements.define('aether-chat', AetherChatElement)
