@@ -5,7 +5,7 @@ import { sandboxExists } from './sandbox'
 
 // ── Standalone app page ───────────────────────────────────────────────────────
 
-function appPageHtml(sandboxId: string): string {
+function appPageHtml(sandboxId: string, nonce: string): string {
   const id = JSON.stringify(sandboxId)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
@@ -83,7 +83,7 @@ footer a:hover{color:var(--accent2)}
   </div>
 </div>
 
-<script>
+<script nonce="${nonce}">
 const SANDBOX_ID = ${id}
 const API = ''
 
@@ -214,7 +214,7 @@ init()
 
 // ── Apps gallery page ─────────────────────────────────────────────────────────
 
-const appsGalleryHtml = `<!DOCTYPE html>
+function appsGalleryHtml(nonce: string): string { return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -261,7 +261,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
   <p class="sub">AI-powered apps built with the Vibe Builder or API. Click any card to open the app.</p>
   <div id="grid" class="grid"></div>
 </main>
-<script>
+<script nonce="${nonce}">
 async function load() {
   const grid = document.getElementById('grid')
   try {
@@ -291,7 +291,7 @@ async function load() {
       \`)
     }
   } catch(e) {
-    grid.innerHTML = '<div class="empty"><h3>Failed to load apps</h3><p>' + e + '</p></div>'
+    grid.innerHTML = '<div class="empty"><h3>Failed to load apps</h3><p>' + esc(String(e)) + '</p></div>'
   }
 }
 
@@ -302,25 +302,39 @@ function esc(s) {
 load()
 </script>
 </body>
-</html>`
+</html>` }
 
 // ── Route handlers ────────────────────────────────────────────────────────────
 
-const htmlHeaders = {
-  'Content-Type': 'text/html; charset=utf-8',
-  'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:",
+function genNonce(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
+}
+
+function htmlHeaders(nonce: string, allowFrame = false): Record<string, string> {
+  return {
+    'Content-Type':            'text/html; charset=utf-8',
+    'X-Content-Type-Options':  'nosniff',
+    'Referrer-Policy':         'strict-origin',
+    // app pages are designed to be embedded; all others deny framing
+    ...(allowFrame ? {} : { 'X-Frame-Options': 'SAMEORIGIN' }),
+    'Content-Security-Policy': `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:`,
+  }
 }
 
 export const appPageRoute: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) {
-    return new Response('<h1>App not found</h1>', { status: 404, headers: htmlHeaders })
+    const nonce = genNonce()
+    return new Response('<h1>App not found</h1>', { status: 404, headers: htmlHeaders(nonce) })
   }
-  return new Response(appPageHtml(id), { headers: htmlHeaders })
+  const nonce = genNonce()
+  return new Response(appPageHtml(id, nonce), { headers: htmlHeaders(nonce, true) })
 }
 
-export const appsGalleryRoute: Handler = (_req, _env) =>
-  Promise.resolve(new Response(appsGalleryHtml, { headers: htmlHeaders }))
+export const appsGalleryRoute: Handler = (_req, _env) => {
+  const nonce = genNonce()
+  return Promise.resolve(new Response(appsGalleryHtml(nonce), { headers: htmlHeaders(nonce) }))
+}
 
 // ── Landing page ──────────────────────────────────────────────────────────────
 
@@ -429,8 +443,10 @@ document.body.innerHTML = vibe.embedCode   <span class="c">// instant &lt;iframe
 </body>
 </html>`
 
-export const landingRoute: Handler = (_req, _env) =>
-  Promise.resolve(new Response(landingHtml, { headers: htmlHeaders }))
+export const landingRoute: Handler = (_req, _env) => {
+  const nonce = genNonce()
+  return Promise.resolve(new Response(landingHtml, { headers: htmlHeaders(nonce) }))
+}
 
 export const pageRoutes: Array<[string, string, Handler]> = [
   ['GET', '/',        landingRoute],

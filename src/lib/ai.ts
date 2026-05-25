@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Message, SandboxConfig } from './schema'
 import { sseEvent } from './http'
-import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS } from './constants'
+import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS } from './constants'
 
 // ── Model registry ────────────────────────────────────────────────────────────
 
@@ -28,9 +28,12 @@ function parseGateway(model: string):
   const sep = model.indexOf(':')
   if (sep === -1) return null
   const p = model.slice(0, sep)
-  if (p === 'openai' || p === 'anthropic' || p === 'google')
-    return { provider: p as 'openai' | 'anthropic' | 'google', id: model.slice(sep + 1) }
-  return null
+  if (!(p === 'openai' || p === 'anthropic' || p === 'google')) return null
+  const id = model.slice(sep + 1)
+  // Strict allowlist — only alphanumeric, hyphens, dots, and underscores.
+  // Prevents path traversal in URL-templated gateway calls (e.g. google endpoint).
+  if (!/^[a-zA-Z0-9][\w.\-]*$/.test(id)) return null
+  return { provider: p as 'openai' | 'anthropic' | 'google', id }
 }
 
 function gatewayBase(env: Env): string {
@@ -180,7 +183,11 @@ function toReadableStream(gen: () => AsyncGenerator<string>): ReadableStream {
         }
         controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
       } catch (e) {
-        controller.enqueue(encoder.encode(sseEvent({ error: String(e) }, 'error')))
+        // Normalize provider errors — don't leak upstream status codes or messages
+        const safeMsg = e instanceof Error && /^\d{3}/.test(e.message)
+          ? 'AI provider temporarily unavailable'
+          : 'AI inference failed'
+        controller.enqueue(encoder.encode(sseEvent({ error: safeMsg }, 'error')))
       } finally {
         controller.close()
       }
@@ -280,7 +287,10 @@ export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): Readable
         }
         controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
       } catch (e) {
-        controller.enqueue(encoder.encode(sseEvent({ error: String(e) }, 'error')))
+        const safeMsg = e instanceof Error && /^\d{3}/.test(e.message)
+          ? 'AI provider temporarily unavailable'
+          : 'AI inference failed'
+        controller.enqueue(encoder.encode(sseEvent({ error: safeMsg }, 'error')))
       } finally {
         controller.close()
       }
@@ -292,6 +302,8 @@ export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): Readable
 
 export async function embed(ai: Ai, text: string | string[], model?: string): Promise<number[][]> {
   const texts = Array.isArray(text) ? text : [text]
+  const totalLen = texts.reduce((n, t) => n + t.length, 0)
+  if (totalLen > MAX_EMBED_CHARS) throw new Error(`Embedding input exceeds ${MAX_EMBED_CHARS} characters`)
   const response = await run(ai)(model ?? MODELS.embed, { text: texts })
   const r = response as { data?: number[][] }
   return r.data ?? []

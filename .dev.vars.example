@@ -16,3 +16,7 @@ GOOGLE_AI_KEY=
 # Optional: sign exported configs with HMAC-SHA256 so imports can verify provenance.
 # Any string works — use `openssl rand -hex 32` to generate a strong secret.
 SIGNING_SECRET=
+
+# Optional: restrict CORS to specific origins (comma-separated). Defaults to '*'.
+# Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+ALLOWED_ORIGINS=

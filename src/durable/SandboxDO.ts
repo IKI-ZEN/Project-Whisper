@@ -8,9 +8,10 @@ import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQU
 import { computeConfigHash } from '../lib/integrity'
 import { scan } from '../lib/guard'
 
+const RL_STORAGE_KEY = 'rlState'
+
 export class SandboxDO extends DurableObject<Env> {
   private config: SandboxConfig | null = null
-  private rlWindow: number[] = []   // in-memory sliding window; resets on hibernation
 
   // ── Hydration ─────────────────────────────────────────────────────────────
 
@@ -28,13 +29,16 @@ export class SandboxDO extends DurableObject<Env> {
     await this.ctx.storage.put(DO_STORAGE_KEY, config)
   }
 
-  // ── Rate limiting ─────────────────────────────────────────────────────────
+  // ── Rate limiting (persistent — survives DO hibernation) ─────────────────
 
-  private checkRateLimit(): boolean {
+  private async checkRateLimit(): Promise<boolean> {
+    const stored = await this.ctx.storage.get<{ window: number[] }>(RL_STORAGE_KEY) ?? { window: [] }
     const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS
-    this.rlWindow = this.rlWindow.filter(t => t > cutoff)
-    if (this.rlWindow.length >= RATE_LIMIT_MAX_REQUESTS) return false
-    this.rlWindow.push(Date.now())
+    const window = stored.window.filter(t => t > cutoff)
+    if (window.length >= RATE_LIMIT_MAX_REQUESTS) return false
+    window.push(Date.now())
+    // Fire-and-forget — don't block the request on the write
+    void this.ctx.storage.put(RL_STORAGE_KEY, { window })
     return true
   }
 
@@ -98,13 +102,14 @@ export class SandboxDO extends DurableObject<Env> {
     }
 
     const config = await this.load()
-    const { id: _i, memory: _m, createdAt: _c, ...allowed } = patch
+    // Disallow patching server-managed fields including integrityHash
+    const { id: _i, memory: _m, createdAt: _c, integrityHash: _ih, ...allowed } = patch
     await this.save({ ...config, ...allowed, updatedAt: now() })
     return json({ ok: true, data: { updated: true } })
   }
 
   private async handleRun(req: Request): Promise<Response> {
-    if (!this.checkRateLimit()) {
+    if (!await this.checkRateLimit()) {
       return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
     }
 
@@ -126,6 +131,14 @@ export class SandboxDO extends DurableObject<Env> {
     const ts = now()
     const reply = await runInSandbox(this.env.AI, this.env, config, message)
 
+    // Outbound scan — detect if the model was successfully jailbroken
+    const replyGuard = scan(reply)
+    if (replyGuard.riskLevel !== 'clean') {
+      void this.env.DB.prepare(
+        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+      ).bind(config.id, 'response_flag', JSON.stringify({ patterns: replyGuard.patterns }), now()).run()
+    }
+
     const userMsg: Message  = { role: 'user',      content: message, timestamp: ts }
     const asstMsg: Message  = { role: 'assistant', content: reply,   timestamp: now() }
     const memory = [...config.memory, userMsg, asstMsg].slice(-MAX_MESSAGES)
@@ -136,7 +149,7 @@ export class SandboxDO extends DurableObject<Env> {
   }
 
   private async handleStream(req: Request): Promise<Response> {
-    if (!this.checkRateLimit()) {
+    if (!await this.checkRateLimit()) {
       return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
     }
 

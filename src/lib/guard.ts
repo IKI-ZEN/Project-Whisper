@@ -32,10 +32,18 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'anthropic_key', re: /sk-ant-[A-Za-z0-9-]{20,}/ },
 ]
 
-// base64 chunks long enough to encode meaningful text (≥40 chars)
-const BASE64_RE = /[A-Za-z0-9+/]{40,}={0,2}/g
+// Covers standard base64 (+/) and URL-safe base64 (-_); chunks ≥40 chars
+const BASE64_RE = /[A-Za-z0-9+/\-_]{40,}={0,2}/g
+
+// Zero-width, directional override, and invisible Unicode code points that can
+// split words across normalization boundaries to evade regex patterns.
+const INVISIBLE_RE = /[​-‏‪-‮⁠-⁤﻿]/g
 
 // ── Scanner ────────────────────────────────────────────────────────────────────
+
+function stripInvisible(text: string): string {
+  return text.replace(INVISIBLE_RE, '')
+}
 
 function matchPatterns(text: string, table: Array<{ name: string; re: RegExp }>): string[] {
   return table.filter(p => p.re.test(text)).map(p => p.name)
@@ -45,7 +53,9 @@ function decodeBase64Chunks(text: string): string[] {
   const decoded: string[] = []
   for (const chunk of text.match(BASE64_RE) ?? []) {
     try {
-      decoded.push(atob(chunk))
+      // atob requires standard base64; convert URL-safe variants first
+      const std = chunk.replace(/-/g, '+').replace(/_/g, '/')
+      decoded.push(atob(std))
     } catch {
       // not valid base64 — skip
     }
@@ -58,10 +68,11 @@ function decodeBase64Chunks(text: string): string[] {
  * and leaked API secrets. Safe to call with any string — user messages,
  * system prompts, transcriptions, or extracted file content.
  *
- * Unicode is NFKC-normalised before scanning to catch homoglyph substitutions.
+ * Invisible Unicode characters are stripped, then NFKC normalisation is
+ * applied to catch homoglyph substitutions before pattern matching.
  */
 export function scan(text: string): ScanResult {
-  const normalised = text.normalize('NFKC')
+  const normalised = stripInvisible(text).normalize('NFKC')
   const matched: string[] = []
 
   // Check blocked patterns on normalised text
