@@ -72,6 +72,82 @@ export const deleteBuildHandler: Handler = async (_req, env, params) => {
   return json(ok({ deleted: true }))
 }
 
+// GET /api/v2/build/:id/thumbnail — E3
+export const getBuildThumbnailHandler: Handler = async (_req, env, params) => {
+  const id  = params.id ?? ''
+  const obj = await env.FILES.get(`apps/${id}/.thumbnail.svg`)
+  if (!obj) return new Response('Not found', { status: 404 })
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type':  'image/svg+xml',
+      'Cache-Control': 'public, max-age=3600',
+    },
+  })
+}
+
+// POST /api/v2/build/:id/deploy — E6: Cloudflare Pages direct upload
+export const deployBuildHandler: Handler = async (_req, env, params) => {
+  if (!env.CLOUDFLARE_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID) {
+    return json(err('Cloudflare API token not configured — set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID'), 503)
+  }
+
+  const id = params.id ?? ''
+
+  // 1. Verify build is complete
+  const statusRes  = await doBuild(buildStub(env, id), '/status')
+  const statusData = await statusRes.json() as { ok: boolean; data?: { status: string; files: string[]; name: string }; error?: string }
+  if (!statusData.ok || !statusData.data) return json(err('Build not found'), 404)
+  if (statusData.data.status !== 'complete') return json(err(`Build not complete (status: ${statusData.data.status})`), 409)
+
+  const buildFiles  = statusData.data.files
+  const projectName = `aether-lite-app-${id.slice(0, 8)}`
+  const apiBase     = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}`
+  const authHeaders = { 'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}` }
+
+  // 2. Create the Pages project if it doesn't exist (422 = already exists)
+  const projectRes = await fetch(`${apiBase}/pages/projects`, {
+    method:  'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ name: projectName, production_branch: 'main' }),
+  })
+  if (!projectRes.ok && projectRes.status !== 422) {
+    const e = await projectRes.json() as { errors?: Array<{ message: string }> }
+    return json(err(`Failed to create Pages project: ${e.errors?.[0]?.message ?? projectRes.statusText}`), 502)
+  }
+
+  // 3. Build manifest + assemble multipart form
+  const form     = new FormData()
+  const manifest: Record<string, string> = {}
+
+  for (const filename of buildFiles) {
+    const obj = await env.FILES.get(`apps/${id}/${filename}`)
+    if (!obj) continue
+    const bytes    = await obj.arrayBuffer()
+    const hashBuf  = await crypto.subtle.digest('SHA-256', bytes)
+    const hash     = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('')
+    manifest[`/${filename}`] = hash
+    form.append(`/${filename}`, new Blob([bytes]), filename)
+  }
+  form.append('manifest', JSON.stringify(manifest))
+
+  // 4. Create deployment
+  const deployRes = await fetch(`${apiBase}/pages/projects/${projectName}/deployments`, {
+    method:  'POST',
+    headers: authHeaders,
+    body:    form,
+  })
+  const deployData = await deployRes.json() as { success: boolean; result?: { id: string }; errors?: Array<{ message: string }> }
+  if (!deployData.success) {
+    return json(err(`Deployment failed: ${deployData.errors?.[0]?.message ?? 'Unknown error'}`), 502)
+  }
+
+  return json(ok({
+    deploymentUrl: `https://${projectName}.pages.dev`,
+    deploymentId:  deployData.result?.id,
+    projectName,
+  }))
+}
+
 // ── Route table ───────────────────────────────────────────────────────────────
 
 export const buildRoutes: Array<[string, string, Handler]> = [
@@ -80,4 +156,6 @@ export const buildRoutes: Array<[string, string, Handler]> = [
   ['GET',    '/api/v2/build/:id/files',           listBuildFilesHandler],
   ['GET',    '/api/v2/build/:id/files/:filename', getBuildFileHandler],
   ['DELETE', '/api/v2/build/:id',                 deleteBuildHandler],
+  ['GET',    '/api/v2/build/:id/thumbnail',       getBuildThumbnailHandler],
+  ['POST',   '/api/v2/build/:id/deploy',          deployBuildHandler],
 ]

@@ -124,7 +124,7 @@ export async function requireAccess(req: Request, env: Env): Promise<Response | 
  * the public sandbox run/stream endpoints and the CSP report sink.
  */
 export function isProtectedRequest(method: string, pathname: string): boolean {
-  if (!['POST', 'PATCH', 'DELETE'].includes(method)) return false
+  if (!['POST', 'PATCH', 'DELETE', 'PUT'].includes(method)) return false
   if (pathname.startsWith('/s/'))              return false   // short public API
   if (pathname === '/api/csp-report')          return false   // reporting sink
   if (/^\/api\/sandbox\/[^/]+\/(run|stream)$/.test(pathname)) return false  // core run API

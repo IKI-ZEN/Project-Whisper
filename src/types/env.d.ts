@@ -5,6 +5,22 @@ export interface AetherLiteJob {
   createdAt: number
 }
 
+// ── Cloudflare Email binding ──────────────────────────────────────────────────
+
+export interface SendEmailMessage {
+  to: string
+  from: string
+  subject: string
+  text?: string
+  html?: string
+}
+
+export interface SendEmailBinding {
+  send(message: SendEmailMessage): Promise<void>
+}
+
+// ── Worker environment ────────────────────────────────────────────────────────
+
 export interface Env {
   // Cloudflare Workers AI
   AI: Ai
@@ -14,6 +30,9 @@ export interface Env {
 
   // Durable Object namespace — one instance per app build
   APP_BUILDER: DurableObjectNamespace
+
+  // Durable Object namespace — one instance per app (persistent key-value state)
+  APP_STATE: DurableObjectNamespace
 
   // KV — sandbox registry + session state
   SANDBOX_REGISTRY: KVNamespace
@@ -33,6 +52,9 @@ export interface Env {
   // Analytics Engine — time-series telemetry
   ANALYTICS?: AnalyticsEngineDataset
 
+  // Email — Cloudflare Email Routing send binding (optional)
+  SEND_EMAIL?: SendEmailBinding
+
   // Vars
   ENVIRONMENT: string
   CLOUDFLARE_ACCOUNT_ID?: string
@@ -46,4 +68,7 @@ export interface Env {
   // Cloudflare Access — Zero Trust identity-aware proxy
   CF_ACCESS_AUD?: string          // Access application audience tag (from the dashboard)
   CF_ACCESS_TEAM_DOMAIN?: string  // e.g. yourteam.cloudflareaccess.com
+
+  // Cloudflare API token — required for Pages deployment
+  CLOUDFLARE_API_TOKEN?: string
 }
