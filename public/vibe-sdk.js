@@ -212,11 +212,12 @@ export class SandboxHandle {
   /** @type {string|null} */ integrityHash
   /** @type {boolean} */ tampered
   /** @type {'strict'|'audit'|'off'} */ guardMode
+  /** @type {boolean} */ ragEnabled
   /** @type {string} */ #base
 
   /**
    * @param {string} base
-   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean, guardMode?: 'strict'|'audit'|'off' }} meta
+   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean, guardMode?: 'strict'|'audit'|'off', ragEnabled?: boolean }} meta
    */
   constructor(base, meta) {
     this.#base         = base
@@ -232,6 +233,7 @@ export class SandboxHandle {
     this.integrityHash = meta.integrityHash ?? null
     this.tampered      = meta.tampered      ?? false
     this.guardMode     = meta.guardMode     ?? 'strict'
+    this.ragEnabled    = meta.ragEnabled    ?? false
   }
 
   /**
@@ -293,6 +295,47 @@ export class SandboxHandle {
   async export() {
     return /** @type {any} */ (
       await apiRequest(this.#base, `/api/sandbox/${this.id}/export`, 'GET')
+    )
+  }
+
+  /**
+   * Upload a document for RAG indexing.
+   * @param {File} file
+   * @returns {Promise<{ docId: string, name: string, size: number, status: string }>}
+   */
+  async uploadDocument(file) {
+    const form = new FormData()
+    form.append('file', file)
+    return /** @type {any} */ (
+      await apiRequest(this.#base, `/api/sandbox/${this.id}/documents`, 'POST', form)
+    )
+  }
+
+  /**
+   * List all documents uploaded to this sandbox.
+   * @returns {Promise<{ docs: Array<{ docId: string, name: string, mimeType: string, size: number, uploadedAt: number, status: string }>, total: number }>}
+   */
+  async listDocuments() {
+    return /** @type {any} */ (
+      await apiRequest(this.#base, `/api/sandbox/${this.id}/documents`, 'GET')
+    )
+  }
+
+  /**
+   * Delete a document and its vector chunks.
+   * @param {string} docId
+   */
+  async deleteDocument(docId) {
+    await apiRequest(this.#base, `/api/sandbox/${this.id}/documents/${docId}`, 'DELETE')
+  }
+
+  /**
+   * Get usage metrics for this sandbox.
+   * @returns {Promise<{ totalRuns: number, totalTokensIn: number, totalTokensOut: number, avgLatencyMs: number, modelBreakdown: Array<{ model: string, runs: number, tokensIn: number, tokensOut: number }> }>}
+   */
+  async metrics() {
+    return /** @type {any} */ (
+      await apiRequest(this.#base, `/api/sandbox/${this.id}/metrics`, 'GET')
     )
   }
 }

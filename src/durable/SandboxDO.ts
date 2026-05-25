@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../types/env'
 import type { SandboxConfig, Message } from '../lib/schema'
-import { runInSandbox, streamInSandbox } from '../lib/ai'
+import { runInSandboxWithRAG, streamInSandboxWithRAG } from '../lib/ai'
 import { json, sseResponse } from '../lib/http'
 import { now } from '../lib/utils'
 import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS } from '../lib/constants'
@@ -146,7 +146,13 @@ export class SandboxDO extends DurableObject<Env> {
     }
 
     const ts = now()
-    const reply = await runInSandbox(this.env.AI, this.env, config, message)
+    const startMs = Date.now()
+    const reply = await runInSandboxWithRAG(this.env.AI, this.env, config, message)
+    const latencyMs = Date.now() - startMs
+
+    void this.env.DB.prepare(
+      'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).bind(config.id, config.model, Math.ceil(message.length / 4), Math.ceil(reply.length / 4), latencyMs, now()).run()
 
     // Outbound scan — detect if the model was successfully jailbroken
     const replyGuard = this.guardedScan(reply, gMode)
@@ -187,7 +193,7 @@ export class SandboxDO extends DurableObject<Env> {
     }
 
     // Stream is preview-only — use /run to persist to memory
-    return sseResponse(streamInSandbox(this.env.AI, this.env, config, message))
+    return sseResponse(streamInSandboxWithRAG(this.env.AI, this.env, config, message))
   }
 
   private async handleHistory(): Promise<Response> {
@@ -196,6 +202,21 @@ export class SandboxDO extends DurableObject<Env> {
   }
 
   private async handleDelete(): Promise<Response> {
+    try {
+      const config = await this.load()
+      const sandboxId = config.id
+      // Best-effort: clean up R2 documents and their Vectorize chunks
+      void this.env.FILES.list({ prefix: `sandboxes/${sandboxId}/documents/` }).then(async listed => {
+        for (const obj of listed.objects) {
+          const docId = obj.key.split('/').pop() ?? ''
+          if (docId) {
+            const ids = Array.from({ length: 500 }, (_, i) => `${sandboxId}_${docId}_${i}`)
+            void this.env.VECTORS.deleteByIds(ids).catch(() => {})
+          }
+          void this.env.FILES.delete(obj.key).catch(() => {})
+        }
+      }).catch(() => {})
+    } catch { /* config not found — nothing to clean */ }
     await this.ctx.storage.deleteAll()
     this.config = null
     return json({ ok: true, data: { deleted: true } })
