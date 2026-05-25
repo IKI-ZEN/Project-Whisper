@@ -235,13 +235,34 @@ Hook sites in `SandboxDO`: `handleInit`, `handlePatchConfig`, `handleRun` (inbou
 
 When `SIGNING_SECRET` is set: `exportConfig` appends a `signature` field (hex HMAC-SHA256 over a canonical JSON string with a fixed field order). `importConfig` rejects with 422 if `SIGNING_SECRET` is set and the signature is absent or invalid. Canonical order: `version, name, description, systemPrompt, tools, model, temperature, maxTokens`.
 
-**Rate limiting (`src/durable/SandboxDO.ts`)**
+**Rate limiting**
 
-Persistent sliding-window limiter stored under `RL_STORAGE_KEY`. `checkRateLimit()` is async and fire-and-forgets the state write. Returns 429 in `handleRun` and `handleStream` when the window is full.
+Two layers:
+- *Per-sandbox* (`src/durable/SandboxDO.ts`): persistent sliding-window limiter under `RL_STORAGE_KEY` — 20 run/stream calls per 60 s. Returns 429 in `handleRun` and `handleStream`.
+- *Per-IP on /api/ai/\** (`src/lib/http.ts`, `checkAiRateLimit()`): KV-backed sliding window, 30 calls/60 s, keyed by `CF-Connecting-IP` stored under `rl:ai:{ip}` in `SANDBOX_REGISTRY`. Checked in `Router.handle()` before dispatch.
+
+**Cloudflare Access (`src/lib/access.ts`)**
+
+Zero Trust identity-aware proxy integration. When `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` are set, all state-mutation endpoints require a valid Cloudflare Access JWT:
+
+- Protected: `POST /api/sandbox`, `POST /api/sandbox/import`, `PATCH /api/sandbox/:id`, `DELETE /api/sandbox/:id`, `POST /api/sandbox/:id/documents`, `DELETE /api/sandbox/:id/documents/:docId`, `POST /api/vibes`, `POST /api/v2/build`, `DELETE /api/v2/build/:id`
+- Public (no auth): all `GET` routes, `POST /api/sandbox/:id/run`, `POST /api/sandbox/:id/stream`, all `/api/ai/*` routes, all page routes, `/s/:id/run`, `/s/:id/stream`
+
+Token resolution order: `Cf-Access-Jwt-Assertion` header (set automatically by Access proxy) → `Authorization: Bearer <token>` header (for programmatic clients).
+
+`requireAccess(req, env)` fetches Cloudflare's JWKS from `https://{teamDomain}/cdn-cgi/access/certs`, validates RS256 signature, audience, and expiry using Web Crypto API. JWKS cached in module scope for 1 hour. Returns `null` (allow) or a 401 Response.
+
+`isProtectedRequest(method, pathname)` — pure boolean, called in `Router.handle()` before dispatching.
 
 **CSP + secure headers (`src/routes/pages.ts`)**
 
-`genNonce()` generates a per-request base64 nonce. `htmlHeaders(nonce, allowFrame)` returns headers with `Content-Security-Policy: script-src 'nonce-${nonce}'` (no `unsafe-inline`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin`. App embed pages pass `allowFrame=true` to omit `X-Frame-Options`.
+`genNonce()` generates a per-request base64 nonce. `htmlHeaders(nonce, allowFrame)` returns headers with `Content-Security-Policy: script-src 'nonce-${nonce}'` (no `unsafe-inline`), a matching `Content-Security-Policy-Report-Only` header pointing to `POST /api/csp-report`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin`. App embed pages pass `allowFrame=true` to omit `X-Frame-Options`.
+
+CSP violations are written to D1 `sandbox_events` as event type `csp_violation` via `POST /api/csp-report` (`src/routes/security.ts`). No auth required on this endpoint.
+
+**X-Request-ID traceability**
+
+Every response from the Router carries an `X-Request-ID: <uuid>` header generated per request. Clients can include this in bug reports. The `migrations/0002_request_id.sql` migration adds a `request_id TEXT` column to `sandbox_events` for future correlation of HTTP logs with D1 audit rows.
 
 ### Public assets (`public/`)
 
@@ -294,6 +315,12 @@ SIGNING_SECRET=...          # optional — HMAC-SHA256 key for export signing
 ALLOWED_ORIGINS=...         # optional — comma-separated allowed CORS origins
                             # omit or set to '' for wildcard '*' (default)
 ENVIRONMENT=development     # set by wrangler.toml; 'production' in deployed builds
+
+# Cloudflare Access (Zero Trust) — optional
+CF_ACCESS_AUD=...           # Access application Audience tag (from dash.cloudflare.com → Access)
+CF_ACCESS_TEAM_DOMAIN=...   # e.g. yourteam.cloudflareaccess.com
+                            # When set: all mutation endpoints require a valid Access JWT.
+                            # Read-only and run/stream endpoints remain public.
 ```
 
 See `.dev.vars.example` for the full annotated list.
