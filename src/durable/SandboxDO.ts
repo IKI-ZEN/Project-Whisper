@@ -1,14 +1,15 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../types/env'
 import type { SandboxConfig, Message } from '../lib/schema'
-import { runInSandboxWithRAG, streamInSandboxWithRAG } from '../lib/ai'
+import { runInSandboxWithRAG, streamInSandboxWithRAG, isToolCallReply, decodeToolCalls, encodeToolResult } from '../lib/ai'
 import { json, sseResponse } from '../lib/http'
 import { now } from '../lib/utils'
-import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS } from '../lib/constants'
+import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
 import { scan, type ScanResult } from '../lib/guard'
 
 const RL_STORAGE_KEY = 'rlState'
+const MAX_TOOL_LOOPS = 10
 
 export class SandboxDO extends DurableObject<Env> {
   private config: SandboxConfig | null = null
@@ -36,6 +37,23 @@ export class SandboxDO extends DurableObject<Env> {
     await this.ctx.storage.put(DO_STORAGE_KEY, config)
   }
 
+  // ── Per-session memory ────────────────────────────────────────────────────
+  // Empty/undefined sessionId uses config.memory (default thread).
+  // Named sessionIds get their own Message[] stored under session:{id}.
+
+  private async loadSessionMemory(sessionId: string | undefined, config: SandboxConfig): Promise<Message[]> {
+    if (!sessionId) return config.memory
+    return (await this.ctx.storage.get<Message[]>(`session:${sessionId}`)) ?? []
+  }
+
+  private async saveSessionMemory(sessionId: string | undefined, memory: Message[], config: SandboxConfig): Promise<void> {
+    if (!sessionId) {
+      await this.save({ ...config, memory, updatedAt: now() })
+      return
+    }
+    await this.ctx.storage.put(`session:${sessionId}`, memory)
+  }
+
   // ── Rate limiting (persistent — survives DO hibernation) ─────────────────
 
   private async checkRateLimit(): Promise<boolean> {
@@ -44,14 +62,107 @@ export class SandboxDO extends DurableObject<Env> {
     const window = stored.window.filter(t => t > cutoff)
     if (window.length >= RATE_LIMIT_MAX_REQUESTS) return false
     window.push(Date.now())
-    // Fire-and-forget — don't block the request on the write
     void this.ctx.storage.put(RL_STORAGE_KEY, { window })
     return true
+  }
+
+  // ── Built-in code execution ───────────────────────────────────────────────
+
+  private async executeCode(code: string): Promise<string> {
+    try {
+      const result = await Promise.race([
+        new Promise<string>(resolve => {
+          // eslint-disable-next-line no-new-func
+          const fn = new Function('__code', `
+            const logs = []
+            const c = {
+              log:   (...a) => logs.push(a.map(String).join(' ')),
+              error: (...a) => logs.push('ERROR: ' + a.map(String).join(' ')),
+              warn:  (...a) => logs.push('WARN: '  + a.map(String).join(' ')),
+            }
+            let __result
+            try {
+              __result = eval(__code)
+            } catch(e) {
+              resolve('Error: ' + e.message)
+              return
+            }
+            const out = logs.join('\\n')
+            if (__result !== undefined && __result !== null) {
+              resolve(out ? out + '\\n' + String(__result) : String(__result))
+            } else {
+              resolve(out || '(no output)')
+            }
+          `)
+          fn(code)
+        }),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error(`Execution timed out after ${CODE_EXEC_TIMEOUT_MS / 1000}s`)), CODE_EXEC_TIMEOUT_MS)
+        ),
+      ])
+      return result
+    } catch (e) {
+      return `Error: ${String(e)}`
+    }
+  }
+
+  // ── Tool call loop ────────────────────────────────────────────────────────
+  // Runs tool calls server-side for built-in tools (run_code).
+  // Returns the final non-tool-call reply and the full updated memory.
+
+  private async runWithToolLoop(
+    config: SandboxConfig, memory: Message[], userMessage: string,
+  ): Promise<{ reply: string; memory: Message[] }> {
+    let currentMemory = [...memory, { role: 'user' as const, content: userMessage, timestamp: now() }]
+    let loops = 0
+
+    while (loops < MAX_TOOL_LOOPS) {
+      loops++
+      const configWithMem = { ...config, memory: currentMemory.slice(0, -1) }
+      const lastMsg = currentMemory[currentMemory.length - 1]
+      const reply = await runInSandboxWithRAG(this.env.AI, this.env, configWithMem, lastMsg.content)
+      const assistantMsg: Message = { role: 'assistant', content: reply, timestamp: now() }
+
+      if (!isToolCallReply(reply)) {
+        currentMemory = [...currentMemory, assistantMsg]
+        return { reply, memory: currentMemory }
+      }
+
+      // Handle tool calls — currently only run_code is executed server-side
+      const calls = decodeToolCalls(reply)
+      currentMemory = [...currentMemory, assistantMsg]
+
+      for (const call of calls) {
+        let result: string
+        if (call.name === 'run_code') {
+          const code = typeof call.input.code === 'string' ? call.input.code : String(call.input.code ?? '')
+          result = await this.executeCode(code)
+        } else {
+          // Non-built-in tool: return tool_call reply so caller can handle it
+          return { reply, memory: currentMemory }
+        }
+        const toolResultMsg: Message = {
+          role: 'user',
+          content: encodeToolResult(call.id, call.name, result),
+          timestamp: now(),
+        }
+        currentMemory = [...currentMemory, toolResultMsg]
+      }
+    }
+
+    // Max loops hit — return last state
+    const last = currentMemory[currentMemory.length - 1]
+    return { reply: last.content, memory: currentMemory }
   }
 
   // ── Fetch router ──────────────────────────────────────────────────────────
 
   async fetch(request: Request): Promise<Response> {
+    // WebSocket upgrade — handled before the switch to avoid URL matching issues
+    if (request.headers.get('Upgrade') === 'websocket') {
+      return this.handleWebSocket(request)
+    }
+
     const { pathname } = new URL(request.url)
 
     try {
@@ -61,13 +172,103 @@ export class SandboxDO extends DurableObject<Env> {
         case 'PATCH /config': return this.handlePatchConfig(request)
         case 'POST /run':     return this.handleRun(request)
         case 'POST /stream':  return this.handleStream(request)
-        case 'GET /history':  return this.handleHistory()
+        case 'GET /history':  return this.handleHistory(request)
         case 'DELETE /':      return this.handleDelete()
         default: return json({ ok: false, error: 'DO route not found' }, 404)
       }
     } catch (e) {
       return json({ ok: false, error: String(e) }, 500)
     }
+  }
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+
+  private handleWebSocket(req: Request): Response {
+    const url = new URL(req.url)
+    const sessionId = url.searchParams.get('sessionId') ?? undefined
+
+    const pair = new WebSocketPair()
+    const client = pair[0]
+    const server = pair[1]
+    server.accept()
+
+    // pendingResolve allows the message handler to wait for a tool_result reply
+    let pendingResolve: ((raw: string) => void) | null = null
+
+    server.addEventListener('message', async ({ data }: MessageEvent) => {
+      const raw = typeof data === 'string' ? data : new TextDecoder().decode(data as ArrayBuffer)
+      let msg: { type: string; content?: string; results?: unknown[] }
+      try { msg = JSON.parse(raw) } catch { return }
+
+      if (msg.type === 'tool_result' && pendingResolve) {
+        const r = pendingResolve
+        pendingResolve = null
+        r(raw)
+        return
+      }
+
+      if (msg.type !== 'message' || !msg.content) return
+
+      try {
+        if (!await this.checkRateLimit()) {
+          server.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }))
+          return
+        }
+
+        const config = await this.load()
+        const gMode = config.guardMode ?? 'strict'
+        const guard = this.guardedScan(msg.content, gMode)
+
+        if (guard) {
+          if (guard.riskLevel === 'blocked' && gMode !== 'audit') {
+            server.send(JSON.stringify({ type: 'error', message: 'Message blocked: adversarial content detected' }))
+            return
+          }
+          if (guard.riskLevel !== 'clean') {
+            void this.env.DB.prepare(
+              'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+            ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'ws', patterns: guard.patterns }), now()).run()
+          }
+        }
+
+        const memory = await this.loadSessionMemory(sessionId, config)
+        const { reply, memory: updatedMemory } = await this.runWithToolLoop(config, memory, msg.content)
+
+        // If the final reply is still a tool call, client must handle it
+        if (isToolCallReply(reply)) {
+          const calls = decodeToolCalls(reply)
+          server.send(JSON.stringify({ type: 'tool_call', calls }))
+          // Wait for client tool_result
+          const toolResultRaw = await new Promise<string>(resolve => { pendingResolve = resolve })
+          let toolMsg: { type: string; results?: Array<{ toolUseId: string; toolName: string; content: string }> }
+          try { toolMsg = JSON.parse(toolResultRaw) } catch { return }
+          const resultMemory = [...updatedMemory]
+          for (const r of (toolMsg.results ?? [])) {
+            resultMemory.push({ role: 'user', content: encodeToolResult(r.toolUseId, r.toolName, r.content), timestamp: now() })
+          }
+          const finalReply = await runInSandboxWithRAG(
+            this.env.AI, this.env,
+            { ...config, memory: resultMemory.slice(0, -1) },
+            resultMemory[resultMemory.length - 1].content,
+          )
+          const finalMemory = [...resultMemory, { role: 'assistant' as const, content: finalReply, timestamp: now() }]
+          await this.saveSessionMemory(sessionId, finalMemory.slice(-MAX_MESSAGES), config)
+          server.send(JSON.stringify({ type: 'done', reply: finalReply }))
+          return
+        }
+
+        const trimmed = updatedMemory.slice(-MAX_MESSAGES)
+        await this.saveSessionMemory(sessionId, trimmed, config)
+        server.send(JSON.stringify({ type: 'done', reply }))
+      } catch (e) {
+        server.send(JSON.stringify({ type: 'error', message: String(e) }))
+      }
+    })
+
+    server.addEventListener('close', () => { /* connection closed */ })
+    server.addEventListener('error', () => { try { server.close(1011, 'Internal error') } catch {} })
+
+    return new Response(null, { status: 101, webSocket: client })
   }
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -118,7 +319,6 @@ export class SandboxDO extends DurableObject<Env> {
       }
     }
 
-    // Disallow patching server-managed fields including integrityHash
     const { id: _i, memory: _m, createdAt: _c, integrityHash: _ih, ...allowed } = patch
     await this.save({ ...config, ...allowed, updatedAt: now() })
     return json({ ok: true, data: { updated: true } })
@@ -129,7 +329,8 @@ export class SandboxDO extends DurableObject<Env> {
       return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
     }
 
-    const { message } = await req.json() as { message: string }
+    const body = await req.json() as { message: string; sessionId?: string }
+    const { message, sessionId } = body
     const config = await this.load()
     const gMode = config.guardMode ?? 'strict'
 
@@ -145,16 +346,15 @@ export class SandboxDO extends DurableObject<Env> {
       }
     }
 
-    const ts = now()
     const startMs = Date.now()
-    const reply = await runInSandboxWithRAG(this.env.AI, this.env, config, message)
+    const memory = await this.loadSessionMemory(sessionId, config)
+    const { reply, memory: updatedMemory } = await this.runWithToolLoop(config, memory, message)
     const latencyMs = Date.now() - startMs
 
     void this.env.DB.prepare(
       'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     ).bind(config.id, config.model, Math.ceil(message.length / 4), Math.ceil(reply.length / 4), latencyMs, now()).run()
 
-    // Outbound scan — detect if the model was successfully jailbroken
     const replyGuard = this.guardedScan(reply, gMode)
     if (replyGuard && replyGuard.riskLevel !== 'clean') {
       void this.env.DB.prepare(
@@ -162,13 +362,10 @@ export class SandboxDO extends DurableObject<Env> {
       ).bind(config.id, 'response_flag', JSON.stringify({ patterns: replyGuard.patterns }), now()).run()
     }
 
-    const userMsg: Message  = { role: 'user',      content: message, timestamp: ts }
-    const asstMsg: Message  = { role: 'assistant', content: reply,   timestamp: now() }
-    const memory = [...config.memory, userMsg, asstMsg].slice(-MAX_MESSAGES)
+    const trimmed = updatedMemory.slice(-MAX_MESSAGES)
+    await this.saveSessionMemory(sessionId, trimmed, config)
 
-    await this.save({ ...config, memory, updatedAt: now() })
-
-    return json({ ok: true, data: { reply, turns: memory.length / 2 } })
+    return json({ ok: true, data: { reply, turns: Math.floor(trimmed.length / 2) } })
   }
 
   private async handleStream(req: Request): Promise<Response> {
@@ -176,7 +373,8 @@ export class SandboxDO extends DurableObject<Env> {
       return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
     }
 
-    const { message } = await req.json() as { message: string }
+    const body = await req.json() as { message: string; sessionId?: string }
+    const { message } = body
     const config = await this.load()
     const gMode = config.guardMode ?? 'strict'
 
@@ -192,20 +390,22 @@ export class SandboxDO extends DurableObject<Env> {
       }
     }
 
-    // Stream is preview-only — use /run to persist to memory
     return sseResponse(streamInSandboxWithRAG(this.env.AI, this.env, config, message))
   }
 
-  private async handleHistory(): Promise<Response> {
+  private async handleHistory(req: Request): Promise<Response> {
     const config = await this.load()
-    return json({ ok: true, data: config.memory })
+    // Accept sessionId as query param for GET requests
+    const url = new URL(req.url)
+    const sessionId = url.searchParams.get('sessionId') ?? undefined
+    const memory = await this.loadSessionMemory(sessionId, config)
+    return json({ ok: true, data: memory })
   }
 
   private async handleDelete(): Promise<Response> {
     try {
       const config = await this.load()
       const sandboxId = config.id
-      // Best-effort: clean up R2 documents and their Vectorize chunks
       void this.env.FILES.list({ prefix: `sandboxes/${sandboxId}/documents/` }).then(async listed => {
         for (const obj of listed.objects) {
           const docId = obj.key.split('/').pop() ?? ''

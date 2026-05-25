@@ -194,7 +194,7 @@ export const runHandler: Handler = async (req, env, params: Params) => {
   let parsed
   try { parsed = parseRunSandboxRequest(body) } catch (e) { return json(err(String(e)), 422) }
 
-  const res = await doFetch(stub(env, id), 'run', 'POST', { message: parsed.message })
+  const res = await doFetch(stub(env, id), 'run', 'POST', { message: parsed.message, sessionId: parsed.sessionId })
 
   await env.DB.prepare(
     'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
@@ -211,14 +211,17 @@ export const streamHandler: Handler = async (req, env, params: Params) => {
   let parsed
   try { parsed = parseRunSandboxRequest(body) } catch (e) { return json(err(String(e)), 422) }
 
-  const doRes = await doFetch(stub(env, id), 'stream', 'POST', { message: parsed.message })
+  const doRes = await doFetch(stub(env, id), 'stream', 'POST', { message: parsed.message, sessionId: parsed.sessionId })
   return sseResponse(doRes.body as ReadableStream)
 }
 
-const history: Handler = async (_req, env, params: Params) => {
+const history: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
-  return doFetch(stub(env, id), 'history', 'GET')
+  // Forward sessionId query param to DO
+  const sessionId = new URL(req.url).searchParams.get('sessionId')
+  const doUrl = sessionId ? `history?sessionId=${encodeURIComponent(sessionId)}` : 'history'
+  return doFetch(stub(env, id), doUrl, 'GET')
 }
 
 const del: Handler = async (_req, env, params: Params) => {

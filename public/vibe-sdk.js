@@ -313,6 +313,78 @@ export class AiClient {
   }
 }
 
+// ── SandboxConnection (WebSocket) ─────────────────────────────────────────────
+
+/**
+ * Live WebSocket connection to a sandbox.
+ * Supports tool call cycles: server emits tool_call events, client submits results.
+ *
+ * Protocol (JSON over WS):
+ *   Client → Server: { type: 'message', content: string }
+ *   Server → Client: { type: 'token', content: string }
+ *   Server → Client: { type: 'tool_call', calls: [{id, name, input}] }
+ *   Client → Server: { type: 'tool_result', results: [{toolUseId, toolName, content}] }
+ *   Server → Client: { type: 'done', reply: string }
+ *   Server → Client: { type: 'error', message: string }
+ */
+export class SandboxConnection {
+  #ws
+  #handlers = {}
+
+  /** @param {WebSocket} ws */
+  constructor(ws) {
+    this.#ws = ws
+    ws.addEventListener('message', ({ data }) => {
+      let msg
+      try { msg = JSON.parse(data) } catch { return }
+      const h = this.#handlers
+      if (msg.type === 'token'     && h.token)     h.token(msg.content)
+      if (msg.type === 'tool_call' && h.toolCall)  h.toolCall(msg.calls)
+      if (msg.type === 'done'      && h.done)       h.done(msg.reply)
+      if (msg.type === 'error'     && h.error)      h.error(new VibeError(msg.message))
+    })
+    ws.addEventListener('error', () => {
+      if (this.#handlers.error) this.#handlers.error(new VibeError('WebSocket error'))
+    })
+    ws.addEventListener('close', () => {
+      if (this.#handlers.close) this.#handlers.close()
+    })
+  }
+
+  /** Called with each streamed token. @param {(token: string) => void} fn */
+  onToken(fn)    { this.#handlers.token = fn;    return this }
+  /** Called when the model wants to call tools. @param {(calls: {id:string,name:string,input:object}[]) => void} fn */
+  onToolCall(fn) { this.#handlers.toolCall = fn; return this }
+  /** Called when the turn is complete. @param {(reply: string) => void} fn */
+  onDone(fn)     { this.#handlers.done = fn;     return this }
+  /** Called on error. @param {(err: VibeError) => void} fn */
+  onError(fn)    { this.#handlers.error = fn;    return this }
+  /** Called when the connection closes. @param {() => void} fn */
+  onClose(fn)    { this.#handlers.close = fn;    return this }
+
+  /** Send a message to start a conversation turn. @param {string} content */
+  send(content) {
+    this.#ws.send(JSON.stringify({ type: 'message', content }))
+  }
+
+  /**
+   * Submit tool results after receiving a tool_call event.
+   * @param {{ toolUseId: string, toolName: string, content: string }[]} results
+   */
+  submitToolResults(results) {
+    this.#ws.send(JSON.stringify({ type: 'tool_result', results }))
+  }
+
+  /** @returns {'connecting'|'open'|'closing'|'closed'} */
+  get readyState() {
+    const states = ['connecting', 'open', 'closing', 'closed']
+    return states[this.#ws.readyState] ?? 'closed'
+  }
+
+  /** Close the connection. */
+  close() { this.#ws.close() }
+}
+
 // ── SandboxHandle ─────────────────────────────────────────────────────────────
 
 export class SandboxHandle {
@@ -330,11 +402,12 @@ export class SandboxHandle {
   /** @type {'strict'|'audit'|'off'} */ guardMode
   /** @type {boolean} */ ragEnabled
   /** @type {object[]} */ tools
+  /** @type {string|undefined} */ appHtml
   /** @type {string} */ #base
 
   /**
    * @param {string} base
-   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean, guardMode?: 'strict'|'audit'|'off', ragEnabled?: boolean, tools?: object[] }} meta
+   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean, guardMode?: 'strict'|'audit'|'off', ragEnabled?: boolean, tools?: object[], appHtml?: string }} meta
    */
   constructor(base, meta) {
     this.#base         = base
@@ -352,16 +425,18 @@ export class SandboxHandle {
     this.guardMode     = meta.guardMode     ?? 'strict'
     this.ragEnabled    = meta.ragEnabled    ?? false
     this.tools         = meta.tools         ?? []
+    this.appHtml       = meta.appHtml
   }
 
   /**
    * Send a message and get a blocking reply (persists to conversation memory).
    * @param {string} message
+   * @param {string} [sessionId] Named session — omit for default shared thread
    * @returns {Promise<string>}
    */
-  async run(message) {
+  async run(message, sessionId) {
     const data = /** @type {{ reply: string }} */ (
-      await apiRequest(this.#base, `/api/sandbox/${this.id}/run`, 'POST', { message })
+      await apiRequest(this.#base, `/api/sandbox/${this.id}/run`, 'POST', { message, sessionId })
     )
     return data.reply
   }
@@ -370,13 +445,14 @@ export class SandboxHandle {
    * Send a message and stream the response token by token.
    * Memory is NOT updated — use run() if persistence is needed.
    * @param {string} message
+   * @param {string} [sessionId]
    * @returns {AsyncGenerator<string>}
    */
-  async * stream(message) {
+  async * stream(message, sessionId) {
     const res = await fetch(`${this.#base}/api/sandbox/${this.id}/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, sessionId }),
     })
     if (!res.ok || !res.body) throw new VibeError('Stream request failed', res.status)
     yield * parseSSEStream(res.body)
@@ -384,12 +460,28 @@ export class SandboxHandle {
 
   /**
    * Get full conversation history.
+   * @param {string} [sessionId] Named session — omit for default shared thread
    * @returns {Promise<{ role: string, content: string, timestamp: number }[]>}
    */
-  async history() {
+  async history(sessionId) {
+    const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''
     return /** @type {any} */ (
-      await apiRequest(this.#base, `/api/sandbox/${this.id}/history`, 'GET')
+      await apiRequest(this.#base, `/api/sandbox/${this.id}/history${qs}`, 'GET')
     )
+  }
+
+  /**
+   * Open a WebSocket connection for bidirectional real-time conversation.
+   * Enables tool call cycles where the server sends tool_call events and
+   * the client submits results without needing a new HTTP request.
+   * @param {string} [sessionId]
+   * @returns {SandboxConnection}
+   */
+  connect(sessionId) {
+    const wsBase = this.#base.replace(/^http/, 'ws') || (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host
+    const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''
+    const ws = new WebSocket(`${wsBase}/api/sandbox/${this.id}/ws${qs}`)
+    return new SandboxConnection(ws)
   }
 
   /**
