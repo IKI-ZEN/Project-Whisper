@@ -244,6 +244,8 @@
     <div id="config-editor" style="display:none;flex-direction:column;gap:8px;margin-top:8px">
       <hr/>
       <label>Edit config</label>
+      <div id="integrity-badge" style="display:none;font-family:var(--mono);font-size:10px;word-break:break-all;opacity:0.65;padding:4px 6px;background:var(--surface);border-radius:4px"></div>
+      <div id="tamper-warn" style="display:none;color:#ef4444;font-size:11px;font-weight:600;padding:4px 0">⚠ Config tampered — hash mismatch detected</div>
       <div class="field"><label>Name</label><input id="cfg-name" type="text"/></div>
       <div class="field"><label>System Prompt</label><textarea id="cfg-sys" rows="4" class="mono"></textarea></div>
       <div class="field"><label>Model</label><input id="cfg-model" type="text"/></div>
@@ -476,11 +478,22 @@
       `<strong>${escHtml(sandbox.name)}</strong><br>` +
       `<span class="badge-model">${escHtml(sandbox.model)}</span><br>` +
       `<span style="opacity:0.6;font-size:10px">${escHtml(sandbox.id)}</span>`
-    document.getElementById('cfg-name').value          = sandbox.name
-    document.getElementById('cfg-sys').value           = sandbox.systemPrompt
-    document.getElementById('cfg-model').value         = sandbox.model
-    document.getElementById('cfg-temp').value          = sandbox.temperature
-    document.getElementById('cfg-tokens').value        = sandbox.maxTokens
+    document.getElementById('cfg-name').value   = sandbox.name
+    document.getElementById('cfg-sys').value    = sandbox.systemPrompt
+    document.getElementById('cfg-model').value  = sandbox.model
+    document.getElementById('cfg-temp').value   = sandbox.temperature
+    document.getElementById('cfg-tokens').value = sandbox.maxTokens
+
+    const badge = document.getElementById('integrity-badge')
+    const warn  = document.getElementById('tamper-warn')
+    if (sandbox.integrityHash) {
+      badge.textContent = `SHA-256: ${sandbox.integrityHash}`
+      badge.style.display = 'block'
+    } else {
+      badge.style.display = 'none'
+    }
+    warn.style.display = sandbox.tampered ? 'block' : 'none'
+
     document.getElementById('config-editor').style.display = 'flex'
     document.getElementById('chat-input').disabled  = false
     document.getElementById('send-btn').disabled    = false
@@ -541,8 +554,10 @@
     await activeSandbox.delete()
     addMsg('system', 'Sandbox deleted.')
     activeSandbox = null
-    document.getElementById('sandbox-meta').style.display = 'none'
-    document.getElementById('config-editor').style.display = 'none'
+    document.getElementById('sandbox-meta').style.display   = 'none'
+    document.getElementById('config-editor').style.display  = 'none'
+    document.getElementById('integrity-badge').style.display = 'none'
+    document.getElementById('tamper-warn').style.display     = 'none'
     document.getElementById('chat-input').disabled  = true
     document.getElementById('send-btn').disabled    = true
     document.getElementById('del-btn').disabled     = true

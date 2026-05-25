@@ -179,23 +179,27 @@ export class SandboxHandle {
   /** @type {number} */ maxTokens
   /** @type {string} */ appUrl
   /** @type {string} */ shortLink
+  /** @type {string|null} */ integrityHash
+  /** @type {boolean} */ tampered
   /** @type {string} */ #base
 
   /**
    * @param {string} base
-   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string }} meta
+   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean }} meta
    */
   constructor(base, meta) {
-    this.#base        = base
-    this.id           = meta.id
-    this.name         = meta.name
-    this.description  = meta.description  ?? ''
-    this.model        = meta.model        ?? ''
-    this.systemPrompt = meta.systemPrompt ?? ''
-    this.temperature  = meta.temperature  ?? 0.7
-    this.maxTokens    = meta.maxTokens    ?? 1024
-    this.appUrl       = meta.appUrl       ?? `/app/${meta.id}`
-    this.shortLink    = meta.shortLink    ?? `/s/${meta.id}`
+    this.#base         = base
+    this.id            = meta.id
+    this.name          = meta.name
+    this.description   = meta.description   ?? ''
+    this.model         = meta.model         ?? ''
+    this.systemPrompt  = meta.systemPrompt  ?? ''
+    this.temperature   = meta.temperature   ?? 0.7
+    this.maxTokens     = meta.maxTokens     ?? 1024
+    this.appUrl        = meta.appUrl        ?? `/app/${meta.id}`
+    this.shortLink     = meta.shortLink     ?? `/s/${meta.id}`
+    this.integrityHash = meta.integrityHash ?? null
+    this.tampered      = meta.tampered      ?? false
   }
 
   /**

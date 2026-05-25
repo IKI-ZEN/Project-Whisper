@@ -32,6 +32,7 @@ export interface SandboxConfig {
   memory: Message[]
   createdAt: number
   updatedAt: number
+  integrityHash?: string
 }
 
 // ── Request shapes ─────────────────────────────────────────────────────────────

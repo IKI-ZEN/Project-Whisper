@@ -92,6 +92,10 @@ export class SandboxHandle {
   readonly maxTokens: number
   readonly appUrl: string
   readonly shortLink: string
+  /** SHA-256 fingerprint of config + conversation length. Null on legacy sandboxes. */
+  readonly integrityHash: string | null
+  /** True if stored hash doesn't match live config — indicates out-of-band tampering. */
+  readonly tampered: boolean
 
   run(message: string): Promise<string>
   stream(message: string): AsyncGenerator<string>

@@ -5,6 +5,28 @@ import { parseCreateSandboxRequest, parseRunSandboxRequest, type SandboxConfig }
 import { newId, now } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
 
+// ── HMAC helpers ──────────────────────────────────────────────────────────────
+
+async function importHmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
+  )
+}
+
+async function signPayload(payload: string, secret: string): Promise<string> {
+  const key = await importHmacKey(secret)
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function verifySignature(payload: string, signature: string, secret: string): Promise<boolean> {
+  const key = await importHmacKey(secret)
+  const expected = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
+  const expectedHex = [...new Uint8Array(expected)].map(b => b.toString(16).padStart(2, '0')).join('')
+  return expectedHex === signature
+}
+
 // ── KV metadata shape (stored with each sandbox key) ─────────────────────────
 
 export interface SandboxMeta {
@@ -164,11 +186,28 @@ const exportConfig: Handler = async (_req, env, params: Params) => {
   const body = await res.json() as { ok: boolean; data: Omit<SandboxConfig, 'memory'> }
   if (!body.ok) return json(err('Failed to load config'), 500)
   const { name, description, systemPrompt, tools, model, temperature, maxTokens } = body.data
-  return json(ok({ version: 1 as const, name, description, systemPrompt, tools, model, temperature, maxTokens }))
+
+  const payload = JSON.stringify({ version: 1, name, description, systemPrompt, tools, model, temperature, maxTokens })
+  const signature = env.SIGNING_SECRET ? await signPayload(payload, env.SIGNING_SECRET) : undefined
+
+  return json(ok({ version: 1 as const, name, description, systemPrompt, tools, model, temperature, maxTokens, signature }))
 }
 
 const importConfig: Handler = async (req, env) => {
-  const p = await parseBody(req, parseCreateSandboxRequest)
+  let raw: unknown
+  try { raw = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
+
+  // Verify HMAC signature when SIGNING_SECRET is configured
+  if (env.SIGNING_SECRET && typeof raw === 'object' && raw !== null) {
+    const { signature, ...rest } = raw as Record<string, unknown>
+    if (typeof signature === 'string') {
+      const payload = JSON.stringify(rest)
+      const valid = await verifySignature(payload, signature, env.SIGNING_SECRET)
+      if (!valid) return json(err('Import rejected: invalid export signature'), 422)
+    }
+  }
+
+  const p = await parseBody(new Request(req.url, { method: 'POST', body: JSON.stringify(raw), headers: { 'Content-Type': 'application/json' } }), parseCreateSandboxRequest)
   if (!p.ok) return p.response
 
   const id = newId()

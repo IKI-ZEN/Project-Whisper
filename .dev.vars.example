@@ -12,3 +12,7 @@ AI_GATEWAY_ID=
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 GOOGLE_AI_KEY=
+
+# Optional: sign exported configs with HMAC-SHA256 so imports can verify provenance.
+# Any string works — use `openssl rand -hex 32` to generate a strong secret.
+SIGNING_SECRET=
