@@ -1,4 +1,4 @@
-import { MAX_REQUEST_BODY } from './constants'
+import { MAX_REQUEST_BODY, AI_RATE_LIMIT_WINDOW_MS, AI_RATE_LIMIT_MAX } from './constants'
 
 // ── Standard response envelope ────────────────────────────────────────────────
 
@@ -84,6 +84,21 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   }
 }
 
+// Sliding-window IP rate limiter for /api/ai/* routes — stored in SANDBOX_REGISTRY KV.
+export async function checkAiRateLimit(req: Request, env: Env): Promise<Response | null> {
+  const ip  = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const key = `rl:ai:${ip}`
+  const now = Date.now()
+  const stored = await env.SANDBOX_REGISTRY.get(key, 'json') as number[] | null
+  const window = (stored ?? []).filter(t => t > now - AI_RATE_LIMIT_WINDOW_MS)
+  if (window.length >= AI_RATE_LIMIT_MAX) {
+    return json(err('Rate limit exceeded — try again in a minute.'), 429)
+  }
+  window.push(now)
+  void env.SANDBOX_REGISTRY.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(AI_RATE_LIMIT_WINDOW_MS / 1000) })
+  return null
+}
+
 export class Router {
   private readonly routes: Route[] = []
 
@@ -102,30 +117,38 @@ export class Router {
   patch(path: string, h: Handler): this  { return this.on('PATCH',  path, h) }
 
   async handle(req: Request, env: Env): Promise<Response> {
+    const requestId = crypto.randomUUID()
     const cors = corsHeaders(req, env)
 
     // CORS preflight
     if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: cors })
+      return new Response(null, { status: 204, headers: { ...cors, 'X-Request-ID': requestId } })
     }
 
     const url = new URL(req.url)
+
+    // IP-based rate limit on all /api/ai/* routes
+    if (url.pathname.startsWith('/api/ai/')) {
+      const rlRes = await checkAiRateLimit(req, env)
+      if (rlRes) return this.addHeaders(rlRes, cors, requestId)
+    }
+
     for (const route of this.routes) {
       if (route.method !== req.method) continue
       const match = route.pattern.exec(url)
       if (!match) continue
       const params = match.pathname.groups as Params
       const res = await route.handler(req, env, params)
-      return this.addCors(res, cors)
+      return this.addHeaders(res, cors, requestId)
     }
 
-    return this.addCors(json(err('Not found'), 404), cors)
+    return this.addHeaders(json(err('Not found'), 404), cors, requestId)
   }
 
-  private addCors(res: Response, cors: Record<string, string>): Response {
-    if (Object.keys(cors).length === 0) return res
+  private addHeaders(res: Response, cors: Record<string, string>, requestId: string): Response {
     const headers = new Headers(res.headers)
     for (const [k, v] of Object.entries(cors)) headers.set(k, v)
+    headers.set('X-Request-ID', requestId)
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
   }
 }

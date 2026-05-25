@@ -20,6 +20,10 @@ export const DO_STORAGE_KEY        = 'config'
 export const RATE_LIMIT_WINDOW_MS    = 60_000   // 1 minute
 export const RATE_LIMIT_MAX_REQUESTS = 20
 
+// IP-based sliding-window rate limit for /api/ai/* routes
+export const AI_RATE_LIMIT_WINDOW_MS = 60_000   // 1 minute
+export const AI_RATE_LIMIT_MAX       = 30        // 30 calls/min per IP
+
 // Input length limits — defence against cost amplification and storage exhaustion
 export const MAX_NAME_LEN            = 128
 export const MAX_DESCRIPTION_LEN     = 512

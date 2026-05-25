@@ -15,7 +15,7 @@ export interface DocumentMeta {
   mimeType: string
   size: number
   uploadedAt: number
-  status: 'processing' | 'indexed' | 'error'
+  status: 'processing' | 'indexed' | 'error' | 'blocked'
 }
 
 // ── Allowed MIME types for upload ─────────────────────────────────────────────
@@ -57,7 +57,7 @@ const upload: Handler = async (req, env, params: Params) => {
     return json(err(`Unsupported file type: ${mimeType}. Allowed: text, markdown, csv, JSON, PDF`), 415)
   }
 
-  // Run guard scan on extractable text
+  // Run guard scan on text-extractable content (PDFs are scanned post-extraction in fileProcess)
   if (!mimeType.includes('pdf')) {
     try {
       const text = await file.text()
@@ -65,7 +65,7 @@ const upload: Handler = async (req, env, params: Params) => {
       if (guard.riskLevel === 'blocked') {
         return json(err('Document rejected: adversarial content detected', guard.patterns.join(', ')), 422)
       }
-    } catch { /* non-text content, skip scan */ }
+    } catch { /* binary content — guard scan runs in fileProcess after text extraction */ }
   }
 
   const docId = newId()

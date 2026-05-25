@@ -101,7 +101,7 @@ async function init() {
     badge.textContent = app.model.split('/').pop()
     badge.style.display = ''
     document.getElementById('embed-code').value =
-      '<iframe src="' + location.origin + '/app/' + SANDBOX_ID + '" width="420" height="640" frameborder="0" allow="microphone"></iframe>'
+      '<iframe src="' + location.origin + '/app/' + SANDBOX_ID + '" width="420" height="640" frameborder="0" allow="microphone" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>'
     setMsg('system', 'Hi! I am ' + app.name + (app.description ? ' — ' + app.description : '') + '. How can I help?')
     document.getElementById('user-input').disabled = false
     document.getElementById('send-btn').disabled = false
@@ -319,6 +319,7 @@ function htmlHeaders(nonce: string, allowFrame = false): Record<string, string> 
     // app pages are designed to be embedded; all others deny framing
     ...(allowFrame ? {} : { 'X-Frame-Options': 'SAMEORIGIN' }),
     'Content-Security-Policy': `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:`,
+    'Content-Security-Policy-Report-Only': `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; report-uri /api/csp-report`,
   }
 }
 
