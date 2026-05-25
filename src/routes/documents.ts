@@ -1,4 +1,4 @@
-import type { Env, AetherJob } from '../types/env'
+import type { Env, AetherLiteJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err } from '../lib/http'
 import { scan } from '../lib/guard'
