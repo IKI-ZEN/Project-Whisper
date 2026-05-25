@@ -42,4 +42,8 @@ export interface Env {
   GOOGLE_AI_KEY?: string
   SIGNING_SECRET?: string
   ALLOWED_ORIGINS?: string   // comma-separated origins, or '*' (default)
+
+  // Cloudflare Access — Zero Trust identity-aware proxy
+  CF_ACCESS_AUD?: string          // Access application audience tag (from the dashboard)
+  CF_ACCESS_TEAM_DOMAIN?: string  // e.g. yourteam.cloudflareaccess.com
 }

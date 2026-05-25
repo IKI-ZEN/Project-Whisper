@@ -1,4 +1,5 @@
 import { MAX_REQUEST_BODY, AI_RATE_LIMIT_WINDOW_MS, AI_RATE_LIMIT_MAX } from './constants'
+import { requireAccess, isProtectedRequest } from './access'
 
 // ── Standard response envelope ────────────────────────────────────────────────
 
@@ -131,6 +132,12 @@ export class Router {
     if (url.pathname.startsWith('/api/ai/')) {
       const rlRes = await checkAiRateLimit(req, env)
       if (rlRes) return this.addHeaders(rlRes, cors, requestId)
+    }
+
+    // Cloudflare Access: gate state-mutation endpoints when CF_ACCESS_AUD is set
+    if (isProtectedRequest(req.method, url.pathname)) {
+      const authRes = await requireAccess(req, env)
+      if (authRes) return this.addHeaders(authRes, cors, requestId)
     }
 
     for (const route of this.routes) {

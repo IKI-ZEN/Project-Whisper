@@ -20,3 +20,10 @@ SIGNING_SECRET=
 # Optional: restrict CORS to specific origins (comma-separated). Defaults to '*'.
 # Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
 ALLOWED_ORIGINS=
+
+# Optional: Cloudflare Access Zero Trust authentication.
+# When set, all state-mutation API endpoints (create/update/delete sandbox, build, upload)
+# require a valid Cf-Access-Jwt-Assertion header. Read-only and run/stream endpoints
+# remain public. Set up your Access application at dash.cloudflare.com → Access.
+CF_ACCESS_AUD=             # Application Audience (AUD) tag from the Access app settings
+CF_ACCESS_TEAM_DOMAIN=     # e.g. yourteam.cloudflareaccess.com
