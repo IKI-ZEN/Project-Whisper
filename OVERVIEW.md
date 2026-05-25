@@ -117,6 +117,65 @@ The SDK handles authentication, streaming, error handling, and retry logic autom
 
 ---
 
+## For AI Whisperers
+
+Aether-Lite is designed to get out of the way when you need to study how models actually behave. The following features are built specifically for researchers who probe attractor basins, test entropy, and explore activation patterns.
+
+### Guard mode
+
+Every sandbox has a `guardMode` setting that controls the prompt injection scanner:
+
+| Mode | What it does |
+|------|-------------|
+| `strict` | Default. Blocks prompts that match injection patterns. |
+| `audit` | Logs detected patterns to the audit trail but never blocks. Useful when you want a record of what triggered the scanner without interference. |
+| `off` | Disables the scanner entirely. No restrictions, no logging overhead. |
+
+Set it when creating a sandbox or patch it at any time:
+```javascript
+const sandbox = await client.sandbox.create({ ..., guardMode: 'off' })
+// or later:
+await sandbox.update({ guardMode: 'audit' })
+```
+
+### Model comparison
+
+Run the same prompt across multiple models simultaneously and see the results side by side with per-model latency:
+
+```javascript
+const { data } = await client.ai.compare(
+  ['@cf/meta/llama-3.1-8b-instruct', 'openai:gpt-4o', 'anthropic:claude-sonnet-4-6', 'google:gemini-2.0-flash'],
+  'Describe consciousness in three words',
+  { temperature: 1.2 }
+)
+data.results.forEach(r => console.log(`${r.model}: "${r.response}" (${r.latencyMs}ms)`))
+```
+
+### Temperature sweep
+
+Run the same prompt at multiple temperatures and collect multiple samples per temperature. This maps the attractor basin structure of the model's learned distribution — where responses converge (low T) and where they diverge into high-entropy territory (high T):
+
+```javascript
+const { data } = await client.ai.sweep(
+  'What is the meaning of life?',
+  [0, 0.3, 0.7, 1.0, 1.5, 2.0],
+  { model: 'anthropic:claude-sonnet-4-6', samples: 3 }
+)
+// data.results: [{ temperature, responses: string[], latencyMs }]
+```
+
+The **Whisperer** tab in the Playground provides a UI for both of these — a checkbox grid for model selection and a temperature table with configurable sampling depth.
+
+### Integrity verification
+
+Every sandbox config has a SHA-256 fingerprint that includes the current message count as a thread-length salt. The Playground's Chat sidebar shows the live hash and raises a tamper warning if the stored fingerprint doesn't match — useful for verifying that a sandbox config hasn't been modified between sessions. You can also poll `GET /api/sandbox/:id/fingerprint` from a monitoring script without exposing the system prompt.
+
+### Signed config sharing
+
+When `SIGNING_SECRET` is configured on the server, exported configs carry an HMAC-SHA256 signature. Recipients can verify the signature on import — if the JSON was modified in transit, the import is rejected with a 422. This is useful for sharing carefully crafted system prompts or research configurations between instances with provenance guarantees.
+
+---
+
 ## What it runs on
 
 Aether-Lite is built entirely on Cloudflare's global network. This means:
@@ -129,10 +188,11 @@ Aether-Lite is built entirely on Cloudflare's global network. This means:
 
 ## Playground
 
-The Playground (`/playground.html`) is an in-browser developer interface with three tabs:
+The Playground (`/playground.html`) is an in-browser developer interface with four tabs:
 
 | Tab | Purpose |
 |-----|---------|
-| **Vibe Builder** | Create a new AI app from a description |
-| **Sandbox Chat** | Load any sandbox by ID and chat with it directly |
-| **AI Workbench** | Test raw AI capabilities: text generation, streaming, embeddings, image generation, and audio transcription |
+| **Vibe Builder** | Create a new AI app from a description, export/import configs |
+| **Sandbox Chat** | Load any sandbox by ID, chat, edit config (including `guardMode`), view integrity badge |
+| **AI Workbench** | Test raw AI capabilities: text generation, streaming, embeddings, image generation, audio transcription |
+| **Whisperer** | Model comparison (checkbox grid, parallel results with latency) and temperature sweep (gradient table with multi-sample support) |
