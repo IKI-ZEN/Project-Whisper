@@ -1,4 +1,4 @@
-import type { Env, AetherJob } from '../types/env'
+import type { Env, AetherLiteJob } from '../types/env'
 import { embed } from '../lib/ai'
 
 interface FileProcessPayload {
@@ -17,7 +17,7 @@ function chunkText(text: string, size = 512, overlap = 64): string[] {
   return chunks
 }
 
-export async function processFile(job: AetherJob, env: Env): Promise<void> {
+export async function processFile(job: AetherLiteJob, env: Env): Promise<void> {
   const { docId, key, mimeType } = job.payload as FileProcessPayload
   const { sandboxId } = job
 
@@ -64,6 +64,6 @@ export async function processFile(job: AetherJob, env: Env): Promise<void> {
   })
 }
 
-export async function processEmbeddingBatch(_job: AetherJob, _env: Env): Promise<void> {
+export async function processEmbeddingBatch(_job: AetherLiteJob, _env: Env): Promise<void> {
   // Reserved for future bulk re-indexing
 }
