@@ -27,6 +27,9 @@ export interface Env {
   // Vectorize — per-sandbox RAG embeddings
   VECTORS: VectorizeIndex
 
+  // Analytics Engine — time-series telemetry
+  ANALYTICS?: AnalyticsEngineDataset
+
   // Vars
   ENVIRONMENT: string
   CLOUDFLARE_ACCOUNT_ID?: string

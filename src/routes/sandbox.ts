@@ -145,7 +145,45 @@ const patchConfig: Handler = async (req, env, params: Params) => {
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   let body: unknown
   try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-  return doFetch(stub(env, id), 'config', 'PATCH', body)
+  const res = await doFetch(stub(env, id), 'config', 'PATCH', body)
+
+  // Keep KV listing metadata in sync when display fields change
+  if (res.ok) {
+    const patch = body as Partial<{ name: string; description: string; model: string }>
+    if (patch.name !== undefined || patch.description !== undefined || patch.model !== undefined) {
+      const existing = await env.SANDBOX_REGISTRY.getWithMetadata<SandboxMeta>(`${SANDBOX_KEY_PREFIX}${id}`)
+      if (existing.metadata) {
+        const meta: SandboxMeta = { ...existing.metadata }
+        if (patch.name        !== undefined) meta.name        = patch.name
+        if (patch.description !== undefined) meta.description = patch.description
+        if (patch.model       !== undefined) meta.model       = patch.model
+        void env.SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${id}`, id, { expirationTtl: SANDBOX_TTL, metadata: meta })
+      }
+    }
+  }
+
+  return res
+}
+
+const metrics: Handler = async (_req, env, params: Params) => {
+  const id = params.id ?? ''
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+
+  const summary = await env.DB.prepare(
+    'SELECT COUNT(*) as totalRuns, SUM(tokens_in) as totalTokensIn, SUM(tokens_out) as totalTokensOut, AVG(latency_ms) as avgLatencyMs FROM usage_metrics WHERE sandbox_id = ?',
+  ).bind(id).first<{ totalRuns: number; totalTokensIn: number | null; totalTokensOut: number | null; avgLatencyMs: number | null }>()
+
+  const breakdown = await env.DB.prepare(
+    'SELECT model, COUNT(*) as runs, SUM(tokens_in) as tokensIn, SUM(tokens_out) as tokensOut FROM usage_metrics WHERE sandbox_id = ? GROUP BY model',
+  ).bind(id).all<{ model: string; runs: number; tokensIn: number; tokensOut: number }>()
+
+  return json(ok({
+    totalRuns:      summary?.totalRuns      ?? 0,
+    totalTokensIn:  summary?.totalTokensIn  ?? 0,
+    totalTokensOut: summary?.totalTokensOut ?? 0,
+    avgLatencyMs:   Math.round(summary?.avgLatencyMs ?? 0),
+    modelBreakdown: breakdown.results,
+  }))
 }
 
 export const runHandler: Handler = async (req, env, params: Params) => {
@@ -270,6 +308,7 @@ export const sandboxRoutes: Array<[string, string, Handler]> = [
   ['GET',    '/api/sandbox/:id',                getConfig],
   ['GET',    '/api/sandbox/:id/export',         exportConfig],
   ['GET',    '/api/sandbox/:id/fingerprint',    fingerprint],
+  ['GET',    '/api/sandbox/:id/metrics',        metrics],
   ['PATCH',  '/api/sandbox/:id',                patchConfig],
   ['POST',   '/api/sandbox/:id/run',            runHandler],
   ['POST',   '/api/sandbox/:id/stream',         streamHandler],

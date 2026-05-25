@@ -51,6 +51,23 @@ export interface ImageOpts {
   steps?: number
 }
 
+export interface DocumentMeta {
+  docId: string
+  name: string
+  mimeType: string
+  size: number
+  uploadedAt: number
+  status: 'processing' | 'indexed' | 'error'
+}
+
+export interface UsageMetrics {
+  totalRuns: number
+  totalTokensIn: number
+  totalTokensOut: number
+  avgLatencyMs: number
+  modelBreakdown: Array<{ model: string; runs: number; tokensIn: number; tokensOut: number }>
+}
+
 export interface SandboxMeta {
   id: string
   name: string
@@ -79,6 +96,7 @@ export interface CreateSandboxOpts {
   model: string
   temperature: number
   maxTokens: number
+  ragEnabled?: boolean
 }
 
 export interface VibeTemplate {
@@ -128,6 +146,8 @@ export class SandboxHandle {
   readonly tampered: boolean
   /** Guard mode for this sandbox: 'strict' blocks injections, 'audit' logs only, 'off' disables scanning. */
   readonly guardMode: 'strict' | 'audit' | 'off'
+  /** Whether RAG is enabled — relevant document chunks are injected into prompts. */
+  readonly ragEnabled: boolean
 
   run(message: string): Promise<string>
   stream(message: string): AsyncGenerator<string>
@@ -135,6 +155,10 @@ export class SandboxHandle {
   update(patch: Partial<CreateSandboxOpts>): Promise<void>
   delete(): Promise<void>
   export(): Promise<SandboxExport>
+  uploadDocument(file: File): Promise<{ docId: string; name: string; size: number; status: string }>
+  listDocuments(): Promise<{ docs: DocumentMeta[]; total: number }>
+  deleteDocument(docId: string): Promise<void>
+  metrics(): Promise<UsageMetrics>
 }
 
 // ── SandboxClient ─────────────────────────────────────────────────────────────

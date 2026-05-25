@@ -60,6 +60,11 @@ max_retries = 3
 binding = "VECTORS"
 index_name = "aether-lite-vectors"
 
+# ── Analytics Engine ──────────────────────────────────────────────────────────
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "aether_lite_events"
+
 # ── Environment Variables ─────────────────────────────────────────────────────
 [vars]
 ENVIRONMENT = "development"

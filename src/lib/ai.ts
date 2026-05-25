@@ -2,6 +2,7 @@ import type { Env } from '../types/env'
 import type { Message, SandboxConfig } from './schema'
 import { sseEvent } from './http'
 import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS } from './constants'
+import { sha256 } from './utils'
 
 // ── Model registry ────────────────────────────────────────────────────────────
 
@@ -79,11 +80,14 @@ function buildMessages(opts: CompletionOpts): { role: string; content: string }[
 // ── Provider completions (gateway) ────────────────────────────────────────────
 
 async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Promise<string> {
+  const temp = opts.temperature ?? DEFAULT_TEMPERATURE
   const res = await fetch(`${gatewayBase(env)}/openai/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${env.OPENAI_API_KEY ?? ''}`,
+      'cf-aig-cache-ttl':  '3600',
+      'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
     },
     body: JSON.stringify({
       model,
@@ -99,12 +103,15 @@ async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Pr
 
 async function completeAnthropic(env: Env, model: string, opts: CompletionOpts): Promise<string> {
   const messages = buildMessages(opts).filter(m => m.role !== 'system')
+  const temp = opts.temperature ?? DEFAULT_TEMPERATURE
   const res = await fetch(`${gatewayBase(env)}/anthropic/v1/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': env.ANTHROPIC_API_KEY ?? '',
       'anthropic-version': '2023-06-01',
+      'cf-aig-cache-ttl':  '3600',
+      'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
     },
     body: JSON.stringify({
       model,
@@ -130,9 +137,18 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
     generationConfig: { temperature: opts.temperature ?? DEFAULT_TEMPERATURE, maxOutputTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS },
     ...(system ? { systemInstruction: { parts: [{ text: system.content }] } } : {}),
   }
+  const temp = opts.temperature ?? DEFAULT_TEMPERATURE
   const res = await fetch(
     `${gatewayBase(env)}/google-ai-studio/v1/models/${model}:generateContent?key=${env.GOOGLE_AI_KEY ?? ''}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-aig-cache-ttl':  '3600',
+        'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
+      },
+      body: JSON.stringify(body),
+    },
   )
   if (!res.ok) throw new Error(`Google gateway error ${res.status}: ${await res.text()}`)
   const data = await res.json() as { candidates: { content: { parts: { text: string }[] } }[] }
@@ -304,9 +320,21 @@ export async function embed(ai: Ai, text: string | string[], model?: string): Pr
   const texts = Array.isArray(text) ? text : [text]
   const totalLen = texts.reduce((n, t) => n + t.length, 0)
   if (totalLen > MAX_EMBED_CHARS) throw new Error(`Embedding input exceeds ${MAX_EMBED_CHARS} characters`)
+
+  // Cache embeddings — deterministic, expensive, safe to cache for 24h
+  const cacheKey = new Request(`https://aether-cache/embed/${await sha256(JSON.stringify([model ?? MODELS.embed, texts]))}`)
+  const cached = await caches.default.match(cacheKey)
+  if (cached) return cached.json() as Promise<number[][]>
+
   const response = await run(ai)(model ?? MODELS.embed, { text: texts })
   const r = response as { data?: number[][] }
-  return r.data ?? []
+  const result = r.data ?? []
+
+  void caches.default.put(cacheKey, new Response(JSON.stringify(result), {
+    headers: { 'Cache-Control': 'max-age=86400', 'Content-Type': 'application/json' },
+  }))
+
+  return result
 }
 
 // ── Image generation ──────────────────────────────────────────────────────────
@@ -364,6 +392,80 @@ export function streamInSandbox(ai: Ai, env: Env, config: SandboxConfig, userMes
     ],
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+  })
+}
+
+// ── RAG-augmented sandbox run ─────────────────────────────────────────────────
+
+export async function runInSandboxWithRAG(
+  ai: Ai, env: Env, config: SandboxConfig, userMessage: string,
+): Promise<string> {
+  if (!config.ragEnabled) return runInSandbox(ai, env, config, userMessage)
+
+  // Embed user message and retrieve relevant document chunks scoped to this sandbox
+  const [[queryVec]] = await embed(ai, userMessage)
+  if (!queryVec) return runInSandbox(ai, env, config, userMessage)
+
+  const results = await (env.VECTORS as VectorizeIndex).query(queryVec as unknown as number[], {
+    topK: 5,
+    returnMetadata: 'all',
+    filter: { sandboxId: config.id } as Record<string, string>,
+  })
+
+  const context = results.matches
+    .map(m => ((m.metadata ?? {}) as { text?: string }).text ?? '')
+    .filter(Boolean)
+    .join('\n\n')
+
+  const augmented = context.length > 0
+    ? `${userMessage}\n\n--- Relevant context from your documents ---\n${context}`
+    : userMessage
+
+  return runInSandbox(ai, env, config, augmented)
+}
+
+export function streamInSandboxWithRAG(ai: Ai, env: Env, config: SandboxConfig, userMessage: string): ReadableStream {
+  // RAG requires an async embed query before streaming — run RAG augmentation first
+  // then delegate to the standard stream function with the augmented message
+  if (!config.ragEnabled) return streamInSandbox(ai, env, config, userMessage)
+
+  const encoder = new TextEncoder()
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        const [[queryVec]] = await embed(ai, userMessage)
+        let augmented = userMessage
+        if (queryVec) {
+          const results = await (env.VECTORS as VectorizeIndex).query(queryVec as unknown as number[], {
+            topK: 5,
+            returnMetadata: 'all',
+            filter: { sandboxId: config.id } as Record<string, string>,
+          })
+          const context = results.matches
+            .map(m => ((m.metadata ?? {}) as { text?: string }).text ?? '')
+            .filter(Boolean)
+            .join('\n\n')
+          if (context.length > 0) {
+            augmented = `${userMessage}\n\n--- Relevant context from your documents ---\n${context}`
+          }
+        }
+
+        const downstream = streamInSandbox(ai, env, config, augmented)
+        const reader = downstream.getReader()
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          controller.enqueue(value instanceof Uint8Array ? value : encoder.encode(String(value)))
+        }
+      } catch (e) {
+        const safeMsg = e instanceof Error && /^\d{3}/.test(e.message)
+          ? 'AI provider temporarily unavailable'
+          : 'AI inference failed'
+        controller.enqueue(encoder.encode(sseEvent({ error: safeMsg }, 'error')))
+      } finally {
+        controller.close()
+      }
+    },
   })
 }
 

@@ -4,6 +4,8 @@ import { aiRoutes }              from './routes/ai'
 import { sandboxRoutes, runHandler, streamHandler } from './routes/sandbox'
 import { vibeRoutes }            from './routes/vibes'
 import { pageRoutes }            from './routes/pages'
+import { documentRoutes }        from './routes/documents'
+import { processFile, processEmbeddingBatch } from './jobs/fileProcess'
 
 // Required: Wrangler binds the DO class via the export from this entry file.
 export { SandboxDO } from './durable/SandboxDO'
@@ -33,7 +35,7 @@ router.post('/s/:id/run',    runHandler)
 router.post('/s/:id/stream', streamHandler)
 
 // Mount route groups
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...pageRoutes]) {
+for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...pageRoutes, ...documentRoutes]) {
   router.on(method, path, handler)
 }
 
@@ -44,10 +46,16 @@ export default {
     return router.handle(req, env)
   },
 
-  async queue(batch: MessageBatch<AetherJob>, _env: Env): Promise<void> {
+  async queue(batch: MessageBatch<AetherJob>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
-      console.log('[queue]', msg.body.type, msg.body.sandboxId)
-      msg.ack()
+      try {
+        if (msg.body.type === 'file_process')    await processFile(msg.body, env)
+        if (msg.body.type === 'embedding_batch') await processEmbeddingBatch(msg.body, env)
+        msg.ack()
+      } catch (e) {
+        console.error('[queue] job failed:', msg.body.type, e)
+        msg.retry()
+      }
     }
   },
 }

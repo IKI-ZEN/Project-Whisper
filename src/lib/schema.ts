@@ -37,6 +37,7 @@ export interface SandboxConfig {
   updatedAt: number
   integrityHash?: string
   guardMode?: 'strict' | 'audit' | 'off'
+  ragEnabled?: boolean
 }
 
 // ── Request shapes ─────────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ export interface CreateSandboxRequest {
   temperature: number
   maxTokens: number
   guardMode?: 'strict' | 'audit' | 'off'
+  ragEnabled?: boolean
 }
 
 export interface CompareRequest {
@@ -175,6 +177,7 @@ export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
     temperature: num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2),
     maxTokens:   num(body.maxTokens,   'maxTokens',   DEFAULT_MAX_TOKENS,  1, 8192),
     guardMode:   gm === 'audit' || gm === 'off' ? gm : 'strict',
+    ragEnabled:  body.ragEnabled === true,
   }
 }
 
