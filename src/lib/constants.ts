@@ -15,3 +15,7 @@ export const EMBED_HEIGHT          = 640
 export const MAX_MESSAGES          = 100
 
 export const DO_STORAGE_KEY        = 'config'
+
+// Sliding-window rate limit for sandbox run/stream calls
+export const RATE_LIMIT_WINDOW_MS    = 60_000   // 1 minute
+export const RATE_LIMIT_MAX_REQUESTS = 20

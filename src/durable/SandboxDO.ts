@@ -4,10 +4,13 @@ import type { SandboxConfig, Message } from '../lib/schema'
 import { runInSandbox, streamInSandbox } from '../lib/ai'
 import { json, sseResponse } from '../lib/http'
 import { now } from '../lib/utils'
-import { DO_STORAGE_KEY, MAX_MESSAGES } from '../lib/constants'
+import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS } from '../lib/constants'
+import { computeConfigHash } from '../lib/integrity'
+import { scan } from '../lib/guard'
 
 export class SandboxDO extends DurableObject<Env> {
   private config: SandboxConfig | null = null
+  private rlWindow: number[] = []   // in-memory sliding window; resets on hibernation
 
   // ── Hydration ─────────────────────────────────────────────────────────────
 
@@ -20,8 +23,19 @@ export class SandboxDO extends DurableObject<Env> {
   }
 
   private async save(config: SandboxConfig): Promise<void> {
+    config.integrityHash = await computeConfigHash(config)
     this.config = config
     await this.ctx.storage.put(DO_STORAGE_KEY, config)
+  }
+
+  // ── Rate limiting ─────────────────────────────────────────────────────────
+
+  private checkRateLimit(): boolean {
+    const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS
+    this.rlWindow = this.rlWindow.filter(t => t > cutoff)
+    if (this.rlWindow.length >= RATE_LIMIT_MAX_REQUESTS) return false
+    this.rlWindow.push(Date.now())
+    return true
   }
 
   // ── Fetch router ──────────────────────────────────────────────────────────
@@ -49,30 +63,67 @@ export class SandboxDO extends DurableObject<Env> {
 
   private async handleInit(req: Request): Promise<Response> {
     const config = await req.json() as SandboxConfig
+
+    const guard = scan(config.systemPrompt ?? '')
+    if (guard.riskLevel === 'blocked') {
+      return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
+    }
+
     await this.save(config)
     return json({ ok: true, data: { id: config.id } })
   }
 
   private async handleGetConfig(): Promise<Response> {
     const config = await this.load()
+    const freshHash = await computeConfigHash(config)
+    const tampered = !!config.integrityHash && config.integrityHash !== freshHash
     const { memory: _memory, ...meta } = config
-    return json({ ok: true, data: meta })
+    return json({ ok: true, data: { ...meta, tampered } })
   }
 
   private async handlePatchConfig(req: Request): Promise<Response> {
     const patch = await req.json() as Partial<SandboxConfig>
+
+    if (patch.systemPrompt !== undefined) {
+      const guard = scan(patch.systemPrompt)
+      if (guard.riskLevel === 'blocked') {
+        return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
+      }
+      if (guard.riskLevel === 'suspicious') {
+        const config = await this.load()
+        await this.env.DB.prepare(
+          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'patch', patterns: guard.patterns }), now()).run()
+      }
+    }
+
     const config = await this.load()
-    // Disallow patching server-managed fields
     const { id: _i, memory: _m, createdAt: _c, ...allowed } = patch
     await this.save({ ...config, ...allowed, updatedAt: now() })
     return json({ ok: true, data: { updated: true } })
   }
 
   private async handleRun(req: Request): Promise<Response> {
-    const { message } = await req.json() as { message: string }
-    const config = await this.load()
-    const ts = now()
+    if (!this.checkRateLimit()) {
+      return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
+    }
 
+    const { message } = await req.json() as { message: string }
+
+    const guard = scan(message)
+    if (guard.riskLevel === 'blocked') {
+      return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
+    }
+
+    const config = await this.load()
+
+    if (guard.riskLevel === 'suspicious') {
+      await this.env.DB.prepare(
+        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+      ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns }), now()).run()
+    }
+
+    const ts = now()
     const reply = await runInSandbox(this.env.AI, this.env, config, message)
 
     const userMsg: Message  = { role: 'user',      content: message, timestamp: ts }
@@ -85,8 +136,24 @@ export class SandboxDO extends DurableObject<Env> {
   }
 
   private async handleStream(req: Request): Promise<Response> {
+    if (!this.checkRateLimit()) {
+      return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
+    }
+
     const { message } = await req.json() as { message: string }
+
+    const guard = scan(message)
+    if (guard.riskLevel === 'blocked') {
+      return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
+    }
+
     const config = await this.load()
+
+    if (guard.riskLevel === 'suspicious') {
+      await this.env.DB.prepare(
+        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+      ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns }), now()).run()
+    }
 
     // Stream is preview-only — use /run to persist to memory
     return sseResponse(streamInSandbox(this.env.AI, this.env, config, message))

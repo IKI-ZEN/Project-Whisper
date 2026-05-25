@@ -34,4 +34,5 @@ export interface Env {
   OPENAI_API_KEY?: string
   ANTHROPIC_API_KEY?: string
   GOOGLE_AI_KEY?: string
+  SIGNING_SECRET?: string
 }
