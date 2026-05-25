@@ -49,18 +49,14 @@ function matchPatterns(text: string, table: Array<{ name: string; re: RegExp }>)
   return table.filter(p => p.re.test(text)).map(p => p.name)
 }
 
-function decodeBase64Chunks(text: string): string[] {
-  const decoded: string[] = []
+function decodeBase64Layer(text: string): string {
+  let result = ''
   for (const chunk of text.match(BASE64_RE) ?? []) {
     try {
-      // atob requires standard base64; convert URL-safe variants first
-      const std = chunk.replace(/-/g, '+').replace(/_/g, '/')
-      decoded.push(atob(std))
-    } catch {
-      // not valid base64 — skip
-    }
+      result += atob(chunk.replace(/-/g, '+').replace(/_/g, '/'))
+    } catch { /* not valid base64 */ }
   }
-  return decoded
+  return result
 }
 
 /**
@@ -79,12 +75,19 @@ export function scan(text: string): ScanResult {
   const blocked = matchPatterns(normalised, BLOCKED_PATTERNS)
   matched.push(...blocked)
 
-  // Check base64-decoded chunks for blocked patterns (encoding evasion)
-  for (const decoded of decodeBase64Chunks(normalised)) {
-    const decodedBlocked = matchPatterns(decoded.normalize('NFKC'), BLOCKED_PATTERNS)
+  // Recursive base64 decode — up to 3 layers to catch double/triple-encoded payloads
+  let layer = normalised
+  for (let depth = 0; depth < 3; depth++) {
+    const decoded = decodeBase64Layer(layer)
+    if (!decoded || decoded === layer) break
+    layer = decoded
+    const norm = layer.normalize('NFKC')
+    const decodedBlocked = matchPatterns(norm, BLOCKED_PATTERNS)
     for (const p of decodedBlocked) {
-      if (!matched.includes(`base64:${p}`)) matched.push(`base64:${p}`)
+      const tag = depth === 0 ? `base64:${p}` : `base64x${depth + 1}:${p}`
+      if (!matched.includes(tag)) matched.push(tag)
     }
+    if (decodedBlocked.length) break  // stop digging once we found something
   }
 
   if (matched.length > 0) {

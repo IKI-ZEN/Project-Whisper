@@ -7,6 +7,7 @@ import { pageRoutes }            from './routes/pages'
 import { documentRoutes }        from './routes/documents'
 import { whispererRoutes }       from './routes/whisperer'
 import { buildRoutes }           from './routes/build'
+import { securityRoutes }        from './routes/security'
 import { processFile, processEmbeddingBatch } from './jobs/fileProcess'
 
 // Required: Wrangler binds DO classes via exports from this entry file.
@@ -38,7 +39,7 @@ router.post('/s/:id/run',    runHandler)
 router.post('/s/:id/stream', streamHandler)
 
 // Mount route groups
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes]) {
+for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes]) {
   router.on(method, path, handler)
 }
 

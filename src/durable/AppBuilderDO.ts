@@ -228,6 +228,8 @@ Tech stack options:
 - "vue": Vue 3 via CDN ESM
 
 CDN pattern: https://esm.sh/react@18, https://esm.sh/vue@3 etc.
+When loading scripts or stylesheets from a CDN, always include integrity and crossorigin attributes for Subresource Integrity (SRI):
+  <script src="https://esm.sh/react@18" integrity="sha384-<hash>" crossorigin="anonymous"></script>
 index.html MUST always be included as the entry file.
 Maximum ${MAX_BUILD_FILES} files total. Aim for 2-3. Keep it minimal and self-contained.
 

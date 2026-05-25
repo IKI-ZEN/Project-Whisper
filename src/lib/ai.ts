@@ -346,8 +346,9 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
     'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
   }
   if (opts.sandboxId) googleHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
+  if (env.GOOGLE_AI_KEY) googleHeaders['x-goog-api-key'] = env.GOOGLE_AI_KEY
   const res = await fetch(
-    `${gatewayBase(env)}/google-ai-studio/v1/models/${model}:generateContent?key=${env.GOOGLE_AI_KEY ?? ''}`,
+    `${gatewayBase(env)}/google-ai-studio/v1/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: 'POST',
       headers: googleHeaders,

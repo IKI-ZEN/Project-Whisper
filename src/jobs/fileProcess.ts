@@ -1,5 +1,6 @@
 import type { Env, AetherLiteJob } from '../types/env'
 import { embed } from '../lib/ai'
+import { scan } from '../lib/guard'
 
 interface FileProcessPayload {
   docId: string
@@ -39,6 +40,18 @@ export async function processFile(job: AetherLiteJob, env: Env): Promise<void> {
       .trim()
   } else {
     text = new TextDecoder().decode(buf)
+  }
+
+  // Guard scan on extracted text — catches adversarial content in PDFs and other files
+  if (text.trim()) {
+    const guardResult = scan(text.slice(0, 8192))
+    if (guardResult.riskLevel === 'blocked') {
+      await env.FILES.put(key, buf, {
+        httpMetadata:   { contentType: mimeType },
+        customMetadata: { ...existingMeta, status: 'blocked', blockReason: guardResult.patterns.join(',') },
+      })
+      return
+    }
   }
 
   if (text.trim()) {

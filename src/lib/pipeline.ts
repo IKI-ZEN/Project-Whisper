@@ -117,10 +117,13 @@ async function runFrom(
   nodeMap: Map<string, PipelineNode>,
   nodeId: string, input: string, original: string,
   trace: PipelineTrace[], depth: number, maxDepth: number,
+  visited: Set<string> = new Set(),
 ): Promise<string> {
   if (depth >= maxDepth) return input
+  if (visited.has(nodeId)) throw new Error(`Pipeline cycle detected at node "${nodeId}"`)
   const node = nodeMap.get(nodeId)
   if (!node) return input
+  visited.add(nodeId)
 
   const t0 = Date.now()
   const output = await executeNode(ai, env, node, input, original)
@@ -139,7 +142,7 @@ async function runFrom(
   trace.push({ nodeId, type: node.type, input, output, conditionMet, latencyMs })
 
   if (!nextId) return output
-  return runFrom(ai, env, nodeMap, nextId, output, original, trace, depth + 1, maxDepth)
+  return runFrom(ai, env, nodeMap, nextId, output, original, trace, depth + 1, maxDepth, new Set(visited))
 }
 
 export async function executePipeline(
