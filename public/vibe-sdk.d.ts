@@ -1,5 +1,5 @@
 /**
- * vibeSDK TypeScript declarations
+ * Aether-Lite SDK TypeScript declarations
  * Project Aether-Lite
  */
 
@@ -200,6 +200,46 @@ export interface SandboxMeta {
   fromVibe?: boolean
 }
 
+// ── App Builder types ─────────────────────────────────────────────────────────
+
+export type BuildStatus = 'idle' | 'blueprinting' | 'generating' | 'complete' | 'error'
+
+export interface BlueprintFile {
+  filename: string
+  description: string
+  role: 'entry' | 'logic' | 'styles' | 'component'
+}
+
+export interface Blueprint {
+  name: string
+  techStack: 'vanilla' | 'alpine' | 'react' | 'vue' | 'svelte'
+  cdnDependencies: string[]
+  files: BlueprintFile[]
+  sandboxIntegration: boolean
+}
+
+export interface BuildState {
+  id: string
+  name: string
+  description: string
+  sandboxId?: string
+  model: string
+  status: BuildStatus
+  blueprint?: Blueprint
+  files: string[]
+  errorMessage?: string
+  createdAt: number
+  completedAt?: number
+}
+
+export interface AppSessionOpts {
+  name?: string
+  sandboxId?: string
+  model?: string
+}
+
+// ── Sandbox types ─────────────────────────────────────────────────────────────
+
 export interface SandboxExport {
   version: 1
   name: string
@@ -335,9 +375,10 @@ export class SandboxClient {
   import(config: SandboxExport | CreateSandboxOpts): Promise<SandboxHandle>
 }
 
-// ── VibeResult ────────────────────────────────────────────────────────────────
+// ── VibeBuilderResult ─────────────────────────────────────────────────────────
 
-export class VibeResult {
+/** Result of a quick sandbox creation via VibesClient.create(). */
+export class VibeBuilderResult {
   readonly sandboxId: string
   readonly name: string
   readonly description: string
@@ -352,16 +393,87 @@ export class VibeResult {
   sandbox(): SandboxHandle
 }
 
+/** @deprecated Use VibeBuilderResult */
+export const VibeResult: typeof VibeBuilderResult
+
 // ── VibesClient ───────────────────────────────────────────────────────────────
 
+/** Quick AI-assistant creator (single sandbox + custom HTML). */
 export class VibesClient {
   templates(): Promise<VibeTemplate[]>
-  create(description: string, name?: string): Promise<VibeResult>
+  create(description: string, name?: string): Promise<VibeBuilderResult>
 }
 
-// ── VibeClient ────────────────────────────────────────────────────────────────
+// ── AppHandle ─────────────────────────────────────────────────────────────────
 
-export class VibeClient {
+/** Handle to a completed (or in-progress) app build. */
+export class AppHandle {
+  readonly id: string
+  readonly name: string
+  readonly status: BuildStatus
+  readonly errorMessage: string | undefined
+  readonly files: string[]
+  /** URL where the generated app is served. */
+  readonly appUrl: string
+
+  getFile(filename: string): Promise<string>
+  delete(): Promise<void>
+}
+
+// ── AppSession ────────────────────────────────────────────────────────────────
+
+/**
+ * WebSocket-driven build session. Streams real-time progress events
+ * from blueprint generation through file-by-file code generation.
+ * Inspired by Cloudflare VibeSDK's BuildSession.
+ */
+export class AppSession {
+  constructor(baseUrl: string, description: string, opts?: AppSessionOpts)
+
+  onBlueprintStart(fn: () => void): this
+  onBlueprintChunk(fn: (text: string) => void): this
+  onBlueprintReady(fn: (blueprint: Blueprint) => void): this
+  onFileStart(fn: (info: { filename: string; index: number; total: number }) => void): this
+  onFileChunk(fn: (info: { filename: string; text: string }) => void): this
+  onFileComplete(fn: (info: { filename: string; bytes: number }) => void): this
+  onComplete(fn: (result: { buildId: string; appUrl: string; files: string[] }) => void): this
+  onError(fn: (err: VibeError) => void): this
+
+  /** Start the build — creates the build record then opens WebSocket. Returns this for chaining. */
+  start(): Promise<this>
+  /** Stop the build (closes WebSocket). */
+  stop(): void
+
+  readonly buildId: string | null
+  readonly status: BuildStatus | 'idle' | 'connecting'
+  readonly appUrl: string | null
+}
+
+// ── AppBuilder ────────────────────────────────────────────────────────────────
+
+/**
+ * Client for the Aether-Lite App Builder — generates multi-file web apps
+ * from natural language descriptions, stored in R2 and served at /build/:id.
+ * Inspired by Cloudflare VibeSDK's PhasicClient.
+ */
+export class AppBuilder {
+  constructor(baseUrl?: string)
+  /** Create a new build session (lazy — call .start() to begin). */
+  session(description: string, opts?: AppSessionOpts): AppSession
+  /** Load an existing build by ID. */
+  get(buildId: string): Promise<AppHandle>
+  /** Delete a build and its generated files. */
+  delete(buildId: string): Promise<void>
+}
+
+// ── AetherLiteClient ──────────────────────────────────────────────────────────
+
+/**
+ * Main entry point for the Aether-Lite SDK.
+ * Provides access to AI inference, sandbox management, quick vibe creation,
+ * and the full multi-file App Builder.
+ */
+export class AetherLiteClient {
   /**
    * @param baseUrl Base URL of the Aether-Lite Worker. Defaults to same origin ('').
    */
@@ -369,18 +481,15 @@ export class VibeClient {
   readonly ai: AiClient
   readonly sandbox: SandboxClient
   readonly vibes: VibesClient
+  readonly builder: AppBuilder
 }
 
-// ── <vibe-chat> web component ─────────────────────────────────────────────────
+/** @deprecated Use AetherLiteClient */
+export const VibeClient: typeof AetherLiteClient
 
-/**
- * Drop-in chat widget. Renders in Shadow DOM.
- *
- * @example
- * <vibe-chat sandbox-id="abc123"></vibe-chat>
- * <vibe-chat sandbox-id="xyz" theme="dark" placeholder="Ask me..."></vibe-chat>
- */
-export interface VibeChatAttributes {
+// ── Web components ────────────────────────────────────────────────────────────
+
+export interface AetherChatAttributes {
   /** Required. ID of the sandbox to connect to. */
   'sandbox-id': string
   /** Base URL of the Worker. Defaults to same origin. */
@@ -391,8 +500,12 @@ export interface VibeChatAttributes {
   theme?: 'light' | 'dark'
 }
 
+/** @deprecated Use VibeChatAttributes */
+export interface VibeChatAttributes extends AetherChatAttributes {}
+
 declare global {
   interface HTMLElementTagNameMap {
-    'vibe-chat': HTMLElement & VibeChatAttributes
+    'aether-chat': HTMLElement & AetherChatAttributes
+    'vibe-chat':   HTMLElement & VibeChatAttributes
   }
 }

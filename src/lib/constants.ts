@@ -47,3 +47,8 @@ export const CODE_EXEC_TIMEOUT_MS        = 5_000
 
 // Custom app HTML from Vibe Builder
 export const MAX_APP_HTML_LEN            = 51_200   // 50 KB
+
+// App Builder (AppBuilderDO)
+export const MAX_BUILD_DESCRIPTION_LEN   = 2_000
+export const MAX_BUILD_FILES             = 6
+export const MAX_FILE_BYTES              = 102_400  // 100 KB per generated file

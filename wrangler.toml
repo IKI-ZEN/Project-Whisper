@@ -16,9 +16,17 @@ binding = "AI"
 name = "SANDBOX"
 class_name = "SandboxDO"
 
+[[durable_objects.bindings]]
+name = "APP_BUILDER"
+class_name = "AppBuilderDO"
+
 [[migrations]]
 tag = "v1"
 new_classes = ["SandboxDO"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["AppBuilderDO"]
 
 # ── KV Namespaces ─────────────────────────────────────────────────────────────
 # Run: wrangler kv:namespace create SANDBOX_REGISTRY

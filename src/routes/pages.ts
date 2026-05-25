@@ -468,8 +468,60 @@ export const landingRoute: Handler = (_req, _env) => {
   return Promise.resolve(new Response(landingHtml, { headers: htmlHeaders(nonce) }))
 }
 
+// ── Built app serving (/build/:id) ───────────────────────────────────────────
+
+function buildMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+  const map: Record<string, string> = {
+    html: 'text/html; charset=utf-8',
+    css:  'text/css; charset=utf-8',
+    js:   'application/javascript; charset=utf-8',
+    mjs:  'application/javascript; charset=utf-8',
+    json: 'application/json; charset=utf-8',
+    svg:  'image/svg+xml',
+    png:  'image/png',
+    jpg:  'image/jpeg',
+    jpeg: 'image/jpeg',
+    ico:  'image/x-icon',
+    txt:  'text/plain; charset=utf-8',
+    md:   'text/markdown; charset=utf-8',
+  }
+  return map[ext] ?? 'application/octet-stream'
+}
+
+// Permissive CSP for AI-generated apps — they may load CDN ESM frameworks
+const BUILD_CSP = [
+  "default-src 'self' https: data: blob:",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https:",
+  "connect-src 'self' https: wss:",
+  "img-src 'self' data: https: blob:",
+  "font-src 'self' https:",
+].join('; ')
+
+async function serveBuildFile(env: Env, buildId: string, filename: string): Promise<Response> {
+  const key = `apps/${buildId}/${filename}`
+  const obj = await env.FILES.get(key)
+  if (!obj) return new Response('Not found', { status: 404 })
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type':           buildMimeType(filename),
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': BUILD_CSP,
+    },
+  })
+}
+
+export const buildIndexRoute: Handler = (_req, env, params) =>
+  serveBuildFile(env, params.id ?? '', 'index.html')
+
+export const buildFileRoute: Handler = (_req, env, params) =>
+  serveBuildFile(env, params.id ?? '', params.filename ?? 'index.html')
+
 export const pageRoutes: Array<[string, string, Handler]> = [
-  ['GET', '/',        landingRoute],
-  ['GET', '/app/:id', appPageRoute],
-  ['GET', '/apps',    appsGalleryRoute],
+  ['GET', '/',                   landingRoute],
+  ['GET', '/app/:id',            appPageRoute],
+  ['GET', '/apps',               appsGalleryRoute],
+  ['GET', '/build/:id/:filename', buildFileRoute],
+  ['GET', '/build/:id',          buildIndexRoute],
 ]

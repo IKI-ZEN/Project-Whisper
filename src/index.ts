@@ -6,10 +6,12 @@ import { vibeRoutes }            from './routes/vibes'
 import { pageRoutes }            from './routes/pages'
 import { documentRoutes }        from './routes/documents'
 import { whispererRoutes }       from './routes/whisperer'
+import { buildRoutes }           from './routes/build'
 import { processFile, processEmbeddingBatch } from './jobs/fileProcess'
 
-// Required: Wrangler binds the DO class via the export from this entry file.
-export { SandboxDO } from './durable/SandboxDO'
+// Required: Wrangler binds DO classes via exports from this entry file.
+export { SandboxDO }     from './durable/SandboxDO'
+export { AppBuilderDO }  from './durable/AppBuilderDO'
 
 // ── Router setup ──────────────────────────────────────────────────────────────
 
@@ -36,7 +38,7 @@ router.post('/s/:id/run',    runHandler)
 router.post('/s/:id/stream', streamHandler)
 
 // Mount route groups
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes]) {
+for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes]) {
   router.on(method, path, handler)
 }
 
@@ -44,10 +46,13 @@ for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRou
 
 export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    // WebSocket upgrades must bypass the HTTP router — pass directly to the DO
+    // WebSocket upgrades must bypass the HTTP router — pass directly to the appropriate DO
     if (req.headers.get('Upgrade') === 'websocket') {
-      const match = new URL(req.url).pathname.match(/^\/api\/sandbox\/([^/]+)\/ws$/)
-      if (match) return env.SANDBOX.get(env.SANDBOX.idFromName(match[1])).fetch(req)
+      const { pathname } = new URL(req.url)
+      const sandboxWs = pathname.match(/^\/api\/sandbox\/([^/]+)\/ws$/)
+      if (sandboxWs) return env.SANDBOX.get(env.SANDBOX.idFromName(sandboxWs[1])).fetch(req)
+      const builderWs = pathname.match(/^\/api\/v2\/build\/([^/]+)\/ws$/)
+      if (builderWs) return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(builderWs[1])).fetch(req)
     }
     return router.handle(req, env)
   },
