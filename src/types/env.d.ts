@@ -35,4 +35,5 @@ export interface Env {
   ANTHROPIC_API_KEY?: string
   GOOGLE_AI_KEY?: string
   SIGNING_SECRET?: string
+  ALLOWED_ORIGINS?: string   // comma-separated origins, or '*' (default)
 }

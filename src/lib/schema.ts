@@ -1,4 +1,7 @@
-import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, DEFAULT_SYSTEM_PROMPT, DEFAULT_MODEL } from './constants'
+import {
+  DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, DEFAULT_SYSTEM_PROMPT, DEFAULT_MODEL,
+  MAX_NAME_LEN, MAX_DESCRIPTION_LEN, MAX_SYSTEM_PROMPT_LEN, MAX_VIBE_DESCRIPTION,
+} from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -137,14 +140,20 @@ export function parseImageRequest(body: unknown): ImageRequest {
 
 export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const name         = str(body.name,         'name')
+  const description  = str(body.description,  'description',  '')
+  const systemPrompt = str(body.systemPrompt, 'systemPrompt', DEFAULT_SYSTEM_PROMPT)
+  if (name.length         > MAX_NAME_LEN)          throw new Error(`name must be <= ${MAX_NAME_LEN} characters`)
+  if (description.length  > MAX_DESCRIPTION_LEN)   throw new Error(`description must be <= ${MAX_DESCRIPTION_LEN} characters`)
+  if (systemPrompt.length > MAX_SYSTEM_PROMPT_LEN) throw new Error(`systemPrompt must be <= ${MAX_SYSTEM_PROMPT_LEN} characters`)
   return {
-    name:         str(body.name,         'name'),
-    description:  str(body.description,  'description',  ''),
-    systemPrompt: str(body.systemPrompt, 'systemPrompt', DEFAULT_SYSTEM_PROMPT),
-    tools:        [],
-    model:        str(body.model,        'model',        DEFAULT_MODEL),
-    temperature:  num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2),
-    maxTokens:    num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS,  1, 8192),
+    name,
+    description,
+    systemPrompt,
+    tools:       [],
+    model:       str(body.model, 'model', DEFAULT_MODEL),
+    temperature: num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2),
+    maxTokens:   num(body.maxTokens,   'maxTokens',   DEFAULT_MAX_TOKENS,  1, 8192),
   }
 }
 
@@ -158,7 +167,8 @@ export function parseRunSandboxRequest(body: unknown): RunSandboxRequest {
 export function parseVibeRequest(body: unknown): VibeRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   const description = str(body.description, 'description')
-  if (description.length < 10) throw new Error('description must be at least 10 characters')
+  if (description.length < 10)               throw new Error('description must be at least 10 characters')
+  if (description.length > MAX_VIBE_DESCRIPTION) throw new Error(`description must be <= ${MAX_VIBE_DESCRIPTION} characters`)
   return {
     description,
     name: body.name !== undefined ? str(body.name, 'name') : undefined,

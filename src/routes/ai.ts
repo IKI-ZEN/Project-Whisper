@@ -8,6 +8,7 @@ import {
   parseCompleteRequest, parseEmbedRequest, parseImageRequest,
 } from '../lib/schema'
 import { toBase64 } from '../lib/utils'
+import { MAX_AUDIO_BYTES } from '../lib/constants'
 
 export const aiRoutes: Array<[string, string, Handler]> = [
 
@@ -68,7 +69,16 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     if (!audioFile || typeof audioFile === 'string') {
       return json(err("Missing 'audio' file field in form data"), 400)
     }
-    const audioBlob = audioFile as unknown as { arrayBuffer(): Promise<ArrayBuffer> }
+    const audioBlob = audioFile as File
+
+    if (audioBlob.size === 0) return json(err('Audio file is empty'), 400)
+    if (audioBlob.size > MAX_AUDIO_BYTES) return json(err('Audio file too large (max 25 MB)'), 413)
+
+    // Reject clearly non-audio MIME types; allow audio/*, video/*, octet-stream
+    const mime = audioBlob.type ?? ''
+    if (mime && !mime.startsWith('audio/') && !mime.startsWith('video/') && mime !== 'application/octet-stream') {
+      return json(err('Invalid file type — expected audio or video'), 400)
+    }
 
     const model = formData.get('model')
 

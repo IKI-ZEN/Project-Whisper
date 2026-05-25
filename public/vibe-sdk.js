@@ -542,7 +542,9 @@ class VibeChatElement extends HTMLElement {
   }
 
   _paint() {
-    const ph = this.getAttribute('placeholder') ?? 'Type a message…'
+    const rawPh = this.getAttribute('placeholder') ?? 'Type a message…'
+    // Escape for safe injection into an HTML attribute value
+    const ph = rawPh.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
     this._shadow.innerHTML = `<style>${_CSS}</style>
 <div class="shell">
   <div class="messages" part="messages"></div>

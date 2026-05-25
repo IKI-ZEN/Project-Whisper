@@ -1,3 +1,5 @@
+import { MAX_REQUEST_BODY } from './constants'
+
 // ── Standard response envelope ────────────────────────────────────────────────
 
 export interface Ok<T> { ok: true; data: T }
@@ -19,6 +21,8 @@ export function json(body: unknown, status = 200): Response {
 export async function readJson(req: Request): Promise<unknown> {
   const ct = req.headers.get('Content-Type') ?? ''
   if (!ct.includes('application/json')) throw new Error('Content-Type must be application/json')
+  const cl = parseInt(req.headers.get('Content-Length') ?? '0', 10)
+  if (cl > MAX_REQUEST_BODY) throw new Error('Request body too large (max 1 MB)')
   return req.json()
 }
 
@@ -65,11 +69,19 @@ interface Route {
   handler: Handler
 }
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Max-Age': '86400',
+function corsHeaders(req: Request, env: Env): Record<string, string> {
+  const allowed = (env.ALLOWED_ORIGINS ?? '*').split(',').map(s => s.trim())
+  const origin  = req.headers.get('Origin') ?? ''
+  const allow   = allowed.includes('*') ? '*'
+    : allowed.includes(origin) ? origin
+    : null
+  if (!allow) return {}
+  return {
+    'Access-Control-Allow-Origin':  allow,
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, PATCH, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age':       '86400',
+  }
 }
 
 export class Router {
@@ -90,9 +102,11 @@ export class Router {
   patch(path: string, h: Handler): this  { return this.on('PATCH',  path, h) }
 
   async handle(req: Request, env: Env): Promise<Response> {
+    const cors = corsHeaders(req, env)
+
     // CORS preflight
     if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS })
+      return new Response(null, { status: 204, headers: cors })
     }
 
     const url = new URL(req.url)
@@ -102,15 +116,16 @@ export class Router {
       if (!match) continue
       const params = match.pathname.groups as Params
       const res = await route.handler(req, env, params)
-      return this.addCors(res)
+      return this.addCors(res, cors)
     }
 
-    return this.addCors(json(err('Not found'), 404))
+    return this.addCors(json(err('Not found'), 404), cors)
   }
 
-  private addCors(res: Response): Response {
+  private addCors(res: Response, cors: Record<string, string>): Response {
+    if (Object.keys(cors).length === 0) return res
     const headers = new Headers(res.headers)
-    for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v)
+    for (const [k, v] of Object.entries(cors)) headers.set(k, v)
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
   }
 }

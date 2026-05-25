@@ -121,8 +121,23 @@ const create: Handler = async (req, env) => {
 
 const getConfig: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
-  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+  const entry = await env.SANDBOX_REGISTRY.getWithMetadata<SandboxMeta>(`${SANDBOX_KEY_PREFIX}${id}`)
+  if (!entry.value) return json(err('Sandbox not found'), 404)
+  // Refresh TTL on every read — sliding expiry keeps active sandboxes alive
+  void env.SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${id}`, id, {
+    expirationTtl: SANDBOX_TTL,
+    metadata: entry.metadata ?? undefined,
+  })
   return doFetch(stub(env, id), 'config', 'GET')
+}
+
+const fingerprint: Handler = async (_req, env, params: Params) => {
+  const id = params.id ?? ''
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+  const res = await doFetch(stub(env, id), 'config', 'GET')
+  const body = await res.json() as { ok: boolean; data: { integrityHash?: string; tampered: boolean } }
+  if (!body.ok) return json(err('Failed to load config'), 500)
+  return json(ok({ integrityHash: body.data.integrityHash ?? null, tampered: body.data.tampered }))
 }
 
 const patchConfig: Handler = async (req, env, params: Params) => {
@@ -187,8 +202,9 @@ const exportConfig: Handler = async (_req, env, params: Params) => {
   if (!body.ok) return json(err('Failed to load config'), 500)
   const { name, description, systemPrompt, tools, model, temperature, maxTokens } = body.data
 
-  const payload = JSON.stringify({ version: 1, name, description, systemPrompt, tools, model, temperature, maxTokens })
-  const signature = env.SIGNING_SECRET ? await signPayload(payload, env.SIGNING_SECRET) : undefined
+  // Canonical field order — must match the import verification exactly
+  const canonPayload = JSON.stringify({ version: 1, name, description, systemPrompt, tools, model, temperature, maxTokens })
+  const signature = env.SIGNING_SECRET ? await signPayload(canonPayload, env.SIGNING_SECRET) : undefined
 
   return json(ok({ version: 1 as const, name, description, systemPrompt, tools, model, temperature, maxTokens, signature }))
 }
@@ -197,12 +213,23 @@ const importConfig: Handler = async (req, env) => {
   let raw: unknown
   try { raw = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
 
-  // Verify HMAC signature when SIGNING_SECRET is configured
+  // Verify HMAC signature when SIGNING_SECRET is configured.
+  // Canonical field order must match the export handler exactly — prevents
+  // field-reordering attacks that produce a valid signature on different content.
   if (env.SIGNING_SECRET && typeof raw === 'object' && raw !== null) {
-    const { signature, ...rest } = raw as Record<string, unknown>
-    if (typeof signature === 'string') {
-      const payload = JSON.stringify(rest)
-      const valid = await verifySignature(payload, signature, env.SIGNING_SECRET)
+    const r = raw as Record<string, unknown>
+    if (typeof r.signature === 'string') {
+      const canonPayload = JSON.stringify({
+        version:      r.version,
+        name:         r.name,
+        description:  r.description,
+        systemPrompt: r.systemPrompt,
+        tools:        r.tools,
+        model:        r.model,
+        temperature:  r.temperature,
+        maxTokens:    r.maxTokens,
+      })
+      const valid = await verifySignature(canonPayload, r.signature, env.SIGNING_SECRET)
       if (!valid) return json(err('Import rejected: invalid export signature'), 422)
     }
   }
@@ -237,14 +264,15 @@ const importConfig: Handler = async (req, env) => {
 }
 
 export const sandboxRoutes: Array<[string, string, Handler]> = [
-  ['GET',    '/api/sandbox',              list],
-  ['POST',   '/api/sandbox',              create],
-  ['POST',   '/api/sandbox/import',       importConfig],
-  ['GET',    '/api/sandbox/:id',          getConfig],
-  ['GET',    '/api/sandbox/:id/export',   exportConfig],
-  ['PATCH',  '/api/sandbox/:id',          patchConfig],
-  ['POST',   '/api/sandbox/:id/run',      runHandler],
-  ['POST',   '/api/sandbox/:id/stream',   streamHandler],
-  ['GET',    '/api/sandbox/:id/history',  history],
-  ['DELETE', '/api/sandbox/:id',          del],
+  ['GET',    '/api/sandbox',                    list],
+  ['POST',   '/api/sandbox',                    create],
+  ['POST',   '/api/sandbox/import',             importConfig],
+  ['GET',    '/api/sandbox/:id',                getConfig],
+  ['GET',    '/api/sandbox/:id/export',         exportConfig],
+  ['GET',    '/api/sandbox/:id/fingerprint',    fingerprint],
+  ['PATCH',  '/api/sandbox/:id',                patchConfig],
+  ['POST',   '/api/sandbox/:id/run',            runHandler],
+  ['POST',   '/api/sandbox/:id/stream',         streamHandler],
+  ['GET',    '/api/sandbox/:id/history',        history],
+  ['DELETE', '/api/sandbox/:id',                del],
 ]
