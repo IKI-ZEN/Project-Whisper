@@ -36,6 +36,7 @@ export interface SandboxConfig {
   createdAt: number
   updatedAt: number
   integrityHash?: string
+  guardMode?: 'strict' | 'audit' | 'off'
 }
 
 // ── Request shapes ─────────────────────────────────────────────────────────────
@@ -68,6 +69,24 @@ export interface CreateSandboxRequest {
   model: string
   temperature: number
   maxTokens: number
+  guardMode?: 'strict' | 'audit' | 'off'
+}
+
+export interface CompareRequest {
+  prompt: string
+  models: string[]
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+export interface SweepRequest {
+  prompt: string
+  temperatures: number[]
+  model?: string
+  systemPrompt?: string
+  maxTokens?: number
+  samples?: number
 }
 
 export interface RunSandboxRequest {
@@ -146,6 +165,7 @@ export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
   if (name.length         > MAX_NAME_LEN)          throw new Error(`name must be <= ${MAX_NAME_LEN} characters`)
   if (description.length  > MAX_DESCRIPTION_LEN)   throw new Error(`description must be <= ${MAX_DESCRIPTION_LEN} characters`)
   if (systemPrompt.length > MAX_SYSTEM_PROMPT_LEN) throw new Error(`systemPrompt must be <= ${MAX_SYSTEM_PROMPT_LEN} characters`)
+  const gm = body.guardMode
   return {
     name,
     description,
@@ -154,6 +174,7 @@ export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
     model:       str(body.model, 'model', DEFAULT_MODEL),
     temperature: num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2),
     maxTokens:   num(body.maxTokens,   'maxTokens',   DEFAULT_MAX_TOKENS,  1, 8192),
+    guardMode:   gm === 'audit' || gm === 'off' ? gm : 'strict',
   }
 }
 
@@ -162,6 +183,42 @@ export function parseRunSandboxRequest(body: unknown): RunSandboxRequest {
   const message = str(body.message, 'message')
   if (!message.trim()) throw new Error('message cannot be empty')
   return { message }
+}
+
+export function parseCompareRequest(body: unknown): CompareRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const prompt = str(body.prompt, 'prompt')
+  const models = body.models
+  if (!Array.isArray(models) || models.length < 2 || models.length > 6)
+    throw new Error('models must be an array of 2–6 model strings')
+  if (!models.every(m => typeof m === 'string'))
+    throw new Error('all models must be strings')
+  return {
+    prompt,
+    models: models as string[],
+    systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    temperature:  body.temperature  !== undefined ? num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2)    : undefined,
+    maxTokens:    body.maxTokens    !== undefined ? num(body.maxTokens,   'maxTokens',   DEFAULT_MAX_TOKENS,  1, 8192) : undefined,
+  }
+}
+
+export function parseSweepRequest(body: unknown): SweepRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const prompt = str(body.prompt, 'prompt')
+  const temps = body.temperatures
+  if (!Array.isArray(temps) || temps.length < 1 || temps.length > 8)
+    throw new Error('temperatures must be an array of 1–8 values')
+  if (!temps.every(t => typeof t === 'number' && t >= 0 && t <= 2))
+    throw new Error('each temperature must be a number between 0 and 2')
+  const samples = body.samples !== undefined ? num(body.samples, 'samples', 1, 1, 3) : 1
+  return {
+    prompt,
+    temperatures: temps as number[],
+    model:        body.model       !== undefined ? str(body.model,        'model')        : undefined,
+    systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    maxTokens:    body.maxTokens   !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
+    samples,
+  }
 }
 
 export function parseVibeRequest(body: unknown): VibeRequest {

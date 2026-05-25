@@ -253,6 +253,14 @@
         <div class="field"><label>Temperature</label><input id="cfg-temp" type="number" min="0" max="2" step="0.1"/></div>
         <div class="field"><label>Max Tokens</label><input id="cfg-tokens" type="number" min="1" max="8192"/></div>
       </div>
+      <div class="field">
+        <label>Guard Mode</label>
+        <select id="cfg-guard">
+          <option value="strict">strict — block injections</option>
+          <option value="audit">audit — log only, never block</option>
+          <option value="off">off — disable scanning</option>
+        </select>
+      </div>
       <button id="cfg-save-btn" class="full outline" onclick="saveConfig()">Save changes</button>
       <div id="cfg-status" style="display:none"></div>
     </div>
@@ -282,6 +290,7 @@
         <button onclick="switchBench('embed', this)">Embed</button>
         <button onclick="switchBench('image', this)">Image Gen</button>
         <button onclick="switchBench('transcribe', this)">Transcribe</button>
+        <button onclick="switchBench('whisper', this)">Whisperer</button>
       </div>
     </div>
 
@@ -334,6 +343,46 @@
       <button class="full" onclick="doTranscribe()">Transcribe</button>
       <label>Transcript</label>
       <div id="bt-out" class="output"></div>
+    </div>
+
+    <!-- Whisperer: model comparison + temperature sweep -->
+    <div id="bench-whisper" class="bench-pane">
+      <h3 style="margin:0 0 4px">Model Comparison</h3>
+      <p style="margin:0 0 8px;opacity:0.6;font-size:12px">Run the same prompt across multiple models in parallel.</p>
+      <div class="field">
+        <label>Prompt</label>
+        <textarea id="wc-prompt" rows="3" placeholder="Enter prompt…"></textarea>
+      </div>
+      <div class="field">
+        <label>System Prompt (optional)</label>
+        <input id="wc-sys" type="text" placeholder="You are a helpful assistant." />
+      </div>
+      <div id="wc-model-checks" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temperature <input type="number" id="wc-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <button onclick="runCompare()">Compare</button>
+      </div>
+      <div id="wc-results" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px"></div>
+
+      <hr style="margin:20px 0"/>
+
+      <h3 style="margin:0 0 4px">Temperature Sweep</h3>
+      <p style="margin:0 0 8px;opacity:0.6;font-size:12px">Map attractor basin behavior across a temperature gradient.</p>
+      <div class="field">
+        <label>Prompt</label>
+        <textarea id="ws-prompt" rows="3" placeholder="Enter prompt…"></textarea>
+      </div>
+      <div class="field">
+        <label>System Prompt (optional)</label>
+        <input id="ws-sys" type="text" placeholder="You are a helpful assistant." />
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="ws-model" value="@cf/meta/llama-3.1-8b-instruct" style="width:260px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temperatures <input id="ws-temps" value="0,0.5,1.0,1.5,2.0" style="width:160px" title="Comma-separated values 0-2"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples/temp <input type="number" id="ws-samples" value="1" min="1" max="3" style="width:50px"/></label>
+        <button onclick="runSweep()">Sweep</button>
+      </div>
+      <div id="ws-results" style="margin-top:12px"></div>
     </div>
 
   </div>
@@ -483,6 +532,7 @@
     document.getElementById('cfg-model').value  = sandbox.model
     document.getElementById('cfg-temp').value   = sandbox.temperature
     document.getElementById('cfg-tokens').value = sandbox.maxTokens
+    document.getElementById('cfg-guard').value  = sandbox.guardMode ?? 'strict'
 
     const badge = document.getElementById('integrity-badge')
     const warn  = document.getElementById('tamper-warn')
@@ -643,6 +693,7 @@
       model:        document.getElementById('cfg-model').value,
       temperature:  parseFloat(document.getElementById('cfg-temp').value),
       maxTokens:    parseInt(document.getElementById('cfg-tokens').value, 10),
+      guardMode:    document.getElementById('cfg-guard').value,
     }
     const btn = document.getElementById('cfg-save-btn')
     btn.disabled = true; btn.textContent = 'Saving…'
@@ -681,6 +732,87 @@
     }
   }
 
+  // ── Whisperer workbench ───────────────────────────────────────────────────────
+
+  const WHISPERER_MODELS = [
+    { id: '@cf/meta/llama-3.1-8b-instruct',       label: 'Llama 3.1 8B' },
+    { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'Llama 3.3 70B' },
+    { id: 'openai:gpt-4o',                         label: 'GPT-4o' },
+    { id: 'openai:gpt-4o-mini',                    label: 'GPT-4o Mini' },
+    { id: 'anthropic:claude-sonnet-4-6',           label: 'Claude Sonnet' },
+    { id: 'anthropic:claude-opus-4-7',             label: 'Claude Opus' },
+    { id: 'google:gemini-2.0-flash',               label: 'Gemini Flash' },
+  ]
+
+  ;(function initWhispererModels() {
+    const container = document.getElementById('wc-model-checks')
+    WHISPERER_MODELS.forEach((m, i) => {
+      const label = document.createElement('label')
+      label.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px;cursor:pointer;background:var(--surface);padding:4px 8px;border-radius:4px'
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'; cb.value = m.id; cb.id = `wc-m-${i}`
+      if (i < 2) cb.checked = true
+      label.appendChild(cb)
+      label.appendChild(document.createTextNode(m.label))
+      container.appendChild(label)
+    })
+  })()
+
+  async function runCompare() {
+    const prompt = document.getElementById('wc-prompt').value.trim()
+    if (!prompt) return
+    const models = WHISPERER_MODELS
+      .map((_, i) => document.getElementById(`wc-m-${i}`))
+      .filter(cb => cb && cb.checked)
+      .map(cb => cb.value)
+    if (models.length < 2) { alert('Select at least 2 models to compare.'); return }
+    const temperature = parseFloat(document.getElementById('wc-temp').value)
+    const systemPrompt = document.getElementById('wc-sys').value.trim() || undefined
+    const out = document.getElementById('wc-results')
+    out.innerHTML = '<span style="opacity:0.6">Running…</span>'
+    try {
+      const res = await client.ai.compare(models, prompt, { temperature, systemPrompt })
+      if (!res.ok) { out.innerHTML = escHtml(String(res.error)); return }
+      out.innerHTML = res.data.results.map(r => `
+        <div style="flex:1;min-width:200px;max-width:360px;background:var(--surface);border-radius:6px;padding:10px;border:1px solid var(--border)">
+          <div style="font-size:11px;font-family:var(--mono);opacity:0.7;margin-bottom:6px;word-break:break-all">${escHtml(r.model)}</div>
+          <div style="white-space:pre-wrap;font-size:13px">${r.error ? '<span style="color:#ef4444">' + escHtml(r.error) + '</span>' : escHtml(r.response ?? '')}</div>
+          <div style="font-size:10px;opacity:0.5;margin-top:6px">${r.latencyMs}ms</div>
+        </div>`).join('')
+    } catch (e) { out.innerHTML = escHtml(String(e)) }
+  }
+
+  async function runSweep() {
+    const prompt = document.getElementById('ws-prompt').value.trim()
+    if (!prompt) return
+    const model = document.getElementById('ws-model').value.trim() || undefined
+    const systemPrompt = document.getElementById('ws-sys').value.trim() || undefined
+    const samples = parseInt(document.getElementById('ws-samples').value, 10)
+    const tempsRaw = document.getElementById('ws-temps').value
+    const temperatures = tempsRaw.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
+    if (!temperatures.length) { alert('Enter at least one temperature value.'); return }
+    const out = document.getElementById('ws-results')
+    out.innerHTML = '<span style="opacity:0.6">Sweeping…</span>'
+    try {
+      const res = await client.ai.sweep(prompt, temperatures, { model, systemPrompt, samples })
+      if (!res.ok) { out.innerHTML = escHtml(String(res.error)); return }
+      const rows = res.data.results.map(r => `
+        <tr>
+          <td style="font-family:var(--mono);padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top">${r.temperature.toFixed(1)}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border)">
+            ${r.responses.map((resp, i) => `<div style="white-space:pre-wrap;font-size:12px${i > 0 ? ';margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)' : ''}">${escHtml(resp)}</div>`).join('')}
+          </td>
+          <td style="font-size:10px;opacity:0.5;padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top">${r.latencyMs}ms</td>
+        </tr>`).join('')
+      out.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:0.6;border-bottom:1px solid var(--border)">Temp</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:0.6;border-bottom:1px solid var(--border)">Response${samples > 1 ? 's' : ''}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:0.6;border-bottom:1px solid var(--border)">Latency</th>
+        </tr></thead><tbody>${rows}</tbody></table>`
+    } catch (e) { out.innerHTML = escHtml(String(e)) }
+  }
+
   // ── Utils ─────────────────────────────────────────────────────────────────────
   function setStatus(panel, msg, isErr = false) {
     const el = document.getElementById(`${panel}-status`)
@@ -701,6 +833,7 @@
     copyEmbed, copyExport, loadSandbox, sendMessage, deleteSandbox, doImport,
     saveConfig, loadHistory,
     doComplete, doStream, doEmbed, doImage, doTranscribe,
+    runCompare, runSweep,
   })
 </script>
 </body>

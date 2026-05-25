@@ -165,6 +165,36 @@ export class AiClient {
     )
     return data.text
   }
+
+  /**
+   * Run the same prompt across multiple models in parallel and return results with latency.
+   * @param {string[]} models
+   * @param {string} prompt
+   * @param {{ systemPrompt?: string, temperature?: number, maxTokens?: number }} [opts]
+   */
+  async compare(models, prompt, opts = {}) {
+    const res = await fetch(`${this._base}/api/ai/compare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ models, prompt, ...opts }),
+    })
+    return res.json()
+  }
+
+  /**
+   * Run the same prompt at multiple temperatures to map attractor basin behavior.
+   * @param {string} prompt
+   * @param {number[]} temperatures
+   * @param {{ model?: string, systemPrompt?: string, maxTokens?: number, samples?: number }} [opts]
+   */
+  async sweep(prompt, temperatures, opts = {}) {
+    const res = await fetch(`${this._base}/api/ai/sweep`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, temperatures, ...opts }),
+    })
+    return res.json()
+  }
 }
 
 // ── SandboxHandle ─────────────────────────────────────────────────────────────
@@ -181,11 +211,12 @@ export class SandboxHandle {
   /** @type {string} */ shortLink
   /** @type {string|null} */ integrityHash
   /** @type {boolean} */ tampered
+  /** @type {'strict'|'audit'|'off'} */ guardMode
   /** @type {string} */ #base
 
   /**
    * @param {string} base
-   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean }} meta
+   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean, guardMode?: 'strict'|'audit'|'off' }} meta
    */
   constructor(base, meta) {
     this.#base         = base
@@ -200,6 +231,7 @@ export class SandboxHandle {
     this.shortLink     = meta.shortLink     ?? `/s/${meta.id}`
     this.integrityHash = meta.integrityHash ?? null
     this.tampered      = meta.tampered      ?? false
+    this.guardMode     = meta.guardMode     ?? 'strict'
   }
 
   /**

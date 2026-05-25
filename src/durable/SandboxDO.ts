@@ -6,12 +6,19 @@ import { json, sseResponse } from '../lib/http'
 import { now } from '../lib/utils'
 import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
-import { scan } from '../lib/guard'
+import { scan, type ScanResult } from '../lib/guard'
 
 const RL_STORAGE_KEY = 'rlState'
 
 export class SandboxDO extends DurableObject<Env> {
   private config: SandboxConfig | null = null
+
+  // ── Guard helper ─────────────────────────────────────────────────────────
+
+  private guardedScan(text: string, mode?: string): ScanResult | null {
+    if (mode === 'off') return null
+    return scan(text)
+  }
 
   // ── Hydration ─────────────────────────────────────────────────────────────
 
@@ -68,9 +75,16 @@ export class SandboxDO extends DurableObject<Env> {
   private async handleInit(req: Request): Promise<Response> {
     const config = await req.json() as SandboxConfig
 
-    const guard = scan(config.systemPrompt ?? '')
-    if (guard.riskLevel === 'blocked') {
-      return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
+    const guard = this.guardedScan(config.systemPrompt ?? '', config.guardMode)
+    if (guard) {
+      if (guard.riskLevel === 'blocked' && config.guardMode !== 'audit') {
+        return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
+      }
+      if (guard.riskLevel !== 'clean') {
+        void this.env.DB.prepare(
+          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'init', patterns: guard.patterns }), now()).run()
+      }
     }
 
     await this.save(config)
@@ -87,21 +101,23 @@ export class SandboxDO extends DurableObject<Env> {
 
   private async handlePatchConfig(req: Request): Promise<Response> {
     const patch = await req.json() as Partial<SandboxConfig>
+    const config = await this.load()
 
     if (patch.systemPrompt !== undefined) {
-      const guard = scan(patch.systemPrompt)
-      if (guard.riskLevel === 'blocked') {
-        return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
-      }
-      if (guard.riskLevel === 'suspicious') {
-        const config = await this.load()
-        await this.env.DB.prepare(
-          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'patch', patterns: guard.patterns }), now()).run()
+      const effectiveMode = patch.guardMode ?? config.guardMode ?? 'strict'
+      const guard = this.guardedScan(patch.systemPrompt, effectiveMode)
+      if (guard) {
+        if (guard.riskLevel === 'blocked' && effectiveMode !== 'audit') {
+          return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
+        }
+        if (guard.riskLevel !== 'clean') {
+          void this.env.DB.prepare(
+            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+          ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'patch', patterns: guard.patterns }), now()).run()
+        }
       }
     }
 
-    const config = await this.load()
     // Disallow patching server-managed fields including integrityHash
     const { id: _i, memory: _m, createdAt: _c, integrityHash: _ih, ...allowed } = patch
     await this.save({ ...config, ...allowed, updatedAt: now() })
@@ -114,26 +130,27 @@ export class SandboxDO extends DurableObject<Env> {
     }
 
     const { message } = await req.json() as { message: string }
-
-    const guard = scan(message)
-    if (guard.riskLevel === 'blocked') {
-      return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
-    }
-
     const config = await this.load()
+    const gMode = config.guardMode ?? 'strict'
 
-    if (guard.riskLevel === 'suspicious') {
-      await this.env.DB.prepare(
-        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-      ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns }), now()).run()
+    const guard = this.guardedScan(message, gMode)
+    if (guard) {
+      if (guard.riskLevel === 'blocked' && gMode !== 'audit') {
+        return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
+      }
+      if (guard.riskLevel !== 'clean') {
+        void this.env.DB.prepare(
+          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns }), now()).run()
+      }
     }
 
     const ts = now()
     const reply = await runInSandbox(this.env.AI, this.env, config, message)
 
     // Outbound scan — detect if the model was successfully jailbroken
-    const replyGuard = scan(reply)
-    if (replyGuard.riskLevel !== 'clean') {
+    const replyGuard = this.guardedScan(reply, gMode)
+    if (replyGuard && replyGuard.riskLevel !== 'clean') {
       void this.env.DB.prepare(
         'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
       ).bind(config.id, 'response_flag', JSON.stringify({ patterns: replyGuard.patterns }), now()).run()
@@ -154,18 +171,19 @@ export class SandboxDO extends DurableObject<Env> {
     }
 
     const { message } = await req.json() as { message: string }
-
-    const guard = scan(message)
-    if (guard.riskLevel === 'blocked') {
-      return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
-    }
-
     const config = await this.load()
+    const gMode = config.guardMode ?? 'strict'
 
-    if (guard.riskLevel === 'suspicious') {
-      await this.env.DB.prepare(
-        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-      ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns }), now()).run()
+    const guard = this.guardedScan(message, gMode)
+    if (guard) {
+      if (guard.riskLevel === 'blocked' && gMode !== 'audit') {
+        return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
+      }
+      if (guard.riskLevel !== 'clean') {
+        void this.env.DB.prepare(
+          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns }), now()).run()
+      }
     }
 
     // Stream is preview-only — use /run to persist to memory

@@ -2,10 +2,11 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, sseResponse, parseBody } from '../lib/http'
 import {
-  complete, completeStream, embed, generateImage, transcribe,
+  complete, completeStream, embed, generateImage, transcribe, MODELS,
 } from '../lib/ai'
 import {
   parseCompleteRequest, parseEmbedRequest, parseImageRequest,
+  parseCompareRequest, parseSweepRequest,
 } from '../lib/schema'
 import { toBase64 } from '../lib/utils'
 import { MAX_AUDIO_BYTES } from '../lib/constants'
@@ -89,5 +90,40 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     } catch (e) {
       return json(err('Transcription failed', String(e)), 500)
     }
+  }],
+
+  // POST /api/ai/compare — run same prompt across multiple models in parallel
+  ['POST', '/api/ai/compare', async (req: Request, env: Env) => {
+    const p = await parseBody(req, parseCompareRequest)
+    if (!p.ok) return p.response
+    const { models, ...opts } = p.data
+    const results = await Promise.all(models.map(async model => {
+      const start = Date.now()
+      try {
+        const response = await complete(env.AI, env, { ...opts, model })
+        return { model, response, latencyMs: Date.now() - start, error: null }
+      } catch (e) {
+        return { model, response: null, latencyMs: Date.now() - start, error: String(e) }
+      }
+    }))
+    return json(ok({ results }))
+  }],
+
+  // POST /api/ai/sweep — run same prompt at multiple temperatures (attractor basin mapping)
+  ['POST', '/api/ai/sweep', async (req: Request, env: Env) => {
+    const p = await parseBody(req, parseSweepRequest)
+    if (!p.ok) return p.response
+    const { prompt, temperatures, model, systemPrompt, maxTokens, samples = 1 } = p.data
+    const results = await Promise.all(temperatures.map(async temperature => {
+      const start = Date.now()
+      const responses = await Promise.all(
+        Array.from({ length: samples }, () =>
+          complete(env.AI, env, { prompt, model, systemPrompt, maxTokens, temperature })
+            .catch(e => `[error: ${String(e)}]`),
+        ),
+      )
+      return { temperature, responses, latencyMs: Date.now() - start }
+    }))
+    return json(ok({ results, model: model ?? MODELS.text }))
   }],
 ]
