@@ -46,6 +46,110 @@ export interface SweepOpts {
   samples?: number
 }
 
+export interface SensitivityOpts {
+  variants?: number
+  model?: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+export interface SensitivityResult {
+  variants: Array<{ prompt: string; response: string }>
+  similarityMatrix: number[][]
+  latencyMs: number
+}
+
+export interface ClusterOpts {
+  k?: number
+  model?: string
+}
+
+export interface ClusterResult {
+  k: number
+  labels: number[]
+  clusters: Array<{ label: number; items: string[] }>
+  similarityMatrix: number[][]
+  latencyMs: number
+}
+
+export interface CotOpts {
+  model?: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+  samples?: number
+}
+
+export interface CotProbeResult {
+  style: 'plain' | 'step-by-step' | 'xml-structured' | 'self-consistency'
+  response: string
+  latencyMs: number
+}
+
+export interface EntropyOpts {
+  model?: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+  samples?: number
+}
+
+export interface EntropyResult {
+  samples: string[]
+  entropy: number
+  avgCosineSimilarity: number
+  latencyMs: number
+}
+
+export interface ArchaeologyOpts {
+  probe?: string
+  model?: string
+  candidates?: number
+  maxTokens?: number
+}
+
+export interface ArchaeologyCandidate {
+  candidate: string
+  similarity: number
+}
+
+export interface PipelineRoute {
+  condition: string
+  nextId: string
+}
+
+export interface PipelineNode {
+  id: string
+  type: 'complete' | 'classify' | 'guard' | 'transform' | 'parallel'
+  model?: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+  template?: string
+  branches?: string[]
+  select?: 'first' | 'best' | 'all'
+  routes: PipelineRoute[]
+}
+
+export interface PipelineTrace {
+  nodeId: string
+  type: string
+  input: string
+  output: string
+  conditionMet?: string
+  latencyMs: number
+}
+
+export interface PipelineResult {
+  output: string
+  trace: PipelineTrace[]
+}
+
+export interface PipelineOpts {
+  maxDepth?: number
+}
+
 export interface ImageOpts {
   model?: string
   steps?: number
@@ -126,6 +230,18 @@ export class AiClient {
   compare(models: string[], prompt: string, opts?: CompareOpts): Promise<{ ok: boolean; data: { results: CompareResult[] } }>
   /** Run the same prompt at multiple temperatures to map attractor basin behavior. */
   sweep(prompt: string, temperatures: number[], opts?: SweepOpts): Promise<{ ok: boolean; data: { results: SweepResult[]; model: string } }>
+  /** Prompt sensitivity analysis — generate paraphrases and measure response variance. */
+  sensitivity(prompt: string, opts?: SensitivityOpts): Promise<SensitivityResult>
+  /** Semantic clustering — embed texts and k-means cluster by cosine similarity. */
+  cluster(texts: string[], opts?: ClusterOpts): Promise<ClusterResult>
+  /** Chain-of-thought probing — run 4 reasoning styles in parallel and compare outputs. */
+  cot(prompt: string, opts?: CotOpts): Promise<{ results: CotProbeResult[] }>
+  /** Token entropy / attractor stability — sample the model and measure response diversity. */
+  entropy(prompt: string, opts?: EntropyOpts): Promise<EntropyResult>
+  /** Prompt archaeology — reverse-engineer candidate system prompts from a target response. */
+  archaeology(targetResponse: string, opts?: ArchaeologyOpts): Promise<{ candidates: ArchaeologyCandidate[] }>
+  /** Pipeline executor — declarative node graph with per-node model routing. */
+  pipeline(input: string, nodes: PipelineNode[], entryId: string, opts?: PipelineOpts): Promise<PipelineResult>
 }
 
 // ── SandboxHandle ─────────────────────────────────────────────────────────────
