@@ -150,6 +150,25 @@ export interface PipelineOpts {
   maxDepth?: number
 }
 
+export interface ThinkOpts {
+  model?: string
+  systemPrompt?: string
+  maxTokens?: number
+  budgetTokens?: number
+}
+
+export interface ThinkResult {
+  thinking: string
+  response: string
+  latencyMs: number
+}
+
+export interface ToolCallDef {
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+
 export interface ImageOpts {
   model?: string
   steps?: number
@@ -242,6 +261,14 @@ export class AiClient {
   archaeology(targetResponse: string, opts?: ArchaeologyOpts): Promise<{ candidates: ArchaeologyCandidate[] }>
   /** Pipeline executor — declarative node graph with per-node model routing. */
   pipeline(input: string, nodes: PipelineNode[], entryId: string, opts?: PipelineOpts): Promise<PipelineResult>
+  /** Extended thinking — explicit reasoning trace. Uses Anthropic thinking for anthropic:* models. */
+  think(prompt: string, opts?: ThinkOpts): Promise<ThinkResult>
+  /** Check if a SandboxHandle.run() reply contains a tool call rather than plain text. */
+  static isToolCall(reply: string): boolean
+  /** Parse tool calls from a run() reply. */
+  static parseToolCalls(reply: string): ToolCallDef[]
+  /** Encode a tool result to send back via run(). */
+  static encodeToolResult(toolUseId: string, toolName: string, content: string): string
 }
 
 // ── SandboxHandle ─────────────────────────────────────────────────────────────
@@ -264,6 +291,8 @@ export class SandboxHandle {
   readonly guardMode: 'strict' | 'audit' | 'off'
   /** Whether RAG is enabled — relevant document chunks are injected into prompts. */
   readonly ragEnabled: boolean
+  /** Tool definitions available to the sandbox's model. */
+  readonly tools: object[]
 
   run(message: string): Promise<string>
   stream(message: string): AsyncGenerator<string>

@@ -268,6 +268,14 @@
           Enable — inject relevant document context
         </label>
       </div>
+      <div class="field">
+        <label style="display:flex;justify-content:space-between;align-items:center">
+          Tools (JSON array)
+          <span style="font-size:10px;opacity:0.5;font-weight:normal;text-transform:none;letter-spacing:normal">optional — enable function calling</span>
+        </label>
+        <textarea id="cfg-tools" rows="5" class="mono" placeholder='[{"name":"get_weather","description":"Return current weather for a city","parameters":{"city":{"type":"string","description":"City name","required":true}}}]' style="font-size:11px;resize:vertical"></textarea>
+        <div id="cfg-tools-err" style="display:none;color:var(--red);font-size:11px;margin-top:2px"></div>
+      </div>
       <button id="cfg-save-btn" class="full outline" onclick="saveConfig()">Save changes</button>
       <div id="cfg-status" style="display:none"></div>
     </div>
@@ -374,6 +382,7 @@
         <button class="wh-tab" onclick="switchWhisper('entropy',this)" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer">Entropy</button>
         <button class="wh-tab" onclick="switchWhisper('archaeology',this)" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer">Archaeology</button>
         <button class="wh-tab" onclick="switchWhisper('pipeline',this)" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer">Pipeline</button>
+        <button class="wh-tab" onclick="switchWhisper('think',this)" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer">Think</button>
       </div>
 
       <!-- inner panes -->
@@ -530,6 +539,21 @@
           <div id="wpl-results"></div>
         </div>
 
+        <!-- Think -->
+        <div id="wh-think" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+          <h3 style="margin:0">Extended Thinking</h3>
+          <p style="margin:0;opacity:0.6;font-size:12px">Generate an explicit reasoning trace before the final answer. Uses Anthropic extended thinking for <code>anthropic:*</code> models; falls back to XML-prompted reasoning for all others.</p>
+          <div class="field"><label>Prompt</label><textarea id="wth-prompt" rows="4" placeholder="Ask something that benefits from deliberate reasoning…"></textarea></div>
+          <div class="field"><label>System Prompt (optional)</label><input id="wth-sys" type="text" placeholder="You are a helpful assistant." /></div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wth-model" value="anthropic:claude-sonnet-4-6" style="width:240px"/></label>
+            <label style="display:flex;gap:6px;align-items:center;font-size:13px">Thinking budget (tokens) <input type="number" id="wth-budget" value="8000" min="1024" max="80000" style="width:80px" title="Anthropic only — ignored for other providers"/></label>
+            <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max tokens <input type="number" id="wth-tokens" value="2048" min="256" max="16000" style="width:80px"/></label>
+            <button onclick="runThink()">Think</button>
+          </div>
+          <div id="wth-results"></div>
+        </div>
+
       </div>
     </div>
 
@@ -682,6 +706,8 @@
     document.getElementById('cfg-tokens').value = sandbox.maxTokens
     document.getElementById('cfg-guard').value  = sandbox.guardMode ?? 'strict'
     document.getElementById('cfg-rag').checked  = sandbox.ragEnabled ?? false
+    document.getElementById('cfg-tools').value  = sandbox.tools?.length ? JSON.stringify(sandbox.tools, null, 2) : ''
+    document.getElementById('cfg-tools-err').style.display = 'none'
 
     const badge = document.getElementById('integrity-badge')
     const warn  = document.getElementById('tamper-warn')
@@ -890,6 +916,21 @@
   // ── Config editor ─────────────────────────────────────────────────────────────
   async function saveConfig() {
     if (!activeSandbox) return
+    const toolsRaw = document.getElementById('cfg-tools').value.trim()
+    const toolsErr = document.getElementById('cfg-tools-err')
+    let tools = []
+    if (toolsRaw) {
+      try {
+        const parsed = JSON.parse(toolsRaw)
+        if (!Array.isArray(parsed)) throw new Error('Must be a JSON array')
+        tools = parsed
+        toolsErr.style.display = 'none'
+      } catch (e) {
+        toolsErr.textContent = 'Invalid JSON: ' + e.message
+        toolsErr.style.display = 'block'
+        return
+      }
+    }
     const patch = {
       name:         document.getElementById('cfg-name').value,
       systemPrompt: document.getElementById('cfg-sys').value,
@@ -898,6 +939,7 @@
       maxTokens:    parseInt(document.getElementById('cfg-tokens').value, 10),
       guardMode:    document.getElementById('cfg-guard').value,
       ragEnabled:   document.getElementById('cfg-rag').checked,
+      tools,
     }
     const btn = document.getElementById('cfg-save-btn')
     btn.disabled = true; btn.textContent = 'Saving…'
@@ -1215,6 +1257,35 @@
     } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
   }
 
+  // ── Think ─────────────────────────────────────────────────────────────────────
+  async function runThink() {
+    const prompt  = document.getElementById('wth-prompt').value.trim()
+    const sys     = document.getElementById('wth-sys').value.trim()
+    const model   = document.getElementById('wth-model').value.trim() || 'anthropic:claude-sonnet-4-6'
+    const budget  = parseInt(document.getElementById('wth-budget').value, 10) || 8000
+    const maxTok  = parseInt(document.getElementById('wth-tokens').value, 10) || 2048
+    if (!prompt) return
+    const out = document.getElementById('wth-results')
+    out.innerHTML = '<span style="opacity:0.6">Thinking…</span>'
+    try {
+      const data = await client.ai.think(prompt, {
+        model,
+        systemPrompt: sys || undefined,
+        budgetTokens: budget,
+        maxTokens: maxTok,
+      })
+      out.innerHTML = `
+        <div style="margin-bottom:12px">
+          <div style="font-size:10px;font-weight:600;opacity:0.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Thinking trace <span style="font-weight:normal;opacity:0.6">(${data.latencyMs}ms)</span></div>
+          <pre style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:11px;font-family:var(--mono);white-space:pre-wrap;overflow:auto;max-height:320px;color:var(--muted)">${escHtml(data.thinking || '(no thinking trace — provider may not support extended thinking)')}</pre>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;opacity:0.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Response</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:13px;white-space:pre-wrap">${escHtml(data.response)}</div>
+        </div>`
+    } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  }
+
   // ── Heatmap helper ────────────────────────────────────────────────────────────
   function renderHeatmap(matrix, labels) {
     const n = matrix.length
@@ -1253,7 +1324,7 @@
     saveConfig, loadHistory,
     doComplete, doStream, doEmbed, doImage, doTranscribe,
     runCompare, runSweep,
-    runSensitivity, runCluster, runCoT, runEntropy, runArchaeology, runPipeline,
+    runSensitivity, runCluster, runCoT, runEntropy, runArchaeology, runPipeline, runThink,
     uploadDocument, deleteDocumentById,
   })
 </script>

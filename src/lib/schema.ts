@@ -161,6 +161,32 @@ export function parseImageRequest(body: unknown): ImageRequest {
   }
 }
 
+// ── Tool parser helper ────────────────────────────────────────────────────────
+
+const VALID_PARAM_TYPES = ['string', 'number', 'boolean', 'array', 'object'] as const
+
+function parseTool(v: unknown, idx: number): Tool {
+  if (!isObj(v)) throw new Error(`tools[${idx}] must be an object`)
+  const name = str(v.name, `tools[${idx}].name`)
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error(`tools[${idx}].name must be alphanumeric/underscore`)
+  const description = str(v.description, `tools[${idx}].description`)
+  const rawParams = v.parameters
+  if (!isObj(rawParams)) throw new Error(`tools[${idx}].parameters must be an object`)
+  const parameters: Record<string, ToolParam> = {}
+  for (const [k, p] of Object.entries(rawParams)) {
+    if (!isObj(p)) throw new Error(`tools[${idx}].parameters.${k} must be an object`)
+    const type = str(p.type, `tools[${idx}].parameters.${k}.type`)
+    if (!(VALID_PARAM_TYPES as readonly string[]).includes(type))
+      throw new Error(`tools[${idx}].parameters.${k}.type must be one of ${VALID_PARAM_TYPES.join('|')}`)
+    parameters[k] = {
+      type: type as ToolParam['type'],
+      description: str(p.description, `tools[${idx}].parameters.${k}.description`),
+      required: p.required === true,
+    }
+  }
+  return { name, description, parameters }
+}
+
 export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   const name         = str(body.name,         'name')
@@ -170,11 +196,13 @@ export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
   if (description.length  > MAX_DESCRIPTION_LEN)   throw new Error(`description must be <= ${MAX_DESCRIPTION_LEN} characters`)
   if (systemPrompt.length > MAX_SYSTEM_PROMPT_LEN) throw new Error(`systemPrompt must be <= ${MAX_SYSTEM_PROMPT_LEN} characters`)
   const gm = body.guardMode
+  const rawTools = body.tools
+  const tools = Array.isArray(rawTools) ? rawTools.slice(0, 20).map((t, i) => parseTool(t, i)) : []
   return {
     name,
     description,
     systemPrompt,
-    tools:       [],
+    tools,
     model:       str(body.model, 'model', DEFAULT_MODEL),
     temperature: num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2),
     maxTokens:   num(body.maxTokens,   'maxTokens',   DEFAULT_MAX_TOKENS,  1, 8192),
@@ -292,6 +320,25 @@ export interface PipelineRequest {
   nodes: PipelineNode[]
   entryId: string
   maxDepth?: number
+}
+
+export interface ThinkRequest {
+  prompt: string
+  model?: string
+  systemPrompt?: string
+  maxTokens?: number
+  budgetTokens?: number
+}
+
+export function parseThinkRequest(body: unknown): ThinkRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  return {
+    prompt:       str(body.prompt, 'prompt'),
+    model:        body.model        !== undefined ? str(body.model,        'model')        : undefined,
+    systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    maxTokens:    body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 256, 16000) : undefined,
+    budgetTokens: body.budgetTokens !== undefined ? num(body.budgetTokens, 'budgetTokens', 8000, 1024, 80000)             : undefined,
+  }
 }
 
 export function parseSensitivityRequest(body: unknown): SensitivityRequest {
