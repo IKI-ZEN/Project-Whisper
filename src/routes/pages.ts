@@ -436,7 +436,7 @@ footer a:hover{color:var(--accent2)}
     <div class="card">
       <div class="card-icon">⬡</div>
       <h3>Aether-Lite SDK</h3>
-      <p>A zero-dependency browser SDK with <code style="font-size:11px;color:var(--accent2)">&lt;aether-chat&gt;</code> web component, <code style="font-size:11px;color:var(--accent2)">AppBuilder</code>, and full multi-file app generation.</p>
+      <p>A zero-dependency browser SDK with <code style="font-size:11px;color:var(--accent2)">&lt;aether-lite-chat&gt;</code> web component, <code style="font-size:11px;color:var(--accent2)">AppBuilder</code>, and full multi-file app generation.</p>
     </div>
     <div class="card">
       <div class="card-icon">⊕</div>
@@ -460,7 +460,7 @@ document.body.innerHTML = vibe.embedCode   <span class="c">// instant &lt;iframe
 <span class="k">await</span> session.start()
 
 <span class="c">// Or drop in the web component</span>
-<span class="c">// &lt;aether-chat sandbox-id="abc123"&gt;&lt;/aether-chat&gt;</span></div>
+<span class="c">// &lt;aether-lite-chat sandbox-id="abc123"&gt;&lt;/aether-lite-chat&gt;</span></div>
 </main>
 <footer>
   <a href="/playground.html">Playground</a> · <a href="/apps">Apps</a> · <a href="/api">API</a>
