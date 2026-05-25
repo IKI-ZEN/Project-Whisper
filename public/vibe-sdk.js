@@ -195,6 +195,80 @@ export class AiClient {
     })
     return res.json()
   }
+
+  /**
+   * Prompt sensitivity analysis — generate paraphrases and measure response variance.
+   * @param {string} prompt
+   * @param {{ variants?: number, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number }} [opts]
+   * @returns {Promise<{ variants: Array<{ prompt: string, response: string }>, similarityMatrix: number[][], latencyMs: number }>}
+   */
+  async sensitivity(prompt, opts = {}) {
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/sensitivity', 'POST', { prompt, ...opts })
+    )
+  }
+
+  /**
+   * Semantic response clustering — embed texts and cluster by cosine similarity.
+   * @param {string[]} texts
+   * @param {{ k?: number, model?: string }} [opts]
+   * @returns {Promise<{ k: number, labels: number[], clusters: Array<{ label: number, items: string[] }>, similarityMatrix: number[][], latencyMs: number }>}
+   */
+  async cluster(texts, opts = {}) {
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/cluster', 'POST', { texts, ...opts })
+    )
+  }
+
+  /**
+   * Chain-of-thought probing — run 4 reasoning styles in parallel and compare outputs.
+   * @param {string} prompt
+   * @param {{ model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, samples?: number }} [opts]
+   * @returns {Promise<{ results: Array<{ style: string, response: string, latencyMs: number }> }>}
+   */
+  async cot(prompt, opts = {}) {
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/cot', 'POST', { prompt, ...opts })
+    )
+  }
+
+  /**
+   * Token entropy / attractor stability — sample the model multiple times and measure response diversity.
+   * @param {string} prompt
+   * @param {{ model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, samples?: number }} [opts]
+   * @returns {Promise<{ samples: string[], entropy: number, avgCosineSimilarity: number, latencyMs: number }>}
+   */
+  async entropy(prompt, opts = {}) {
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/entropy', 'POST', { prompt, ...opts })
+    )
+  }
+
+  /**
+   * Prompt archaeology — reverse-engineer candidate system prompts from a target response.
+   * @param {string} targetResponse
+   * @param {{ probe?: string, model?: string, candidates?: number, maxTokens?: number }} [opts]
+   * @returns {Promise<{ candidates: Array<{ candidate: string, similarity: number }> }>}
+   */
+  async archaeology(targetResponse, opts = {}) {
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/archaeology', 'POST', { targetResponse, ...opts })
+    )
+  }
+
+  /**
+   * Pipeline executor — run a declarative node graph where each node routes through a specific model.
+   * @param {string} input
+   * @param {Array<{ id: string, type: 'complete'|'classify'|'guard'|'transform'|'parallel', model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, template?: string, branches?: string[], select?: 'first'|'best'|'all', routes: Array<{ condition: string, nextId: string }> }>} nodes
+   * @param {string} entryId
+   * @param {{ maxDepth?: number }} [opts]
+   * @returns {Promise<{ output: string, trace: Array<{ nodeId: string, type: string, input: string, output: string, conditionMet?: string, latencyMs: number }> }>}
+   */
+  async pipeline(input, nodes, entryId, opts = {}) {
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/pipeline', 'POST', { input, nodes, entryId, ...opts })
+    )
+  }
 }
 
 // ── SandboxHandle ─────────────────────────────────────────────────────────────

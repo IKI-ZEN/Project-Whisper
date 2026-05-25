@@ -29,3 +29,11 @@ export const MAX_EMBED_CHARS         = 100_000   // ~25k tokens
 export const MAX_REQUEST_BODY        = 1_048_576 // 1 MB
 export const MAX_AUDIO_BYTES         = 26_214_400 // 25 MB
 export const MAX_DOCUMENT_BYTES      = 10_485_760 // 10 MB — R2 file upload limit
+
+// Whisperer / pipeline limits
+export const MAX_PIPELINE_NODES          = 20
+export const MAX_PIPELINE_DEPTH          = 30
+export const MAX_SENSITIVITY_VARIANTS    = 8
+export const MAX_ENTROPY_SAMPLES         = 10
+export const MAX_ARCHAEOLOGY_CANDIDATES  = 6
+export const MAX_CLUSTER_TEXTS           = 50
