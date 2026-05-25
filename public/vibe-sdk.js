@@ -7,7 +7,7 @@
  *
  * Usage (web component):
  *   <script type="module" src="/vibe-sdk.js"></script>
- *   <aether-chat sandbox-id="abc123"></aether-chat>
+ *   <aether-lite-chat sandbox-id="abc123"></aether-lite-chat>
  *
  * @module vibe-sdk
  */
@@ -1117,6 +1117,10 @@ class VibeChatElement extends HTMLElement {
 
 customElements.define('vibe-chat', VibeChatElement)
 
-// <aether-chat> — canonical name for the Aether-Lite web component
+// <aether-lite-chat> — canonical name for the Aether-Lite web component
+class AetherLiteChatElement extends VibeChatElement {}
+customElements.define('aether-lite-chat', AetherLiteChatElement)
+
+// <aether-chat> — backwards-compat alias
 class AetherChatElement extends VibeChatElement {}
 customElements.define('aether-chat', AetherChatElement)

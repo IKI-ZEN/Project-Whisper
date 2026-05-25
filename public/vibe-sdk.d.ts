@@ -489,7 +489,7 @@ export const VibeClient: typeof AetherLiteClient
 
 // ── Web components ────────────────────────────────────────────────────────────
 
-export interface AetherChatAttributes {
+export interface AetherLiteChatAttributes {
   /** Required. ID of the sandbox to connect to. */
   'sandbox-id': string
   /** Base URL of the Worker. Defaults to same origin. */
@@ -500,12 +500,16 @@ export interface AetherChatAttributes {
   theme?: 'light' | 'dark'
 }
 
-/** @deprecated Use VibeChatAttributes */
-export interface VibeChatAttributes extends AetherChatAttributes {}
+/** @deprecated Use AetherLiteChatAttributes */
+export interface AetherChatAttributes extends AetherLiteChatAttributes {}
+
+/** @deprecated Use AetherLiteChatAttributes */
+export interface VibeChatAttributes extends AetherLiteChatAttributes {}
 
 declare global {
   interface HTMLElementTagNameMap {
-    'aether-chat': HTMLElement & AetherChatAttributes
-    'vibe-chat':   HTMLElement & VibeChatAttributes
+    'aether-lite-chat': HTMLElement & AetherLiteChatAttributes
+    'aether-chat':      HTMLElement & AetherChatAttributes
+    'vibe-chat':        HTMLElement & VibeChatAttributes
   }
 }

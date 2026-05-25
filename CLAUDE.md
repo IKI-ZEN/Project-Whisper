@@ -174,7 +174,7 @@ Persistent sliding-window limiter stored under `RL_STORAGE_KEY`. `checkRateLimit
 Served as static assets via `[assets]` in `wrangler.toml`.
 
 - `playground.html` — four-tab SPA (Vibe Builder / Sandbox Chat / AI Workbench / Whisperer). Uses `vibe-sdk.js` as an ES module. Vibe Builder tab has Quick Sandbox and App Builder modes.
-- `vibe-sdk.js` — zero-dep browser SDK. Primary export: `AetherLiteClient` (with backwards-compat alias `VibeClient`). Classes: `AetherLiteClient`, `AiClient`, `SandboxClient`, `SandboxHandle`, `VibesClient`, `VibeBuilderResult` (alias: `VibeResult`), `AppBuilder`, `AppSession`, `AppHandle`. Registers `<aether-chat>` and `<vibe-chat>` Shadow DOM web components.
+- `vibe-sdk.js` — zero-dep browser SDK. Primary export: `AetherLiteClient` (with backwards-compat alias `VibeClient`). Classes: `AetherLiteClient`, `AiClient`, `SandboxClient`, `SandboxHandle`, `VibesClient`, `VibeBuilderResult` (alias: `VibeResult`), `AppBuilder`, `AppSession`, `AppHandle`. Registers `<aether-lite-chat>`, `<aether-chat>`, and `<vibe-chat>` Shadow DOM web components (latter two are backwards-compat aliases).
 - `vibe-sdk.d.ts` — TypeScript declarations for the SDK.
 
 SDK rename summary:
@@ -182,7 +182,7 @@ SDK rename summary:
 |----------|----------|------|
 | `VibeClient` | `AetherLiteClient` | `window.VibeClient` alias kept for one release |
 | `VibeResult` | `VibeBuilderResult` | `export const VibeResult` alias kept |
-| `<vibe-chat>` | `<aether-chat>` | Both elements registered; `VibeChatElement` is base class |
+| `<vibe-chat>` | `<aether-lite-chat>` | All three elements registered; `VibeChatElement` is base class; `<aether-chat>` kept as alias |
 | (new) | `AppBuilder` | Multi-file app generation client |
 | (new) | `AppSession` | WS-driven build session with fluent event handlers |
 | (new) | `AppHandle` | Handle to a completed build (file access, delete) |
