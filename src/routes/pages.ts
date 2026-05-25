@@ -435,8 +435,8 @@ footer a:hover{color:var(--accent2)}
     </div>
     <div class="card">
       <div class="card-icon">⬡</div>
-      <h3>vibeSDK</h3>
-      <p>A zero-dependency browser SDK and <code style="font-size:11px;color:var(--accent2)">&lt;vibe-chat&gt;</code> web component for embedding any sandbox anywhere with one line of HTML.</p>
+      <h3>Aether-Lite SDK</h3>
+      <p>A zero-dependency browser SDK with <code style="font-size:11px;color:var(--accent2)">&lt;aether-chat&gt;</code> web component, <code style="font-size:11px;color:var(--accent2)">AppBuilder</code>, and full multi-file app generation.</p>
     </div>
     <div class="card">
       <div class="card-icon">⊕</div>
@@ -447,15 +447,20 @@ footer a:hover{color:var(--accent2)}
 
   <p class="section-label">Quick start</p>
   <div class="code-block"><span class="c">// Embed a sandbox anywhere with the SDK</span>
-<span class="k">import</span> { VibeClient } <span class="k">from</span> <span class="s">'/vibe-sdk.js'</span>
-<span class="k">const</span> client = <span class="k">new</span> VibeClient()
+<span class="k">import</span> { AetherLiteClient } <span class="k">from</span> <span class="s">'/vibe-sdk.js'</span>
+<span class="k">const</span> client = <span class="k">new</span> AetherLiteClient()
 
-<span class="c">// Create an AI app from a description</span>
+<span class="c">// Create a quick AI assistant from a description</span>
 <span class="k">const</span> vibe = <span class="k">await</span> client.vibes.create(<span class="s">'A friendly cooking assistant'</span>)
 document.body.innerHTML = vibe.embedCode   <span class="c">// instant &lt;iframe&gt; embed</span>
 
+<span class="c">// Or build a full multi-file app</span>
+<span class="k">const</span> session = client.builder.session(<span class="s">'A to-do list with local storage'</span>)
+  .onComplete(<span class="k">r</span> =&gt; window.open(<span class="k">r</span>.appUrl))
+<span class="k">await</span> session.start()
+
 <span class="c">// Or drop in the web component</span>
-<span class="c">// &lt;vibe-chat sandbox-id="abc123"&gt;&lt;/vibe-chat&gt;</span></div>
+<span class="c">// &lt;aether-chat sandbox-id="abc123"&gt;&lt;/aether-chat&gt;</span></div>
 </main>
 <footer>
   <a href="/playground.html">Playground</a> · <a href="/apps">Apps</a> · <a href="/api">API</a>

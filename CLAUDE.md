@@ -21,18 +21,26 @@ Project Aether-Lite is a **zero-runtime-dependency** AI harness running entirely
 
 ```
 Request → src/index.ts (Worker entry)
+            ├→ WebSocket upgrade bypass (before router)
+            │    ├→ /api/sandbox/:id/ws    → SandboxDO
+            │    └→ /api/v2/build/:id/ws  → AppBuilderDO
             └→ Router (src/lib/http.ts, URLPattern-based)
-                 ├→ /api/ai/*          src/routes/ai.ts
-                 ├→ /api/sandbox/*     src/routes/sandbox.ts
-                 ├→ /api/vibes/*       src/routes/vibes.ts
-                 ├→ /app/:id, /apps    src/routes/pages.ts
-                 ├→ /s/:id/*           index.ts (short public API)
-                 └→ SandboxDO          src/durable/SandboxDO.ts
+                 ├→ /api/ai/*             src/routes/ai.ts
+                 ├→ /api/sandbox/*        src/routes/sandbox.ts
+                 ├→ /api/vibes/*          src/routes/vibes.ts
+                 ├→ /api/v2/build/*       src/routes/build.ts
+                 ├→ /app/:id, /apps       src/routes/pages.ts
+                 ├→ /build/:id            src/routes/pages.ts (R2-served generated apps)
+                 ├→ /s/:id/*              index.ts (short public API)
+                 ├→ SandboxDO             src/durable/SandboxDO.ts
+                 └→ AppBuilderDO          src/durable/AppBuilderDO.ts
 ```
 
 **AI routes** (`/api/ai/*`): complete, stream, embed, image, transcribe, compare, sweep
 
 **Sandbox routes** (`/api/sandbox/*`): list, create, import, get (+ TTL refresh), patch, run, stream, history, export, fingerprint, delete
+
+**Build routes** (`/api/v2/build/*`): create (POST), status (GET), file list (GET), file content (GET), delete (DELETE). WebSocket at `/api/v2/build/:id/ws` — bypasses router, dispatched directly to `AppBuilderDO`.
 
 **Inbound guard pipeline** (runs before every AI call in SandboxDO):
 ```
@@ -44,6 +52,28 @@ message/systemPrompt
   → matchPatterns(SUSPICIOUS)  → D1 audit log, always continue
   → matchPatterns(SECRETS)     → D1 audit log, always continue
 ```
+
+### App Builder (`AppBuilderDO` + `src/routes/build.ts`)
+
+`AppBuilderDO` runs a phased, WebSocket-driven multi-file app generation pipeline:
+
+1. **Blueprint phase** — single streaming AI call producing JSON `{name, techStack, cdnDependencies, files[]}`. Falls back to a minimal `index.html` vanilla app on parse failure.
+2. **File generation phase** — streaming AI call per file, chunks relayed over WS as `file_chunk` events, written to R2 at `apps/{buildId}/{filename}`.
+3. **Complete** — state set to `'complete'`, `build_complete` event sent, WS closed.
+
+R2 key format: `apps/{buildId}/{filename}`  
+Served at: `GET /build/:id` (→ `index.html`) and `GET /build/:id/:filename`
+
+DO storage key: `'state'` (stores `BuildState`). Always addressed by `idFromName(buildId)`.
+
+Build constants in `src/lib/constants.ts`:
+```
+MAX_BUILD_DESCRIPTION_LEN = 2000
+MAX_BUILD_FILES           = 6
+MAX_FILE_BYTES            = 102_400  (100 KB per file)
+```
+
+CSP for served built apps (`BUILD_CSP` in `pages.ts`): permissive — allows `unsafe-inline`, `unsafe-eval`, and CDN origins (`esm.sh`, `unpkg.com`, `cdn.jsdelivr.net`) because AI-generated apps use CDN ESM and inline scripts.
 
 ### Durable Object pattern
 
@@ -143,9 +173,19 @@ Persistent sliding-window limiter stored under `RL_STORAGE_KEY`. `checkRateLimit
 
 Served as static assets via `[assets]` in `wrangler.toml`.
 
-- `playground.html` — four-tab SPA (Vibe Builder / Sandbox Chat / AI Workbench / Whisperer). Uses `vibe-sdk.js` as an ES module.
-- `vibe-sdk.js` — zero-dep browser SDK. Classes: `VibeClient`, `AiClient`, `SandboxClient`, `SandboxHandle`, `VibesClient`, `VibeResult`. Also registers `<vibe-chat>` Shadow DOM web component.
+- `playground.html` — four-tab SPA (Vibe Builder / Sandbox Chat / AI Workbench / Whisperer). Uses `vibe-sdk.js` as an ES module. Vibe Builder tab has Quick Sandbox and App Builder modes.
+- `vibe-sdk.js` — zero-dep browser SDK. Primary export: `AetherLiteClient` (with backwards-compat alias `VibeClient`). Classes: `AetherLiteClient`, `AiClient`, `SandboxClient`, `SandboxHandle`, `VibesClient`, `VibeBuilderResult` (alias: `VibeResult`), `AppBuilder`, `AppSession`, `AppHandle`. Registers `<aether-chat>` and `<vibe-chat>` Shadow DOM web components.
 - `vibe-sdk.d.ts` — TypeScript declarations for the SDK.
+
+SDK rename summary:
+| Old name | New name | Note |
+|----------|----------|------|
+| `VibeClient` | `AetherLiteClient` | `window.VibeClient` alias kept for one release |
+| `VibeResult` | `VibeBuilderResult` | `export const VibeResult` alias kept |
+| `<vibe-chat>` | `<aether-chat>` | Both elements registered; `VibeChatElement` is base class |
+| (new) | `AppBuilder` | Multi-file app generation client |
+| (new) | `AppSession` | WS-driven build session with fluent event handlers |
+| (new) | `AppHandle` | Handle to a completed build (file access, delete) |
 
 ### D1 database
 
