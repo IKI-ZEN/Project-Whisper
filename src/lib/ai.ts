@@ -1,5 +1,5 @@
 import type { Env } from '../types/env'
-import type { Message, SandboxConfig } from './schema'
+import type { Message, SandboxConfig, Tool } from './schema'
 import { sseEvent } from './http'
 import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS } from './constants'
 import { sha256 } from './utils'
@@ -55,6 +55,90 @@ function run(ai: Ai): AiRun {
   return (ai.run as unknown as AiRun).bind(ai)
 }
 
+// ── Tool call encoding (provider-agnostic wire format) ────────────────────────
+
+export interface ToolCall {
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+
+// Messages whose content starts with this prefix are tool results sent by the client
+const TOOL_RESULT_PREFIX = '__TOOL_RESULT__:'
+
+export function encodeToolResult(toolUseId: string, toolName: string, content: string): string {
+  return TOOL_RESULT_PREFIX + JSON.stringify({ toolUseId, toolName, content })
+}
+
+function decodeToolResult(s: string): { toolUseId: string; toolName: string; content: string } | null {
+  if (!s.startsWith(TOOL_RESULT_PREFIX)) return null
+  try { return JSON.parse(s.slice(TOOL_RESULT_PREFIX.length)) } catch { return null }
+}
+
+function encodeToolCalls(calls: ToolCall[]): string {
+  return JSON.stringify({ __tool_calls__: calls })
+}
+
+export function isToolCallReply(reply: string): boolean {
+  try { const o = JSON.parse(reply); return Array.isArray((o as Record<string, unknown>).__tool_calls__) } catch { return false }
+}
+
+export function decodeToolCalls(reply: string): ToolCall[] {
+  try {
+    const o = JSON.parse(reply) as { __tool_calls__?: ToolCall[] }
+    return Array.isArray(o.__tool_calls__) ? o.__tool_calls__ : []
+  } catch { return [] }
+}
+
+// ── Provider-specific tool converters ─────────────────────────────────────────
+
+function toAnthropicTool(t: Tool): Record<string, unknown> {
+  const required = Object.entries(t.parameters).filter(([, p]) => p.required).map(([k]) => k)
+  return {
+    name: t.name,
+    description: t.description,
+    input_schema: {
+      type: 'object',
+      properties: Object.fromEntries(
+        Object.entries(t.parameters).map(([k, p]) => [k, { type: p.type, description: p.description }]),
+      ),
+      required,
+    },
+  }
+}
+
+function toOpenAITool(t: Tool): Record<string, unknown> {
+  const required = Object.entries(t.parameters).filter(([, p]) => p.required).map(([k]) => k)
+  return {
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: {
+        type: 'object',
+        properties: Object.fromEntries(
+          Object.entries(t.parameters).map(([k, p]) => [k, { type: p.type, description: p.description }]),
+        ),
+        required,
+      },
+    },
+  }
+}
+
+function toGoogleFunctionDeclaration(t: Tool): Record<string, unknown> {
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: {
+      type: 'OBJECT',
+      properties: Object.fromEntries(
+        Object.entries(t.parameters).map(([k, p]) => [k, { type: p.type.toUpperCase(), description: p.description }]),
+      ),
+      required: Object.entries(t.parameters).filter(([, p]) => p.required).map(([k]) => k),
+    },
+  }
+}
+
 // ── Shared message builder ────────────────────────────────────────────────────
 
 export interface CompletionOpts {
@@ -64,8 +148,17 @@ export interface CompletionOpts {
   systemPrompt?: string
   temperature?: number
   maxTokens?: number
+  // Advanced features
+  tools?: Tool[]                              // tool definitions — wired to all providers
+  toolChoice?: 'auto' | 'required' | 'none'  // OpenAI/Anthropic tool_choice
+  responseFormat?: 'json' | 'text'           // 'json' → JSON mode (OpenAI / Workers AI)
+  thinking?: number                          // Anthropic: budget_tokens; >0 enables extended thinking
+  reasoningEffort?: 'low' | 'medium' | 'high' // OpenAI o-series reasoning effort
+  sandboxId?: string                         // passed as cf-aig-metadata for observability
+  groundingEnabled?: boolean                 // Google: enable google_search_retrieval
 }
 
+// Build plain text messages for streaming and Workers AI (no tool history support needed)
 function buildMessages(opts: CompletionOpts): { role: string; content: string }[] {
   const out: { role: string; content: string }[] = []
   if (opts.systemPrompt) out.push({ role: 'system', content: opts.systemPrompt })
@@ -77,10 +170,78 @@ function buildMessages(opts: CompletionOpts): { role: string; content: string }[
   return out
 }
 
+// Build Anthropic-format messages, converting tool call/result encoding in history
+function buildAnthropicMessages(opts: CompletionOpts): Array<Record<string, unknown>> {
+  const raw = buildMessages(opts)
+  const out: Array<Record<string, unknown>> = []
+  for (const m of raw) {
+    if (m.role === 'system') continue  // handled separately as top-level system field
+    const tr = decodeToolResult(m.content)
+    if (tr && m.role === 'user') {
+      // Convert tool result back to Anthropic tool_result content block
+      out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: tr.toolUseId, content: tr.content }] })
+      continue
+    }
+    if (isToolCallReply(m.content) && m.role === 'assistant') {
+      // Convert stored tool call back to Anthropic tool_use content blocks
+      const calls = decodeToolCalls(m.content)
+      out.push({ role: 'assistant', content: calls.map(c => ({ type: 'tool_use', id: c.id, name: c.name, input: c.input })) })
+      continue
+    }
+    out.push({ role: m.role, content: m.content })
+  }
+  return out
+}
+
+// Build OpenAI-format messages, converting tool call/result encoding in history
+function buildOpenAIMessages(opts: CompletionOpts): Array<Record<string, unknown>> {
+  const raw = buildMessages(opts)
+  const out: Array<Record<string, unknown>> = []
+  for (const m of raw) {
+    const tr = decodeToolResult(m.content)
+    if (tr && m.role === 'user') {
+      // OpenAI tool result goes as role: 'tool'
+      out.push({ role: 'tool', tool_call_id: tr.toolUseId, content: tr.content })
+      continue
+    }
+    if (isToolCallReply(m.content) && m.role === 'assistant') {
+      const calls = decodeToolCalls(m.content)
+      out.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: calls.map(c => ({
+          id: c.id, type: 'function',
+          function: { name: c.name, arguments: JSON.stringify(c.input) },
+        })),
+      })
+      continue
+    }
+    out.push({ role: m.role, content: m.content })
+  }
+  return out
+}
+
 // ── Provider completions (gateway) ────────────────────────────────────────────
 
 async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Promise<string> {
   const temp = opts.temperature ?? DEFAULT_TEMPERATURE
+  // o-series reasoning models use different params
+  const isReasoning = /^o[1-9]/.test(model)
+  const body: Record<string, unknown> = {
+    model,
+    messages: buildOpenAIMessages(opts),
+    ...(isReasoning
+      ? { max_completion_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}) }
+      : { temperature: temp, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS }
+    ),
+    ...(opts.responseFormat === 'json' && !isReasoning ? { response_format: { type: 'json_object' } } : {}),
+  }
+  if (opts.tools?.length) {
+    body.tools = opts.tools.map(toOpenAITool)
+    if (opts.toolChoice) body.tool_choice = opts.toolChoice
+  }
+  const metaHeaders: Record<string, string> = {}
+  if (opts.sandboxId) metaHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
   const res = await fetch(`${gatewayBase(env)}/openai/chat/completions`, {
     method: 'POST',
     headers: {
@@ -88,42 +249,76 @@ async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Pr
       'Authorization': `Bearer ${env.OPENAI_API_KEY ?? ''}`,
       'cf-aig-cache-ttl':  '3600',
       'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
+      ...metaHeaders,
     },
-    body: JSON.stringify({
-      model,
-      messages: buildMessages(opts),
-      temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
-      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`OpenAI gateway error ${res.status}: ${await res.text()}`)
-  const data = await res.json() as { choices: { message: { content: string } }[] }
-  return data.choices[0]?.message?.content ?? ''
+  type OAIResp = { choices: Array<{ finish_reason: string; message: { content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }> }
+  const data = await res.json() as OAIResp
+  const choice = data.choices[0]
+  if (choice?.message?.tool_calls?.length) {
+    return encodeToolCalls(choice.message.tool_calls.map(tc => ({
+      id: tc.id, name: tc.function.name,
+      input: (() => { try { return JSON.parse(tc.function.arguments) as Record<string, unknown> } catch { return {} } })(),
+    })))
+  }
+  return choice?.message?.content ?? ''
 }
 
 async function completeAnthropic(env: Env, model: string, opts: CompletionOpts): Promise<string> {
-  const messages = buildMessages(opts).filter(m => m.role !== 'system')
   const temp = opts.temperature ?? DEFAULT_TEMPERATURE
+  const messages = buildAnthropicMessages(opts)
+  // thinking mode requires temperature=1
+  const effectiveTemp = opts.thinking && opts.thinking > 0 ? 1 : temp
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    temperature: effectiveTemp,
+    // Prompt caching: wrap system prompt as a cacheable content block
+    ...(opts.systemPrompt
+      ? { system: [{ type: 'text', text: opts.systemPrompt, cache_control: { type: 'ephemeral' } }] }
+      : {}),
+    ...(opts.thinking && opts.thinking > 0
+      ? { thinking: { type: 'enabled', budget_tokens: opts.thinking } }
+      : {}),
+  }
+  if (opts.tools?.length) {
+    body.tools = opts.tools.map(toAnthropicTool)
+    if (opts.toolChoice) body.tool_choice = { type: opts.toolChoice }
+  }
+  const anthHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-api-key': env.ANTHROPIC_API_KEY ?? '',
+    'anthropic-version': '2023-06-01',
+    'anthropic-beta': 'prompt-caching-2024-07-31',
+    'cf-aig-cache-ttl':  temp === 0 ? '3600' : '300',
+    'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
+  }
+  if (opts.sandboxId) anthHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
   const res = await fetch(`${gatewayBase(env)}/anthropic/v1/messages`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': env.ANTHROPIC_API_KEY ?? '',
-      'anthropic-version': '2023-06-01',
-      'cf-aig-cache-ttl':  '3600',
-      'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
-      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-      temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
-    }),
+    headers: anthHeaders,
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`Anthropic gateway error ${res.status}: ${await res.text()}`)
-  const data = await res.json() as { content: { text: string }[] }
-  return data.content[0]?.text ?? ''
+  type AnthResp = {
+    content: Array<
+      | { type: 'text'; text: string }
+      | { type: 'thinking'; thinking: string }
+      | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+    >
+  }
+  const data = await res.json() as AnthResp
+  const toolCalls = data.content
+    .filter(c => c.type === 'tool_use')
+    .map(c => { const tc = c as { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }; return { id: tc.id, name: tc.name, input: tc.input } })
+  if (toolCalls.length) return encodeToolCalls(toolCalls)
+
+  const thinking = data.content.filter(c => c.type === 'thinking').map(c => (c as { type: 'thinking'; thinking: string }).thinking).join('')
+  const text     = data.content.filter(c => c.type === 'text').map(c => (c as { type: 'text'; text: string }).text).join('')
+  return thinking ? `<thinking>\n${thinking}\n</thinking>\n\n${text}` : text
 }
 
 async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Promise<string> {
@@ -132,27 +327,42 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
   const contents = allMessages
     .filter(m => m.role !== 'system')
     .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+  const temp = opts.temperature ?? DEFAULT_TEMPERATURE
   const body: Record<string, unknown> = {
     contents,
-    generationConfig: { temperature: opts.temperature ?? DEFAULT_TEMPERATURE, maxOutputTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS },
+    generationConfig: {
+      temperature: temp,
+      maxOutputTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      ...(opts.responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}),
+    },
     ...(system ? { systemInstruction: { parts: [{ text: system.content }] } } : {}),
+    ...(opts.groundingEnabled ? { tools: [{ googleSearch: {} }] } : opts.tools?.length
+      ? { tools: [{ functionDeclarations: opts.tools.map(toGoogleFunctionDeclaration) }] }
+      : {}),
   }
-  const temp = opts.temperature ?? DEFAULT_TEMPERATURE
+  const googleHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'cf-aig-cache-ttl':  '3600',
+    'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
+  }
+  if (opts.sandboxId) googleHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
   const res = await fetch(
     `${gatewayBase(env)}/google-ai-studio/v1/models/${model}:generateContent?key=${env.GOOGLE_AI_KEY ?? ''}`,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'cf-aig-cache-ttl':  '3600',
-        'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
-      },
+      headers: googleHeaders,
       body: JSON.stringify(body),
     },
   )
   if (!res.ok) throw new Error(`Google gateway error ${res.status}: ${await res.text()}`)
-  const data = await res.json() as { candidates: { content: { parts: { text: string }[] } }[] }
-  return data.candidates[0]?.content?.parts[0]?.text ?? ''
+  type GoogleResp = { candidates: Array<{ content: { parts: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> } }> } }> }
+  const data = await res.json() as GoogleResp
+  const parts = data.candidates[0]?.content?.parts ?? []
+  const funcCalls = parts.filter(p => p.functionCall).map((p, i) => ({
+    id: `gcall_${i}`, name: p.functionCall!.name, input: p.functionCall!.args,
+  }))
+  if (funcCalls.length) return encodeToolCalls(funcCalls)
+  return parts.filter(p => p.text).map(p => p.text).join('') ?? ''
 }
 
 // ── SSE streaming helpers ─────────────────────────────────────────────────────
@@ -269,9 +479,37 @@ export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<
     messages: buildMessages(opts),
     temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
     max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
   })
   const r = response as { response?: string }
   return r.response ?? String(response)
+}
+
+// ── Extended thinking ─────────────────────────────────────────────────────────
+
+export interface ThinkResult {
+  thinking: string
+  response: string
+  latencyMs: number
+}
+
+export async function think(ai: Ai, env: Env, opts: CompletionOpts & { budgetTokens?: number }): Promise<ThinkResult> {
+  const t0 = Date.now()
+  const gw = parseGateway(opts.model ?? '')
+  let raw: string
+  if (gw?.provider === 'anthropic') {
+    raw = await completeAnthropic(env, gw.id, { ...opts, thinking: opts.budgetTokens ?? 8000, temperature: 1 })
+  } else {
+    // Fallback: prompt the model to think step-by-step and wrap its thinking in XML
+    raw = await complete(ai, env, {
+      ...opts,
+      systemPrompt: `${opts.systemPrompt ? opts.systemPrompt + '\n\n' : ''}Before answering, reason through your thinking in <thinking>...</thinking> tags, then provide your final answer.`,
+    })
+  }
+  const thinkMatch = raw.match(/<thinking>([\s\S]*?)<\/thinking>/s)
+  const thinking = thinkMatch?.[1]?.trim() ?? ''
+  const response = raw.replace(/<thinking>[\s\S]*?<\/thinking>\n?\n?/s, '').trim()
+  return { thinking, response, latencyMs: Date.now() - t0 }
 }
 
 // ── Public streaming completion ───────────────────────────────────────────────
@@ -379,6 +617,8 @@ export async function runInSandbox(ai: Ai, env: Env, config: SandboxConfig, user
     ],
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+    tools: config.tools?.length ? config.tools : undefined,
+    sandboxId: config.id,
   })
 }
 
@@ -392,6 +632,8 @@ export function streamInSandbox(ai: Ai, env: Env, config: SandboxConfig, userMes
     ],
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+    sandboxId: config.id,
+    // tools intentionally omitted from streaming — use /run for tool calls
   })
 }
 
@@ -669,7 +911,7 @@ export interface VibeConfig {
   name: string
   description: string
   systemPrompt: string
-  tools: []
+  tools: Tool[]
   model: string
   temperature: number
   maxTokens: number
@@ -698,11 +940,13 @@ The JSON must have exactly these fields:
   "name": "<string, max 128 chars, descriptive app name>",
   "description": "<string, max 512 chars, what this app does>",
   "systemPrompt": "<string, detailed system instructions that make the AI excellent at the task>",
-  "tools": [],
+  "tools": [<optional array — define tools ONLY if the app description implies the AI needs to call external functions. Each tool: { "name": "snake_case_name", "description": "what this tool does", "parameters": { "param_name": { "type": "string|number|boolean", "description": "...", "required": true|false } } }>],
   "model": "<choose the most appropriate model from the options below>",
   "temperature": <number 0-2: 0.2 for factual, 0.7 for balanced, 1.2 for creative>,
   "maxTokens": <integer 256-4096>
 }
+
+Tool guidelines: define tools ONLY when the description explicitly requires calling external APIs or services (e.g. "check the weather", "search the web", "look up prices"). For knowledge-based or conversational apps, tools should be an empty array [].
 
 Available models:
 ${modelOptions}
@@ -724,11 +968,31 @@ User description: "${description}"`
 
   const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
 
+  // Parse tools defensively — invalid entries are silently dropped
+  const rawTools = Array.isArray(parsed.tools) ? parsed.tools : []
+  const tools: Tool[] = rawTools.flatMap((t: unknown) => {
+    try {
+      if (typeof t !== 'object' || t === null) return []
+      const tt = t as Record<string, unknown>
+      const tname = typeof tt.name === 'string' ? tt.name : ''
+      if (!tname || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tname)) return []
+      const rawParams = typeof tt.parameters === 'object' && tt.parameters !== null ? tt.parameters as Record<string, unknown> : {}
+      const parameters: Record<string, { type: 'string' | 'number' | 'boolean' | 'array' | 'object'; description: string; required?: boolean }> = {}
+      for (const [k, p] of Object.entries(rawParams)) {
+        if (typeof p !== 'object' || p === null) continue
+        const pp = p as Record<string, unknown>
+        const ptype = typeof pp.type === 'string' ? pp.type : 'string'
+        parameters[k] = { type: ptype as 'string', description: typeof pp.description === 'string' ? pp.description : k, required: pp.required === true }
+      }
+      return [{ name: tname, description: typeof tt.description === 'string' ? tt.description : tname, parameters }]
+    } catch { return [] }
+  })
+
   return {
     name:         typeof parsed.name === 'string'         ? parsed.name         : name ?? 'Untitled App',
     description:  typeof parsed.description === 'string'  ? parsed.description  : description.slice(0, 256),
     systemPrompt: typeof parsed.systemPrompt === 'string' ? parsed.systemPrompt : 'You are a helpful assistant.',
-    tools:        [],
+    tools,
     model:        typeof parsed.model === 'string'        ? parsed.model        : MODELS.text,
     temperature:  typeof parsed.temperature === 'number'  ? parsed.temperature  : DEFAULT_TEMPERATURE,
     maxTokens:    typeof parsed.maxTokens === 'number'    ? parsed.maxTokens    : DEFAULT_MAX_TOKENS,

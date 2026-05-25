@@ -269,6 +269,48 @@ export class AiClient {
       await apiRequest(this._base, '/api/ai/pipeline', 'POST', { input, nodes, entryId, ...opts })
     )
   }
+
+  /**
+   * Extended thinking — generate a response with an explicit reasoning trace.
+   * Uses Anthropic extended thinking for `anthropic:*` models; falls back to XML reasoning prompt.
+   * @param {string} prompt
+   * @param {{ model?: string, systemPrompt?: string, maxTokens?: number, budgetTokens?: number }} [opts]
+   * @returns {Promise<{ thinking: string, response: string, latencyMs: number }>}
+   */
+  async think(prompt, opts = {}) {
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/think', 'POST', { prompt, ...opts })
+    )
+  }
+
+  /**
+   * Check if a reply from run() is a tool call rather than plain text.
+   * @param {string} reply
+   * @returns {boolean}
+   */
+  static isToolCall(reply) {
+    try { const o = JSON.parse(reply); return Array.isArray(o?.__tool_calls__) } catch { return false }
+  }
+
+  /**
+   * Parse tool calls from a run() reply.
+   * @param {string} reply
+   * @returns {Array<{ id: string, name: string, input: object }>}
+   */
+  static parseToolCalls(reply) {
+    try { const o = JSON.parse(reply); return Array.isArray(o?.__tool_calls__) ? o.__tool_calls__ : [] } catch { return [] }
+  }
+
+  /**
+   * Encode a tool result to send back to the sandbox via run().
+   * @param {string} toolUseId - The id from the tool call
+   * @param {string} toolName - The name from the tool call
+   * @param {string} content - Result of your tool execution
+   * @returns {string}
+   */
+  static encodeToolResult(toolUseId, toolName, content) {
+    return '__TOOL_RESULT__:' + JSON.stringify({ toolUseId, toolName, content })
+  }
 }
 
 // ── SandboxHandle ─────────────────────────────────────────────────────────────
@@ -287,11 +329,12 @@ export class SandboxHandle {
   /** @type {boolean} */ tampered
   /** @type {'strict'|'audit'|'off'} */ guardMode
   /** @type {boolean} */ ragEnabled
+  /** @type {object[]} */ tools
   /** @type {string} */ #base
 
   /**
    * @param {string} base
-   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean, guardMode?: 'strict'|'audit'|'off', ragEnabled?: boolean }} meta
+   * @param {{ id: string, name: string, description?: string, model?: string, systemPrompt?: string, temperature?: number, maxTokens?: number, appUrl?: string, shortLink?: string, integrityHash?: string, tampered?: boolean, guardMode?: 'strict'|'audit'|'off', ragEnabled?: boolean, tools?: object[] }} meta
    */
   constructor(base, meta) {
     this.#base         = base
@@ -308,6 +351,7 @@ export class SandboxHandle {
     this.tampered      = meta.tampered      ?? false
     this.guardMode     = meta.guardMode     ?? 'strict'
     this.ragEnabled    = meta.ragEnabled    ?? false
+    this.tools         = meta.tools         ?? []
   }
 
   /**

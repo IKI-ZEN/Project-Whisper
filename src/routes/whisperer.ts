@@ -3,11 +3,11 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
-  parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest,
+  parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
-  generatePromptVariants, runCoTProbe, estimateEntropy, reverseEngineerPrompts,
+  generatePromptVariants, runCoTProbe, estimateEntropy, reverseEngineerPrompts, think,
 } from '../lib/ai'
 import { executePipeline } from '../lib/pipeline'
 
@@ -111,7 +111,20 @@ const pipeline: Handler = async (req: Request, env: Env) => {
   }
 }
 
+const thinkHandler: Handler = async (req: Request, env: Env) => {
+  const p = await parseBody(req, parseThinkRequest)
+  if (!p.ok) return p.response
+  const { prompt, model, systemPrompt, maxTokens, budgetTokens } = p.data
+  try {
+    const result = await think(env.AI, env, { prompt, model, systemPrompt, maxTokens, budgetTokens })
+    return json(ok(result))
+  } catch (e) {
+    return json(err('Extended thinking failed', String(e)), 500)
+  }
+}
+
 export const whispererRoutes: Array<[string, string, Handler]> = [
+  ['POST', '/api/ai/think',       thinkHandler],
   ['POST', '/api/ai/sensitivity', sensitivity],
   ['POST', '/api/ai/cluster',     cluster],
   ['POST', '/api/ai/cot',         cot],
