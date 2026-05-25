@@ -36,9 +36,28 @@ Request → src/index.ts (Worker entry)
                  └→ AppBuilderDO          src/durable/AppBuilderDO.ts
 ```
 
-**AI routes** (`/api/ai/*`): complete, stream, embed, image, transcribe, compare, sweep
+**AI routes** (`/api/ai/*`): `src/routes/ai.ts` (core) + `src/routes/whisperer.ts` (analysis suite)
 
-**Sandbox routes** (`/api/sandbox/*`): list, create, import, get (+ TTL refresh), patch, run, stream, history, export, fingerprint, delete
+| Route | Handler file | Purpose |
+|-------|-------------|---------|
+| `POST /api/ai/complete` | ai.ts | Blocking text completion |
+| `POST /api/ai/stream` | ai.ts | SSE token stream |
+| `POST /api/ai/embed` | ai.ts | Vector embeddings |
+| `POST /api/ai/image` | ai.ts | Image generation |
+| `POST /api/ai/transcribe` | ai.ts | Audio transcription |
+| `POST /api/ai/compare` | ai.ts | Multi-model parallel comparison |
+| `POST /api/ai/sweep` | ai.ts | Temperature gradient sampling |
+| `POST /api/ai/sensitivity` | whisperer.ts | Prompt variant variance analysis |
+| `POST /api/ai/cluster` | whisperer.ts | K-means semantic clustering |
+| `POST /api/ai/cot` | whisperer.ts | Chain-of-thought probing (4 styles) |
+| `POST /api/ai/entropy` | whisperer.ts | Attractor stability / response diversity |
+| `POST /api/ai/archaeology` | whisperer.ts | Reverse-engineer candidate system prompts |
+| `POST /api/ai/pipeline` | whisperer.ts | Declarative node-graph executor |
+| `POST /api/ai/think` | whisperer.ts | Extended thinking with reasoning trace |
+
+**Sandbox routes** (`/api/sandbox/*`): list, create, import, get (+ TTL refresh), patch, run, stream, history, export, fingerprint, metrics, delete
+
+**Document routes** (`/api/sandbox/:id/documents`): upload (POST multipart), list (GET), delete (DELETE). See [Documents / RAG](#documents--rag) section.
 
 **Build routes** (`/api/v2/build/*`): create (POST), status (GET), file list (GET), file content (GET), delete (DELETE). WebSocket at `/api/v2/build/:id/ws` — bypasses router, dispatched directly to `AppBuilderDO`.
 
@@ -74,6 +93,58 @@ MAX_FILE_BYTES            = 102_400  (100 KB per file)
 ```
 
 CSP for served built apps (`BUILD_CSP` in `pages.ts`): permissive — allows `unsafe-inline`, `unsafe-eval`, and CDN origins (`esm.sh`, `unpkg.com`, `cdn.jsdelivr.net`) because AI-generated apps use CDN ESM and inline scripts.
+
+### Documents / RAG
+
+Document upload is handled by `src/routes/documents.ts`. Files are stored in R2 and indexed into Vectorize for retrieval-augmented generation:
+
+```
+POST   /api/sandbox/:id/documents          multipart upload (10 MB max)
+GET    /api/sandbox/:id/documents          list with metadata
+DELETE /api/sandbox/:id/documents/:docId   delete + best-effort vector cleanup
+```
+
+R2 key: `sandboxes/{sandboxId}/documents/{docId}`
+
+Upload pipeline:
+1. Guard scan on extractable text (blocks adversarial content before storage)
+2. R2 `.put()` with `status: 'processing'` in custom metadata
+3. Enqueue `file_process` job → `src/jobs/fileProcess.ts`
+4. Background: `processFile()` chunks text (512-char, 64-char overlap) → `embed()` in batches of 100 → `env.VECTORS.upsert()`
+5. R2 metadata updated to `status: 'indexed'`
+
+Supported MIME types: `text/plain`, `text/markdown`, `text/csv`, `text/html`, `application/json`, `application/pdf`, `application/x-markdown`
+
+When `ragEnabled: true` on a sandbox, relevant document chunks are injected into the system prompt at inference time.
+
+### Session-based memory
+
+All sandbox inference endpoints accept an optional `sessionId` parameter:
+
+```
+POST /api/sandbox/:id/run?sessionId=alice
+POST /api/sandbox/:id/stream?sessionId=bob
+GET  /api/sandbox/:id/history?sessionId=alice
+WS   /api/sandbox/:id/ws?sessionId=alice
+```
+
+Each session maintains an independent `Message[]` array in DO storage at key `session:{sessionId}`. Omitting `sessionId` defaults to the `'default'` shared thread. Constants: `MAX_SESSION_ID_LEN = 64`, `MAX_SESSIONS_PER_SANDBOX = 100`.
+
+### SandboxDO WebSocket protocol
+
+Connect to `GET /api/sandbox/:id/ws` (Upgrade: websocket). Bidirectional — supports tool call round-trips:
+
+```
+Client → Server:  plain UTF-8 message text
+Server → Client:  token string (streaming)
+                  JSON { type: 'tool_call', calls: [{ id, name, input }] }
+                  JSON { type: 'done', reply: '...' }
+                  JSON { type: 'error', message: '...' }
+Client → Server:  AiClient.encodeToolResult(toolUseId, toolName, content)
+                  (to submit tool results back for the next model turn)
+```
+
+`SandboxConnection` in `vibe-sdk.js` wraps this protocol with `onToken()`, `onToolCall()`, `onDone()`, `onError()` event handlers and a `submitToolResults()` helper.
 
 ### Durable Object pattern
 
@@ -126,14 +197,17 @@ await env.SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${id}`, id, {
 
 ### Schema & validation (`src/lib/schema.ts`)
 
-All request parsing happens here. Parser functions throw `Error` with a human-readable message on invalid input; `parseBody` converts these to 422 responses. Constants for all defaults and limits live in `src/lib/constants.ts`:
+All request parsing happens here. Parser functions throw `Error` with a human-readable message on invalid input; `parseBody` converts these to 422 responses. Every JSON-body route handler uses `parseBody(req, parseFoo)` — never raw `req.json()`. Constants for all defaults and limits live in `src/lib/constants.ts`:
 
 ```
 MAX_NAME_LEN = 128          MAX_DESCRIPTION_LEN = 512      MAX_SYSTEM_PROMPT_LEN = 16_384
 MAX_VIBE_DESCRIPTION = 5000 MAX_EMBED_CHARS = 100_000      MAX_REQUEST_BODY = 1_048_576
 MAX_AUDIO_BYTES = 26_214_400
 RATE_LIMIT_WINDOW_MS = 60_000    RATE_LIMIT_MAX_REQUESTS = 20
+MAX_BUILD_DESCRIPTION_LEN = 2000  MAX_BUILD_FILES = 6  MAX_FILE_BYTES = 102_400
 ```
+
+Key parsers: `parseCompleteRequest`, `parseCreateSandboxRequest`, `parseBuildRequest`, `parseVibeRequest`, `parseSensitivityRequest`, `parseClusterRequest`, `parseCotRequest`, `parseEntropyRequest`, `parseArchaeologyRequest`, `parsePipelineRequest`, `parseThinkRequest`.
 
 ### Security subsystem
 
@@ -189,9 +263,11 @@ SDK rename summary:
 
 ### D1 database
 
-Used for audit logging (`sandbox_events`) and usage metrics (`usage_metrics`). Schema in `migrations/0001_init.sql`. R2, Queues, and Vectorize bindings are declared but not yet implemented.
+Used for audit logging (`sandbox_events`) and usage metrics (`usage_metrics`). Schema in `migrations/0001_init.sql`.
 
 Event types logged to `sandbox_events`: `guard_flag` (suspicious/blocked scan hit), `response_flag` (outbound jailbreak detection), `sandbox_deleted`, `vibe_created`.
+
+`GET /api/sandbox/:id/metrics` returns aggregated usage: `{ totalRuns, totalTokensIn, totalTokensOut, avgLatencyMs, modelBreakdown[] }` from the `usage_metrics` table.
 
 ## One-time Cloudflare setup
 
@@ -217,6 +293,7 @@ SIGNING_SECRET=...          # optional — HMAC-SHA256 key for export signing
                             # generate: openssl rand -hex 32
 ALLOWED_ORIGINS=...         # optional — comma-separated allowed CORS origins
                             # omit or set to '' for wildcard '*' (default)
+ENVIRONMENT=development     # set by wrangler.toml; 'production' in deployed builds
 ```
 
 See `.dev.vars.example` for the full annotated list.

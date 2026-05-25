@@ -1,6 +1,7 @@
 import type { Env } from '../types/env'
 import type { Message } from '../lib/schema'
 import { completeStream, MODELS } from '../lib/ai'
+import { json, ok, err } from '../lib/http'
 import { MAX_BUILD_DESCRIPTION_LEN, MAX_BUILD_FILES, MAX_FILE_BYTES } from '../lib/constants'
 
 // ── Build types ───────────────────────────────────────────────────────────────
@@ -109,15 +110,7 @@ export class AppBuilderDO {
     if (req.method === 'GET'    && pathname === '/files')            return this.handleFileList()
     if (req.method === 'GET'    && pathname.startsWith('/files/'))   return this.handleFile(decodeURIComponent(pathname.slice(7)))
     if (req.method === 'DELETE' && pathname === '/')                 return this.handleDelete()
-    return new Response(JSON.stringify({ ok: false, error: 'Not found' }), {
-      status: 404, headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  private ok(data: unknown): Response {
-    return new Response(JSON.stringify({ ok: true, data }), {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return json(err('Not found'), 404)
   }
 
   private async handleInit(req: Request): Promise<Response> {
@@ -135,25 +128,19 @@ export class AppBuilderDO {
       createdAt:   Date.now(),
     }
     await this.state.storage.put('state', state)
-    return this.ok({ buildId: state.id, status: state.status })
+    return json(ok({ buildId: state.id, status: state.status }))
   }
 
   private async handleStatus(): Promise<Response> {
     const state = await this.state.storage.get<BuildState>('state')
-    if (!state) return new Response(
-      JSON.stringify({ ok: false, error: 'Not found' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
-    return this.ok(state)
+    if (!state) return json(err('Not found'), 404)
+    return json(ok(state))
   }
 
   private async handleFileList(): Promise<Response> {
     const state = await this.state.storage.get<BuildState>('state')
-    if (!state) return new Response(
-      JSON.stringify({ ok: false, error: 'Not found' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } },
-    )
-    return this.ok({ files: state.files, total: state.files.length })
+    if (!state) return json(err('Not found'), 404)
+    return json(ok({ files: state.files, total: state.files.length }))
   }
 
   private async handleFile(filename: string): Promise<Response> {
@@ -170,7 +157,7 @@ export class AppBuilderDO {
       await Promise.all(state.files.map(f => this.env.FILES.delete(`apps/${state.id}/${f}`)))
     }
     await this.state.storage.deleteAll()
-    return this.ok({ deleted: true })
+    return json(ok({ deleted: true }))
   }
 
   private async handleWebSocket(req: Request): Promise<Response> {

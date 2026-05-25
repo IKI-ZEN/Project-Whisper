@@ -3,7 +3,7 @@ import {
   MAX_NAME_LEN, MAX_DESCRIPTION_LEN, MAX_SYSTEM_PROMPT_LEN, MAX_VIBE_DESCRIPTION,
   MAX_SENSITIVITY_VARIANTS, MAX_ENTROPY_SAMPLES, MAX_ARCHAEOLOGY_CANDIDATES,
   MAX_CLUSTER_TEXTS, MAX_PIPELINE_NODES, MAX_PIPELINE_DEPTH,
-  MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN,
+  MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN, MAX_BUILD_DESCRIPTION_LEN,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -488,4 +488,27 @@ export function parseVibeRequest(body: unknown): VibeRequest {
     description,
     name: body.name !== undefined ? str(body.name, 'name') : undefined,
   }
+}
+
+// ── App Builder ───────────────────────────────────────────────────────────────
+
+export interface BuildRequest {
+  description: string
+  name?:       string
+  sandboxId?:  string
+  model?:      string
+}
+
+export function parseBuildRequest(body: unknown): BuildRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const description = str(body.description, 'description')
+  if (!description.trim())                           throw new Error('description must not be empty')
+  if (description.length > MAX_BUILD_DESCRIPTION_LEN) throw new Error(`description must be <= ${MAX_BUILD_DESCRIPTION_LEN} characters`)
+  const name      = body.name      !== undefined ? str(body.name,      'name')      : undefined
+  const sandboxId = body.sandboxId !== undefined ? str(body.sandboxId, 'sandboxId') : undefined
+  const model     = body.model     !== undefined ? str(body.model,     'model')     : undefined
+  if (name      && name.length      > MAX_NAME_LEN) throw new Error(`name must be <= ${MAX_NAME_LEN} characters`)
+  if (sandboxId && sandboxId.length > 64)           throw new Error('sandboxId must be <= 64 characters')
+  if (model     && model.length     > 128)          throw new Error('model must be <= 128 characters')
+  return { description: description.trim(), name, sandboxId, model }
 }

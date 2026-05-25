@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err } from '../lib/http'
-import { MAX_BUILD_DESCRIPTION_LEN, MAX_NAME_LEN } from '../lib/constants'
+import { json, ok, err, parseBody } from '../lib/http'
+import { parseBuildRequest } from '../lib/schema'
 
 // ── DO stub helpers ───────────────────────────────────────────────────────────
 
@@ -21,17 +21,9 @@ function doBuild(stub: DurableObjectStub, path: string, method = 'GET', body?: u
 
 // POST /api/v2/build
 export const createBuildHandler: Handler = async (req, env) => {
-  let body: { description?: unknown; name?: unknown; sandboxId?: unknown; model?: unknown }
-  try { body = await req.json() } catch { return json(err('Invalid JSON body'), 400) }
-
-  if (typeof body.description !== 'string' || !body.description.trim()) {
-    return json(err('description is required'), 422)
-  }
-
-  const description = body.description.trim().slice(0, MAX_BUILD_DESCRIPTION_LEN)
-  const name      = typeof body.name      === 'string' ? body.name.slice(0, MAX_NAME_LEN) : undefined
-  const sandboxId = typeof body.sandboxId === 'string' ? body.sandboxId : undefined
-  const model     = typeof body.model     === 'string' ? body.model     : undefined
+  const parsed = await parseBody(req, parseBuildRequest)
+  if (!parsed.ok) return parsed.response
+  const { description, name, sandboxId, model } = parsed.data
 
   const id   = crypto.randomUUID()
   const stub = buildStub(env, id)
