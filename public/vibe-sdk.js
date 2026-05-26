@@ -767,6 +767,9 @@ export class AppHandle {
   /** URL where the generated app is served. */
   get appUrl() { return `/build/${this.id}` }
 
+  /** URL of the SVG metadata thumbnail for this build. */
+  get thumbnailUrl() { return `${this.#base}/api/v2/build/${this.id}/thumbnail` }
+
   /**
    * Fetch the content of a generated file.
    * @param {string} filename
@@ -934,6 +937,15 @@ export class AppBuilder {
    */
   session(description, opts = {}) {
     return new AppSession(this._base, description, opts)
+  }
+
+  /**
+   * List all builds.
+   * @returns {Promise<Array<{ id: string, name: string, description: string, model: string, createdAt: number }>>}
+   */
+  async list() {
+    const data = await apiRequest(this._base, '/api/v2/build', 'GET')
+    return /** @type {any} */ (data).builds ?? []
   }
 
   /**

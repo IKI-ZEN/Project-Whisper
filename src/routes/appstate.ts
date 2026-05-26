@@ -6,6 +6,7 @@ import { doFetch } from './sandbox'
 import { newId } from '../lib/utils'
 import {
   IMAGE_MAX_BYTES, ALLOWED_IMAGE_TYPES,
+  IMAGE_RATE_LIMIT_WINDOW_MS, IMAGE_RATE_LIMIT_MAX,
   EMAIL_RATE_LIMIT_WINDOW_MS, EMAIL_RATE_LIMIT_MAX,
 } from '../lib/constants'
 
@@ -66,6 +67,9 @@ export const uploadImageHandler: Handler = async (req, env, params) => {
 
   let form: FormData
   try { form = await req.formData() } catch { return json(err('Expected multipart/form-data'), 400) }
+
+  const rl = await checkRateLimit(`rl:image:${id}`, IMAGE_RATE_LIMIT_MAX, IMAGE_RATE_LIMIT_WINDOW_MS, env, 'Image upload rate limit exceeded — max 20 per minute per app.')
+  if (rl) return rl
 
   const file = form.get('file') as File | null
   if (!file) return json(err('Missing file field'), 422)

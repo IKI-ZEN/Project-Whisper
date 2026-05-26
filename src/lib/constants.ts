@@ -74,3 +74,11 @@ export const APP_STATE_KEY_RE            = /^[a-zA-Z0-9._\-/]+$/
 
 // PDF decompression size guard (Z9)
 export const MAX_PDF_INFLATED            = 50 * 1024 * 1024  // 50 MB
+
+// App image upload rate limit (E4)
+export const IMAGE_RATE_LIMIT_WINDOW_MS  = 60_000
+export const IMAGE_RATE_LIMIT_MAX        = 20  // 20 uploads/min per app
+
+// Build list (KV index mirrors sandbox pattern)
+export const BUILD_KEY_PREFIX            = 'build:'
+export const BUILD_TTL                   = 604800  // 7 days
