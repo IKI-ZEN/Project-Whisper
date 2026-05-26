@@ -78,7 +78,7 @@ footer a:hover{color:var(--accent2)}
   <textarea id="user-input" placeholder="Type a message… (Enter to send)" rows="2" disabled aria-label="Message input (Enter to send, Shift+Enter for new line)"></textarea>
   <button id="send-btn" disabled aria-label="Send message">Send</button>
 </div>
-<footer>Powered by <a href="/playground.html">Aether-Lite</a></footer>
+<footer>Powered by <a href="/">Aether-Lite</a></footer>
 
 <div id="embed-panel" class="embed-panel" onclick="if(event.target===this)closeEmbed()" role="presentation">
   <div class="embed-box" role="dialog" aria-modal="true" aria-labelledby="embed-title">
@@ -265,12 +265,12 @@ function appsGalleryHtml(nonce: string): string { return `<!DOCTYPE html>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
-header{display:flex;align-items:center;gap:12px;padding:0 24px;height:54px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
-header h1{font-size:15px;font-weight:600;color:var(--accent2)}
-.pill{font-size:10px;padding:2px 8px;border-radius:99px;background:#7c3aed22;color:var(--accent2)}
-header a{margin-left:auto;text-decoration:none}
-header button{padding:6px 14px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer}
-header button:hover{background:#6d28d9}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;flex-shrink:0}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;margin-right:8px;letter-spacing:.02em}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
+.navlink:hover{color:var(--text)}
+.navlink.active{background:var(--accent);color:#fff}
+.newapp{margin-left:auto}
 main{max-width:1100px;margin:0 auto;padding:32px 24px}
 h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .sub{color:var(--muted);font-size:13px;margin-bottom:28px}
@@ -300,11 +300,14 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 </style>
 </head>
 <body>
-<header>
-  <h1>Aether-Lite</h1>
-  <span class="pill">Apps</span>
-  <a href="/playground.html"><button>+ New App</button></a>
-</header>
+<nav class="topnav" role="navigation" aria-label="Main">
+  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="navlink">Chat</a>
+  <a href="/vibe.html" class="navlink">Vibe</a>
+  <a href="/apps" class="navlink active" aria-current="page">Apps</a>
+  <a href="/tools.html" class="navlink">Tools</a>
+  <a href="/vibe.html" class="navlink newapp">+ New App</a>
+</nav>
 <main>
   <h2>Your Apps</h2>
   <p class="sub">AI-powered apps built with the Vibe Builder or API. Click any card to open the app.</p>
@@ -318,7 +321,7 @@ async function load() {
     const r = await fetch('/api/sandbox')
     const d = await r.json()
     if (!d.ok || !d.data.apps.length) {
-      grid.innerHTML = '<div class="empty"><h3>No apps yet</h3><p>Build your first AI app with the Vibe Builder.</p><a href="/playground.html" class="empty-cta">Open Playground →</a></div>'
+      grid.innerHTML = '<div class="empty"><h3>No apps yet</h3><p>Build your first AI app with the Vibe Builder.</p><a href="/vibe.html" class="empty-cta">Open Vibe Builder →</a></div>'
       return
     }
     grid.innerHTML = ''
@@ -407,121 +410,329 @@ export const appsGalleryRoute: Handler = (_req, _env) => {
   return Promise.resolve(new Response(appsGalleryHtml(nonce), { headers: htmlHeaders(nonce) }))
 }
 
-// ── Landing page ──────────────────────────────────────────────────────────────
+// ── Chat page (root) ──────────────────────────────────────────────────────────
 
-const landingHtml = `<!DOCTYPE html>
+function chatPageHtml(nonce: string): string { return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Project Aether-Lite</title>
+<title>Aether-Lite — Chat</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--green:#34d399;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column}
-header{display:flex;align-items:center;gap:10px;padding:0 32px;height:54px;background:var(--surface);border-bottom:1px solid var(--border)}
-header h1{font-size:15px;font-weight:600;color:var(--accent2)}
-.pill{font-size:10px;padding:2px 8px;border-radius:99px;background:#7c3aed22;color:var(--accent2)}
-header nav{margin-left:auto;display:flex;gap:8px}
-header nav a{font-size:12px;color:var(--muted);text-decoration:none;padding:5px 12px;border-radius:var(--radius);border:1px solid transparent;transition:all .15s}
-header nav a:hover{border-color:var(--border);color:var(--text)}
-header nav a.cta{background:var(--accent);color:#fff;border-color:var(--accent)}
-header nav a.cta:hover{background:#6d28d9;border-color:#6d28d9}
-main{flex:1;max-width:960px;margin:0 auto;padding:72px 24px 48px;width:100%}
-.hero{text-align:center;margin-bottom:64px}
-.hero h2{font-size:42px;font-weight:800;line-height:1.15;letter-spacing:-0.02em;background:linear-gradient(135deg,var(--accent2) 0%,#c4b5fd 50%,var(--accent2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:16px}
-.hero p{font-size:17px;color:var(--muted);max-width:520px;margin:0 auto 32px;line-height:1.6}
-.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-.btn{display:inline-block;padding:11px 28px;border-radius:var(--radius);font-size:14px;font-weight:600;text-decoration:none;transition:all .15s;cursor:pointer;border:none}
-.btn-primary{background:var(--accent);color:#fff}
-.btn-primary:hover{background:#6d28d9}
-.btn-outline{background:none;border:1px solid var(--border);color:var(--text)}
-.btn-outline:hover{border-color:var(--accent2);color:var(--accent2)}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-bottom:56px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:10px}
-.card-icon{font-size:24px;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#7c3aed18;flex-shrink:0}
-.card h3{font-size:14px;font-weight:600}
-.card p{font-size:12px;color:var(--muted);line-height:1.55;flex:1}
-.code-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text);overflow-x:auto;margin-bottom:56px}
-.code-block .c{color:var(--muted)}
-.code-block .s{color:#86efac}
-.code-block .k{color:var(--accent2)}
-.section-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:16px}
-footer{text-align:center;padding:24px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
-footer a{color:var(--muted);text-decoration:none}
-footer a:hover{color:var(--accent2)}
+:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;margin-right:8px;letter-spacing:.02em}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
+.navlink:hover{color:var(--text)}
+.navlink.active{background:var(--accent);color:#fff}
+.layout{display:flex;flex:1;overflow:hidden}
+.sidebar{width:240px;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;flex-shrink:0}
+.sidebar-top{padding:12px}
+.new-thread-btn{width:100%;padding:8px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s}
+.new-thread-btn:hover{background:#6d28d9}
+.thread-list{flex:1;overflow-y:auto;padding:4px 8px}
+.thread-item{padding:8px 10px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--muted);transition:background .1s,color .1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:1px 0;user-select:none}
+.thread-item:hover{background:var(--surface);color:var(--text)}
+.thread-item.active{background:#7c3aed22;color:var(--accent2)}
+.config-section{padding:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.cfg-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.cfg-select{width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:11px;outline:none;cursor:pointer}
+.cfg-select:focus{border-color:var(--accent)}
+.slider-row{display:flex;align-items:center;gap:8px}
+.cfg-slider{flex:1;accent-color:var(--accent)}
+.cfg-val{font-size:11px;color:var(--muted);font-family:var(--mono);width:28px;text-align:right}
+.cfg-textarea{width:100%;resize:none;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:11px;font-family:inherit;outline:none;line-height:1.5}
+.cfg-textarea:focus{border-color:var(--accent)}
+.save-btn{width:100%;padding:7px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s}
+.save-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.chat-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+@keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+#messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55;animation:msgIn .15s ease-out both}
+.msg.user{align-self:flex-end;background:#7c3aed28;border:1px solid #7c3aed44}
+.msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border)}
+.msg.system{align-self:center;color:var(--muted);font-size:12px;font-style:italic}
+.msg.error{align-self:center;color:#f87171;font-size:12px}
+.typing{opacity:.5}
+.input-row{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}
+.input-row textarea{flex:1;resize:none;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
+.input-row textarea:focus{border-color:var(--accent)}
+.input-row button{padding:10px 18px;min-height:40px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
+.input-row button:hover:not(:disabled){background:#6d28d9}
+.input-row button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:768px){.sidebar{display:none}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 </style>
 </head>
 <body>
-<header>
-  <h1>Aether-Lite</h1>
-  <span class="pill">v0.2.0</span>
-  <nav>
-    <a href="/apps">Apps Gallery</a>
-    <a href="/playground.html" class="cta">Open Playground →</a>
-  </nav>
-</header>
-<main>
-  <div class="hero">
-    <h2>Build AI apps<br>in plain English</h2>
-    <p>Describe your app, and Aether-Lite designs, configures, and launches a live AI assistant — instantly, with no backend required.</p>
-    <div class="hero-btns">
-      <a href="/playground.html" class="btn btn-primary">Open Playground →</a>
-      <a href="/apps" class="btn btn-outline">Browse Apps</a>
+<nav class="topnav" role="navigation" aria-label="Main">
+  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="navlink active" aria-current="page">Chat</a>
+  <a href="/vibe.html" class="navlink">Vibe</a>
+  <a href="/apps" class="navlink">Apps</a>
+  <a href="/tools.html" class="navlink">Tools</a>
+</nav>
+<div class="layout">
+  <aside class="sidebar" aria-label="Sidebar">
+    <div class="sidebar-top">
+      <button class="new-thread-btn" id="new-thread-btn">+ New Thread</button>
+    </div>
+    <div id="thread-list" class="thread-list" role="list" aria-label="Threads"></div>
+    <div class="config-section">
+      <span class="cfg-label">Model</span>
+      <select id="model-select" class="cfg-select" aria-label="AI model">
+        <option value="@cf/meta/llama-3.1-8b-instruct">Llama 3.1 8B</option>
+        <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B</option>
+        <option value="@cf/google/gemma-3-12b-it">Gemma 3 12B</option>
+        <option value="@cf/mistral/mistral-7b-instruct-v0.1">Mistral 7B</option>
+        <option value="openai:gpt-4o-mini">GPT-4o mini</option>
+        <option value="openai:gpt-4o">GPT-4o</option>
+        <option value="anthropic:claude-haiku-4-5-20251001">Claude Haiku</option>
+        <option value="anthropic:claude-sonnet-4-6">Claude Sonnet</option>
+      </select>
+      <span class="cfg-label">Temperature</span>
+      <div class="slider-row">
+        <input type="range" id="temp-slider" class="cfg-slider" min="0" max="20" value="7" step="1" aria-label="Temperature (0–2)"/>
+        <span id="temp-val" class="cfg-val">0.7</span>
+      </div>
+      <span class="cfg-label">System Prompt</span>
+      <textarea id="sys-prompt" class="cfg-textarea" rows="3" placeholder="Optional system prompt…" aria-label="System prompt"></textarea>
+      <button id="save-btn" class="save-btn">Save config</button>
+    </div>
+  </aside>
+  <div class="chat-main">
+    <div id="messages" role="log" aria-live="polite" aria-label="Conversation"></div>
+    <div class="input-row">
+      <textarea id="user-input" placeholder="Type a message… (Enter to send, Shift+Enter for new line)" rows="2" aria-label="Message input"></textarea>
+      <button id="send-btn">Send</button>
     </div>
   </div>
+</div>
+<script nonce="${nonce}">
+function _esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function _il(s){
+  s=s.replace(/\`([^\`]+)\`/g,(_,c)=>'<code>'+c+'</code>')
+  s=s.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
+  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+  s=s.replace(/\*([^*\n]+?)\*/g,'<em>$1</em>')
+  s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,(_,t,u)=>'<a href="'+u+'" rel="noopener noreferrer" target="_blank">'+t+'</a>')
+  return s
+}
+function _renderMd(text){
+  const lines=text.split('\\n'),out=[];let i=0
+  while(i<lines.length){
+    const raw=lines[i]
+    if(raw.startsWith('\`\`\`')){const code=[];i++;while(i<lines.length&&!lines[i].startsWith('\`\`\`')){code.push(_esc(lines[i]));i++}i++;out.push('<pre><code>'+code.join('\\n')+'</code></pre>');continue}
+    const hm=raw.match(/^(#{1,3})\s+(.+)/);if(hm){out.push('<h'+hm[1].length+'>'+_il(_esc(hm[2]))+'</h'+hm[1].length+'>');i++;continue}
+    if(raw.startsWith('> ')){out.push('<blockquote>'+_il(_esc(raw.slice(2)))+'</blockquote>');i++;continue}
+    if(raw.startsWith('- ')||raw.startsWith('* ')){const it=[];while(i<lines.length&&(lines[i].startsWith('- ')||lines[i].startsWith('* '))){it.push('<li>'+_il(_esc(lines[i].slice(2)))+'</li>');i++}out.push('<ul>'+it.join('')+'</ul>');continue}
+    if(/^\d+\.\s/.test(raw)){const it=[];while(i<lines.length&&/^\d+\.\s/.test(lines[i])){const m=lines[i].match(/^\d+\.\s+(.+)/);it.push('<li>'+_il(_esc(m?.[1]||''))+'</li>');i++}out.push('<ol>'+it.join('')+'</ol>');continue}
+    if(raw.trim()===''){out.push('');i++;continue}
+    out.push('<p>'+_il(_esc(raw))+'</p>');i++
+  }
+  return out.join('\\n')
+}
 
-  <p class="section-label">What you can do</p>
-  <div class="cards">
-    <div class="card">
-      <div class="card-icon">✦</div>
-      <h3>Vibe Builder</h3>
-      <p>Describe your app in a sentence. The platform designs a complete AI assistant — system prompt, model, and settings — and launches it instantly.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">◈</div>
-      <h3>Apps Gallery</h3>
-      <p>Every sandbox gets a shareable URL, an embeddable iframe widget, and a stable short API. Browse and open all your apps from one place.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">⬡</div>
-      <h3>Aether-Lite SDK</h3>
-      <p>A zero-dependency browser SDK with <code style="font-size:11px;color:var(--accent2)">&lt;aether-lite-chat&gt;</code> web component, <code style="font-size:11px;color:var(--accent2)">AppBuilder</code>, and full multi-file app generation.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">⊕</div>
-      <h3>Multi-provider AI</h3>
-      <p>Use free Workers AI models out of the box, or route to GPT-4o, Claude, and Gemini via Cloudflare AI Gateway with your own API keys.</p>
-    </div>
-  </div>
+const LS_SID='aether:sandboxId'
+const LS_SESS='aether:sessions'
+const LS_ACTIVE='aether:activeSession'
+let sandboxId=localStorage.getItem(LS_SID)
+let sessions=JSON.parse(localStorage.getItem(LS_SESS)||'[]')
+let activeSession=localStorage.getItem(LS_ACTIVE)||'default'
 
-  <p class="section-label">Quick start</p>
-  <div class="code-block"><span class="c">// Embed a sandbox anywhere with the SDK</span>
-<span class="k">import</span> { AetherLiteClient } <span class="k">from</span> <span class="s">'/vibe-sdk.js'</span>
-<span class="k">const</span> client = <span class="k">new</span> AetherLiteClient()
+function addMsg(role,text){
+  const el=document.createElement('div')
+  el.className='msg '+role
+  if(role==='assistant'){el.innerHTML=_renderMd(text)}else{el.textContent=text}
+  document.getElementById('messages').appendChild(el)
+  scroll()
+  return el
+}
 
-<span class="c">// Create a quick AI assistant from a description</span>
-<span class="k">const</span> vibe = <span class="k">await</span> client.vibes.create(<span class="s">'A friendly cooking assistant'</span>)
-document.body.innerHTML = vibe.embedCode   <span class="c">// instant &lt;iframe&gt; embed</span>
+function scroll(){const m=document.getElementById('messages');m.scrollTop=m.scrollHeight}
 
-<span class="c">// Or build a full multi-file app</span>
-<span class="k">const</span> session = client.builder.session(<span class="s">'A to-do list with local storage'</span>)
-  .onComplete(<span class="k">r</span> =&gt; window.open(<span class="k">r</span>.appUrl))
-<span class="k">await</span> session.start()
+function renderThreadList(){
+  const list=document.getElementById('thread-list')
+  list.innerHTML=''
+  sessions.forEach(function(s){
+    const div=document.createElement('div')
+    div.className='thread-item'+(s.id===activeSession?' active':'')
+    div.setAttribute('role','listitem')
+    div.setAttribute('tabindex','0')
+    div.textContent=s.name
+    div.onclick=function(){switchSession(s.id)}
+    div.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();switchSession(s.id)}}
+    list.appendChild(div)
+  })
+}
 
-<span class="c">// Or drop in the web component</span>
-<span class="c">// &lt;aether-lite-chat sandbox-id="abc123"&gt;&lt;/aether-lite-chat&gt;</span></div>
-</main>
-<footer>
-  <a href="/playground.html">Playground</a> · <a href="/apps">Apps</a> · <a href="/api">API</a>
-</footer>
+async function switchSession(id){
+  activeSession=id
+  localStorage.setItem(LS_ACTIVE,activeSession)
+  document.getElementById('messages').innerHTML=''
+  renderThreadList()
+  await loadHistory()
+}
+
+function newThread(){
+  const id='sess-'+Date.now()
+  const name='Thread '+(sessions.length+1)
+  sessions.push({id,name,createdAt:Date.now()})
+  localStorage.setItem(LS_SESS,JSON.stringify(sessions))
+  activeSession=id
+  localStorage.setItem(LS_ACTIVE,activeSession)
+  document.getElementById('messages').innerHTML=''
+  renderThreadList()
+}
+
+async function loadHistory(){
+  if(!sandboxId)return
+  try{
+    const r=await fetch('/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(activeSession))
+    const d=await r.json()
+    if(!d.ok)return
+    const msgs=document.getElementById('messages')
+    msgs.innerHTML=''
+    for(const m of(d.data.messages||[])){
+      if(m.role!=='user'&&m.role!=='assistant')continue
+      const el=document.createElement('div')
+      el.className='msg '+m.role
+      const content=typeof m.content==='string'?m.content:''
+      if(m.role==='assistant'){el.innerHTML=_renderMd(content)}else{el.textContent=content}
+      msgs.appendChild(el)
+    }
+    scroll()
+  }catch{}
+}
+
+async function saveConfig(){
+  if(!sandboxId)return
+  const model=document.getElementById('model-select').value
+  const temperature=parseFloat(document.getElementById('temp-slider').value)/10
+  const systemPrompt=document.getElementById('sys-prompt').value
+  try{
+    await fetch('/api/sandbox/'+sandboxId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model,temperature,systemPrompt})
+    })
+    const btn=document.getElementById('save-btn')
+    btn.textContent='Saved!'
+    setTimeout(function(){btn.textContent='Save config'},1500)
+  }catch{}
+}
+
+async function send(){
+  const input=document.getElementById('user-input')
+  const text=input.value.trim()
+  if(!text||!sandboxId)return
+  input.value=''
+  document.getElementById('send-btn').disabled=true
+  addMsg('user',text)
+  const el=addMsg('assistant','')
+  el.classList.add('typing')
+  try{
+    const res=await fetch('/api/sandbox/'+sandboxId+'/stream?sessionId='+encodeURIComponent(activeSession),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:text})
+    })
+    const reader=res.body.getReader()
+    const dec=new TextDecoder()
+    let buf=''
+    while(true){
+      const{done,value}=await reader.read()
+      if(done)break
+      buf+=dec.decode(value,{stream:true})
+      const parts=buf.split('\\n\\n')
+      buf=parts.pop()??''
+      for(const part of parts){
+        for(const line of part.split('\\n')){
+          if(!line.startsWith('data:'))continue
+          const raw=line.slice(5).trim()
+          if(raw==='[DONE]')continue
+          try{
+            const ev=JSON.parse(raw)
+            if(ev.done)continue
+            if(ev.error){el.textContent+='[Error: '+ev.error+']';break}
+            if(typeof ev.response==='string'){
+              el._buf=(el._buf||'')+ev.response
+              el.innerHTML=_renderMd(el._buf)
+              el.classList.remove('typing')
+              scroll()
+            }
+          }catch{}
+        }
+      }
+    }
+    if(!el.innerHTML)el.textContent='(no response)'
+  }catch(e){
+    el.textContent='Error: '+e
+    el.className='msg error'
+  }finally{
+    document.getElementById('send-btn').disabled=false
+    input.focus()
+  }
+}
+
+async function init(){
+  if(!sandboxId){
+    try{
+      const r=await fetch('/api/sandbox',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:'Chat',description:'',model:'@cf/meta/llama-3.1-8b-instruct',temperature:0.7})
+      })
+      const d=await r.json()
+      if(d.ok){sandboxId=d.data.id;localStorage.setItem(LS_SID,sandboxId)}
+    }catch{}
+  }
+  if(sandboxId){
+    try{
+      const r=await fetch('/api/sandbox/'+sandboxId)
+      const d=await r.json()
+      if(d.ok){
+        const cfg=d.data
+        const sel=document.getElementById('model-select')
+        if([...sel.options].some(function(o){return o.value===cfg.model}))sel.value=cfg.model
+        const temp=typeof cfg.temperature==='number'?cfg.temperature:0.7
+        document.getElementById('temp-slider').value=String(Math.round(temp*10))
+        document.getElementById('temp-val').textContent=temp.toFixed(1)
+        document.getElementById('sys-prompt').value=cfg.systemPrompt||''
+      }
+    }catch{}
+  }
+  if(!sessions.length){
+    sessions=[{id:'default',name:'Thread 1',createdAt:Date.now()}]
+    localStorage.setItem(LS_SESS,JSON.stringify(sessions))
+    activeSession='default'
+    localStorage.setItem(LS_ACTIVE,activeSession)
+  }
+  renderThreadList()
+  await loadHistory()
+  document.getElementById('user-input').focus()
+}
+
+document.getElementById('temp-slider').oninput=function(){
+  document.getElementById('temp-val').textContent=(this.value/10).toFixed(1)
+}
+document.getElementById('send-btn').onclick=send
+document.getElementById('new-thread-btn').onclick=newThread
+document.getElementById('save-btn').onclick=saveConfig
+document.getElementById('user-input').onkeydown=function(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
+}
+init()
+</script>
 </body>
-</html>`
+</html>` }
 
-export const landingRoute: Handler = (_req, _env) => {
+export const chatRoute: Handler = (_req, _env) => {
   const nonce = genNonce()
-  return Promise.resolve(new Response(landingHtml, { headers: htmlHeaders(nonce) }))
+  return Promise.resolve(new Response(chatPageHtml(nonce), { headers: htmlHeaders(nonce) }))
 }
 
 // ── Built app serving (/build/:id) ───────────────────────────────────────────
@@ -581,9 +792,11 @@ export const buildFileRoute: Handler = (_req, env, params) =>
   serveBuildFile(env, params.id ?? '', params.filename ?? 'index.html')
 
 export const pageRoutes: Array<[string, string, Handler]> = [
-  ['GET', '/',                   landingRoute],
-  ['GET', '/app/:id',            appPageRoute],
-  ['GET', '/apps',               appsGalleryRoute],
+  ['GET', '/',                    chatRoute],
+  ['GET', '/vibe',                (_req, _env) => Promise.resolve(new Response(null, { status: 301, headers: { Location: '/vibe.html' } }))],
+  ['GET', '/tools',               (_req, _env) => Promise.resolve(new Response(null, { status: 301, headers: { Location: '/tools.html' } }))],
+  ['GET', '/app/:id',             appPageRoute],
+  ['GET', '/apps',                appsGalleryRoute],
   ['GET', '/build/:id/:filename', buildFileRoute],
-  ['GET', '/build/:id',          buildIndexRoute],
+  ['GET', '/build/:id',           buildIndexRoute],
 ]

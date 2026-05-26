@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Aether-Lite — Tools</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--green:#34d399;--red:#f87171;--radius:8px;--mono:"JetBrains Mono","Fira Code",ui-monospace,monospace}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;margin-right:8px;letter-spacing:.02em}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
+.navlink:hover{color:var(--text)}
+.navlink.active{background:var(--accent);color:#fff}
+.layout{display:flex;flex:1;overflow:hidden}
+.tool-sidebar{width:160px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:8px 0}
+.sidebar-section{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:8px 14px 4px}
+.tool-nav-btn{width:100%;text-align:left;padding:8px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:color .1s,background .1s,border-color .1s;min-height:34px;font-family:inherit}
+.tool-nav-btn:hover{color:var(--text);background:var(--bg)}
+.tool-nav-btn.active{color:var(--text);background:var(--bg);border-left-color:var(--accent)}
+.tool-content{flex:1;overflow:hidden;position:relative}
+.tool-pane{display:none;flex-direction:column;gap:12px;padding:20px;overflow-y:auto;height:100%}
+.tool-pane.active{display:flex}
+@keyframes panelIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.tool-pane.active{animation:panelIn .18s ease-out both}
+label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+input,textarea,select{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+textarea{resize:vertical;min-height:72px}
+textarea.mono{font-family:var(--mono);font-size:12px}
+select option{background:var(--surface)}
+button{padding:8px 16px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;min-height:36px;transition:background .15s,opacity .15s}
+button:hover:not(:disabled){background:#6d28d9}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.outline{background:none;border:1px solid var(--border);color:var(--text)}
+button.outline:hover:not(:disabled){border-color:var(--accent2);color:var(--accent2);background:none}
+button.full{width:100%}
+.output{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-family:var(--mono);font-size:12px;line-height:1.6;overflow-y:auto;white-space:pre-wrap;word-break:break-word;min-height:120px}
+.output.img-out{display:flex;align-items:center;justify-content:center;min-height:200px}
+.output.img-out img{max-width:100%;max-height:400px;border-radius:var(--radius)}
+.field{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:8px;align-items:flex-end}
+.row>*{flex:1}
+hr{border:none;border-top:1px solid var(--border)}
+.status{font-size:12px;padding:6px 10px;border-radius:var(--radius)}
+.status.ok{background:#052e1a;color:var(--green);animation:panelIn .2s ease-out both}
+.status.err{background:#2e0505;color:var(--red);animation:panelIn .2s ease-out both}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid #ffffff44;border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+@media(max-width:700px){.tool-sidebar{width:100%;max-height:44px;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:0 4px}.layout{flex-direction:column}.sidebar-section{display:none}.tool-nav-btn{border-left:none;border-bottom:3px solid transparent;white-space:nowrap;min-width:max-content;padding:8px 12px}.tool-nav-btn.active{border-left-color:transparent;border-bottom-color:var(--accent)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<nav class="topnav" role="navigation" aria-label="Main">
+  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="navlink">Chat</a>
+  <a href="/vibe.html" class="navlink">Vibe</a>
+  <a href="/apps" class="navlink">Apps</a>
+  <a href="/tools.html" class="navlink active" aria-current="page">Tools</a>
+</nav>
+<div class="layout">
+  <nav class="tool-sidebar" aria-label="Tools navigation">
+    <span class="sidebar-section">Workbench</span>
+    <button class="tool-nav-btn active" data-tool="complete" onclick="switchTool('complete',this)">Complete</button>
+    <button class="tool-nav-btn" data-tool="stream" onclick="switchTool('stream',this)">Stream</button>
+    <button class="tool-nav-btn" data-tool="embed" onclick="switchTool('embed',this)">Embed</button>
+    <button class="tool-nav-btn" data-tool="image" onclick="switchTool('image',this)">Image Gen</button>
+    <button class="tool-nav-btn" data-tool="transcribe" onclick="switchTool('transcribe',this)">Transcribe</button>
+    <span class="sidebar-section" style="margin-top:8px">Whisperer</span>
+    <button class="tool-nav-btn" data-tool="compare" onclick="switchTool('compare',this)">Compare</button>
+    <button class="tool-nav-btn" data-tool="sweep" onclick="switchTool('sweep',this)">Sweep</button>
+    <button class="tool-nav-btn" data-tool="sensitivity" onclick="switchTool('sensitivity',this)">Sensitivity</button>
+    <button class="tool-nav-btn" data-tool="cluster" onclick="switchTool('cluster',this)">Cluster</button>
+    <button class="tool-nav-btn" data-tool="cot" onclick="switchTool('cot',this)">CoT Probe</button>
+    <button class="tool-nav-btn" data-tool="entropy" onclick="switchTool('entropy',this)">Entropy</button>
+    <button class="tool-nav-btn" data-tool="archaeology" onclick="switchTool('archaeology',this)">Archaeology</button>
+    <button class="tool-nav-btn" data-tool="pipeline" onclick="switchTool('pipeline',this)">Pipeline</button>
+    <button class="tool-nav-btn" data-tool="think" onclick="switchTool('think',this)">Think</button>
+  </nav>
+  <div class="tool-content">
+
+    <!-- Complete -->
+    <div id="pane-complete" class="tool-pane active">
+      <div class="field"><label>Model</label><input id="bc-model" placeholder="@cf/meta/llama-3.1-8b-instruct"/></div>
+      <div class="field"><label>System Prompt</label><textarea id="bc-sys" rows="3" class="mono" placeholder="You are a helpful assistant."></textarea></div>
+      <div class="field"><label>Prompt</label><textarea id="bc-prompt" rows="4" class="mono" placeholder="What is the capital of France?"></textarea></div>
+      <div class="row">
+        <div class="field"><label>Temperature</label><input id="bc-temp" type="number" value="0.7" min="0" max="2" step="0.1"/></div>
+        <div class="field"><label>Max Tokens</label><input id="bc-tokens" type="number" value="512" min="1" max="8192"/></div>
+      </div>
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;opacity:.6;cursor:pointer;user-select:none;padding:4px 0">Advanced options</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+          <div class="row">
+            <div class="field"><label>Response format</label><select id="bc-format"><option value="">text (default)</option><option value="json">json</option></select></div>
+            <div class="field"><label>Reasoning effort <span style="font-size:9px;opacity:.5">(o-series)</span></label><select id="bc-reasoning"><option value="">none</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Thinking budget <span style="font-size:9px;opacity:.5">(Anthropic)</span></label><input id="bc-thinking" type="number" placeholder="tokens (0=off)" min="0" max="80000"/></div>
+            <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px;margin-top:18px"><input type="checkbox" id="bc-grounding" style="width:auto"/> Google Search grounding</label></div>
+          </div>
+          <div class="field"><label>Tools (JSON array)</label><textarea id="bc-tools" rows="3" class="mono" placeholder='[{"name":"get_weather","description":"…","parameters":{…}}]' style="font-size:11px;resize:vertical"></textarea><div id="bc-tools-err" style="display:none;color:var(--red);font-size:11px;margin-top:2px"></div></div>
+        </div>
+      </details>
+      <button class="full" id="btn-complete">Run</button>
+      <label>Response</label>
+      <div id="bc-out" class="output"></div>
+    </div>
+
+    <!-- Stream -->
+    <div id="pane-stream" class="tool-pane">
+      <div class="field"><label>Model</label><input id="bs-model" placeholder="@cf/meta/llama-3.1-8b-instruct"/></div>
+      <div class="field"><label>System Prompt</label><textarea id="bs-sys" rows="2" class="mono" placeholder="You are a helpful assistant."></textarea></div>
+      <div class="field"><label>Prompt</label><textarea id="bs-prompt" rows="4" class="mono" placeholder="Write a haiku about Cloudflare Workers."></textarea></div>
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;opacity:.6;cursor:pointer;user-select:none;padding:4px 0">Advanced options</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+          <div class="row">
+            <div class="field"><label>Temperature</label><input id="bs-temp" type="number" value="0.7" min="0" max="2" step="0.1"/></div>
+            <div class="field"><label>Max Tokens</label><input id="bs-tokens" type="number" value="512" min="1" max="8192"/></div>
+          </div>
+          <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px"><input type="checkbox" id="bs-grounding" style="width:auto"/> Google Search grounding</label></div>
+        </div>
+      </details>
+      <button class="full" id="btn-stream">Stream</button>
+      <label>Output (streamed)</label>
+      <div id="bs-out" class="output"></div>
+    </div>
+
+    <!-- Embed -->
+    <div id="pane-embed" class="tool-pane">
+      <div class="field"><label>Text (one per line)</label><textarea id="be-text" rows="5" class="mono" placeholder="Hello world&#10;Cloudflare Workers&#10;Embeddings rock"></textarea></div>
+      <button class="full" id="btn-embed">Generate Embeddings</button>
+      <label>Vectors</label>
+      <div id="be-out" class="output"></div>
+    </div>
+
+    <!-- Image Gen -->
+    <div id="pane-image" class="tool-pane">
+      <div class="field"><label>Prompt</label><textarea id="bi-prompt" rows="3" class="mono" placeholder="A futuristic city floating in purple clouds, cinematic lighting"></textarea></div>
+      <div class="field"><label>Steps (1–20)</label><input id="bi-steps" type="number" value="4" min="1" max="20"/></div>
+      <button class="full" id="btn-image">Generate Image</button>
+      <div id="bi-out" class="output img-out">Image will appear here.</div>
+    </div>
+
+    <!-- Transcribe -->
+    <div id="pane-transcribe" class="tool-pane">
+      <div class="field"><label>Audio file (wav / mp3 / m4a)</label><input id="bt-file" type="file" accept="audio/*" style="padding:6px"/></div>
+      <button class="full" id="btn-transcribe">Transcribe</button>
+      <label>Transcript</label>
+      <div id="bt-out" class="output"></div>
+    </div>
+
+    <!-- Compare -->
+    <div id="pane-compare" class="tool-pane">
+      <h3 style="margin:0">Model Comparison</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Run the same prompt across multiple models in parallel.</p>
+      <div class="field"><label>Prompt</label><textarea id="wc-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wc-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div id="wc-model-checks" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temperature <input type="number" id="wc-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <button id="btn-compare">Compare</button>
+      </div>
+      <div id="wc-results" style="display:flex;flex-wrap:wrap;gap:12px"></div>
+    </div>
+
+    <!-- Sweep -->
+    <div id="pane-sweep" class="tool-pane">
+      <h3 style="margin:0">Temperature Sweep</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Map attractor basin behavior across a temperature gradient.</p>
+      <div class="field"><label>Prompt</label><textarea id="ws-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="ws-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="ws-model" value="@cf/meta/llama-3.1-8b-instruct" style="width:240px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temperatures <input id="ws-temps" value="0,0.5,1.0,1.5,2.0" style="width:150px" title="Comma-separated 0-2"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples <input type="number" id="ws-samples" value="1" min="1" max="3" style="width:50px"/></label>
+        <button id="btn-sweep">Sweep</button>
+      </div>
+      <div id="ws-results"></div>
+    </div>
+
+    <!-- Sensitivity -->
+    <div id="pane-sensitivity" class="tool-pane">
+      <h3 style="margin:0">Prompt Sensitivity Analysis</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Generate paraphrases of your prompt and measure how much the model's response varies across them.</p>
+      <div class="field"><label>Prompt</label><textarea id="wsn-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wsn-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wsn-model" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Variants <input type="number" id="wsn-variants" value="4" min="2" max="8" style="width:50px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wsn-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <button id="btn-sensitivity">Analyse</button>
+      </div>
+      <div id="wsn-results"></div>
+    </div>
+
+    <!-- Cluster -->
+    <div id="pane-cluster" class="tool-pane">
+      <h3 style="margin:0">Semantic Response Clustering</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Embed texts and group them by semantic similarity using k-means with cosine distance.</p>
+      <div class="field"><label>Texts (one per line)</label><textarea id="wcl-texts" rows="8" class="mono" placeholder="The sky is blue&#10;Clouds appear white&#10;Water boils at 100°C&#10;Ice melts at 0°C&#10;Fire burns hot&#10;Stars shine at night"></textarea></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">k (clusters) <input type="number" id="wcl-k" value="3" min="2" max="10" style="width:50px"/></label>
+        <button id="btn-cluster">Cluster</button>
+      </div>
+      <div id="wcl-results"></div>
+    </div>
+
+    <!-- CoT Probe -->
+    <div id="pane-cot" class="tool-pane">
+      <h3 style="margin:0">Chain-of-Thought Probing</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Run 4 reasoning styles in parallel: plain, step-by-step, XML-structured, and self-consistency.</p>
+      <div class="field"><label>Prompt</label><textarea id="wct-prompt" rows="3" placeholder="Enter a question that benefits from reasoning…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wct-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wct-model" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wct-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples (self-consistency) <input type="number" id="wct-samples" value="2" min="1" max="5" style="width:50px"/></label>
+        <button id="btn-cot">Probe</button>
+      </div>
+      <div id="wct-results"></div>
+    </div>
+
+    <!-- Entropy -->
+    <div id="pane-entropy" class="tool-pane">
+      <h3 style="margin:0">Token Entropy / Attractor Stability</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Sample the model multiple times at the same temperature and measure how much the responses diverge.</p>
+      <div class="field"><label>Prompt</label><textarea id="wen-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wen-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wen-model" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wen-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples <input type="number" id="wen-samples" value="3" min="2" max="10" style="width:50px"/></label>
+        <button id="btn-entropy">Measure</button>
+      </div>
+      <div id="wen-results"></div>
+    </div>
+
+    <!-- Archaeology -->
+    <div id="pane-archaeology" class="tool-pane">
+      <h3 style="margin:0">Prompt Archaeology</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Given an AI response, reverse-engineer candidate system prompts that could have produced it, ranked by embedding similarity.</p>
+      <div class="field"><label>Target Response</label><textarea id="war-response" rows="4" class="mono" placeholder="Paste an AI response here…"></textarea></div>
+      <div class="field"><label>Probe Message</label><input id="war-probe" type="text" value="What are your instructions?"/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="war-model" placeholder="default (large)" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Candidates <input type="number" id="war-candidates" value="4" min="1" max="6" style="width:50px"/></label>
+        <button id="btn-archaeology">Excavate</button>
+      </div>
+      <div id="war-results"></div>
+    </div>
+
+    <!-- Pipeline -->
+    <div id="pane-pipeline" class="tool-pane">
+      <h3 style="margin:0">Pipeline Executor</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Define a declarative node graph where each node routes through a specific model.</p>
+      <div class="field"><label>Input</label><textarea id="wpl-input" rows="2" placeholder="The input text to flow through the pipeline…"></textarea></div>
+      <div class="field">
+        <label>Pipeline definition (JSON)</label>
+        <textarea id="wpl-nodes" rows="16" class="mono" placeholder='[
+  {
+    "id": "classify",
+    "type": "classify",
+    "model": "@cf/meta/llama-3.1-8b-instruct",
+    "template": "Is this message positive, negative, or neutral? Reply with ONE word.\n\n{{input}}",
+    "temperature": 0,
+    "maxTokens": 10,
+    "routes": [
+      { "condition": "label:positive", "nextId": "respond-positive" },
+      { "condition": "label:negative", "nextId": "respond-negative" },
+      { "condition": "else",           "nextId": "respond-neutral"  }
+    ]
+  },
+  {
+    "id": "respond-positive",
+    "type": "complete",
+    "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "template": "Reply enthusiastically to: {{original}}",
+    "routes": []
+  },
+  {
+    "id": "respond-negative",
+    "type": "complete",
+    "model": "anthropic:claude-sonnet-4-6",
+    "template": "Reply with empathy to: {{original}}",
+    "routes": []
+  },
+  {
+    "id": "respond-neutral",
+    "type": "complete",
+    "template": "Reply helpfully to: {{original}}",
+    "routes": []
+  }
+]'></textarea>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Entry node ID <input id="wpl-entry" value="classify" style="width:160px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max depth <input type="number" id="wpl-depth" value="10" min="1" max="30" style="width:60px"/></label>
+        <button id="btn-pipeline">Run Pipeline</button>
+      </div>
+      <div id="wpl-results"></div>
+    </div>
+
+    <!-- Think -->
+    <div id="pane-think" class="tool-pane">
+      <h3 style="margin:0">Extended Thinking</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Generate an explicit reasoning trace before the final answer. Uses Anthropic extended thinking for <code>anthropic:*</code> models; falls back to XML-prompted reasoning for all others.</p>
+      <div class="field"><label>Prompt</label><textarea id="wth-prompt" rows="4" placeholder="Ask something that benefits from deliberate reasoning…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wth-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wth-model" value="anthropic:claude-sonnet-4-6" style="width:240px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Thinking budget (tokens) <input type="number" id="wth-budget" value="8000" min="1024" max="80000" style="width:80px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max tokens <input type="number" id="wth-tokens" value="2048" min="256" max="16000" style="width:80px"/></label>
+        <button id="btn-think">Think</button>
+      </div>
+      <div id="wth-results"></div>
+    </div>
+
+  </div>
+</div>
+<script type="module">
+import { AetherLiteClient } from '/vibe-sdk.js'
+const client = new AetherLiteClient()
+
+const TOOL_PANES = {
+  complete:'pane-complete', stream:'pane-stream', embed:'pane-embed',
+  image:'pane-image', transcribe:'pane-transcribe',
+  compare:'pane-compare', sweep:'pane-sweep', sensitivity:'pane-sensitivity',
+  cluster:'pane-cluster', cot:'pane-cot', entropy:'pane-entropy',
+  archaeology:'pane-archaeology', pipeline:'pane-pipeline', think:'pane-think',
+}
+
+function switchTool(name, btn) {
+  const paneId = TOOL_PANES[name]
+  document.querySelectorAll('.tool-pane').forEach(p => p.classList.toggle('active', p.id === paneId))
+  document.querySelectorAll('.tool-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === name))
+}
+
+function setLoading(btn, label = 'Loading…') {
+  if (!btn) return
+  btn._originalHTML = btn.innerHTML
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + label
+  btn.disabled = true
+  btn.setAttribute('aria-busy', 'true')
+}
+function clearLoading(btn, label) {
+  if (!btn) return
+  btn.innerHTML = label !== undefined ? label : (btn._originalHTML ?? btn.textContent)
+  btn.disabled = false
+  btn.removeAttribute('aria-busy')
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+// ── Workbench ─────────────────────────────────────────────────────────────────
+
+async function doComplete() {
+  const out = document.getElementById('bc-out')
+  const btn = document.getElementById('btn-complete')
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  const toolsRaw = document.getElementById('bc-tools').value.trim()
+  const toolsErr = document.getElementById('bc-tools-err')
+  let tools
+  if (toolsRaw) {
+    try { tools = JSON.parse(toolsRaw); toolsErr.style.display = 'none' }
+    catch (e) { toolsErr.textContent = 'Invalid JSON: ' + e.message; toolsErr.style.display = 'block'; clearLoading(btn, 'Run'); return }
+  }
+  const thinking = parseInt(document.getElementById('bc-thinking').value, 10) || undefined
+  const reasoning = document.getElementById('bc-reasoning').value || undefined
+  const format = document.getElementById('bc-format').value || undefined
+  const grounding = document.getElementById('bc-grounding').checked
+  try {
+    out.textContent = await client.ai.complete({
+      prompt: document.getElementById('bc-prompt').value,
+      systemPrompt: document.getElementById('bc-sys').value || undefined,
+      model: document.getElementById('bc-model').value || undefined,
+      temperature: parseFloat(document.getElementById('bc-temp').value),
+      maxTokens: parseInt(document.getElementById('bc-tokens').value),
+      tools, responseFormat: format, reasoningEffort: reasoning, thinking,
+      groundingEnabled: grounding || undefined,
+    })
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Run') }
+}
+
+async function doStream() {
+  const out = document.getElementById('bs-out')
+  const btn = document.getElementById('btn-stream')
+  setLoading(btn, 'Streaming…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  const grounding = document.getElementById('bs-grounding').checked
+  const bsTemp = parseFloat(document.getElementById('bs-temp').value)
+  const bsTok = parseInt(document.getElementById('bs-tokens').value)
+  try {
+    let first = true
+    for await (const token of client.ai.stream({
+      prompt: document.getElementById('bs-prompt').value,
+      systemPrompt: document.getElementById('bs-sys').value || undefined,
+      model: document.getElementById('bs-model').value || undefined,
+      temperature: isNaN(bsTemp) ? undefined : bsTemp,
+      maxTokens: isNaN(bsTok) ? undefined : bsTok,
+      groundingEnabled: grounding || undefined,
+    })) {
+      if (first) { out.textContent = ''; first = false }
+      out.textContent += token
+    }
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Stream') }
+}
+
+async function doEmbed() {
+  const out = document.getElementById('be-out')
+  const btn = document.getElementById('btn-embed')
+  setLoading(btn, 'Generating…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  const lines = document.getElementById('be-text').value.split('\n').filter(Boolean)
+  try {
+    const vecs = await client.ai.embed(lines)
+    out.textContent = vecs.map((v, i) =>
+      `[${i}] dim=${v.length}  [${v.slice(0,4).map(x => x.toFixed(4)).join(', ')} …]`
+    ).join('\n')
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Generate Embeddings') }
+}
+
+async function doImage() {
+  const out = document.getElementById('bi-out')
+  const btn = document.getElementById('btn-image')
+  setLoading(btn, 'Generating…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  try {
+    const b64 = await client.ai.image(
+      document.getElementById('bi-prompt').value,
+      { steps: parseInt(document.getElementById('bi-steps').value) },
+    )
+    const img = document.createElement('img')
+    img.src = `data:image/png;base64,${b64}`
+    out.innerHTML = ''
+    out.appendChild(img)
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Generate Image') }
+}
+
+async function doTranscribe() {
+  const fileInput = document.getElementById('bt-file')
+  const out = document.getElementById('bt-out')
+  if (!fileInput.files?.length) { out.textContent = 'Select an audio file first.'; return }
+  const btn = document.getElementById('btn-transcribe')
+  setLoading(btn, 'Transcribing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  try {
+    out.textContent = await client.ai.transcribe(fileInput.files[0])
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Transcribe') }
+}
+
+// ── Whisperer ─────────────────────────────────────────────────────────────────
+
+const WHISPERER_MODELS = [
+  { id: '@cf/meta/llama-3.1-8b-instruct',           label: 'Llama 3.1 8B' },
+  { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'Llama 3.3 70B' },
+  { id: 'openai:gpt-4o',                            label: 'GPT-4o' },
+  { id: 'openai:gpt-4o-mini',                       label: 'GPT-4o Mini' },
+  { id: 'anthropic:claude-sonnet-4-6',              label: 'Claude Sonnet' },
+  { id: 'anthropic:claude-opus-4-7',                label: 'Claude Opus' },
+  { id: 'google:gemini-2.0-flash',                  label: 'Gemini Flash' },
+]
+
+;(function initCompareModels() {
+  const container = document.getElementById('wc-model-checks')
+  WHISPERER_MODELS.forEach((m, i) => {
+    const label = document.createElement('label')
+    label.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px;cursor:pointer;background:var(--surface);padding:4px 8px;border-radius:4px'
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'; cb.value = m.id; cb.id = `wc-m-${i}`
+    if (i < 2) cb.checked = true
+    label.appendChild(cb)
+    label.appendChild(document.createTextNode(m.label))
+    container.appendChild(label)
+  })
+})()
+
+async function runCompare() {
+  const prompt = document.getElementById('wc-prompt').value.trim()
+  if (!prompt) return
+  const models = WHISPERER_MODELS
+    .map((_, i) => document.getElementById(`wc-m-${i}`))
+    .filter(cb => cb && cb.checked)
+    .map(cb => cb.value)
+  if (models.length < 2) { alert('Select at least 2 models to compare.'); return }
+  const temperature = parseFloat(document.getElementById('wc-temp').value)
+  const systemPrompt = document.getElementById('wc-sys').value.trim() || undefined
+  const out = document.getElementById('wc-results')
+  const btn = document.getElementById('btn-compare')
+  setLoading(btn, 'Comparing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Comparing…'
+  try {
+    const res = await client.ai.compare(models, prompt, { temperature, systemPrompt })
+    if (!res.ok) { out.innerHTML = escHtml(String(res.error)); return }
+    out.innerHTML = res.data.results.map(r => `
+      <div style="flex:1;min-width:200px;max-width:360px;background:var(--surface);border-radius:6px;padding:10px;border:1px solid var(--border)">
+        <div style="font-size:11px;font-family:var(--mono);opacity:.7;margin-bottom:6px;word-break:break-all">${escHtml(r.model)}</div>
+        <div style="white-space:pre-wrap;font-size:13px">${r.error ? '<span style="color:#ef4444">'+escHtml(r.error)+'</span>' : escHtml(r.response ?? '')}</div>
+        <div style="font-size:10px;opacity:.5;margin-top:6px">${r.latencyMs}ms</div>
+      </div>`).join('')
+  } catch (e) { out.innerHTML = escHtml(String(e)) }
+  finally { clearLoading(btn, 'Compare') }
+}
+
+async function runSweep() {
+  const prompt = document.getElementById('ws-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('ws-model').value.trim() || undefined
+  const systemPrompt = document.getElementById('ws-sys').value.trim() || undefined
+  const samples = parseInt(document.getElementById('ws-samples').value, 10)
+  const temperatures = document.getElementById('ws-temps').value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
+  if (!temperatures.length) { alert('Enter at least one temperature value.'); return }
+  const out = document.getElementById('ws-results')
+  const btn = document.getElementById('btn-sweep')
+  setLoading(btn, 'Sweeping…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sweeping…'
+  try {
+    const res = await client.ai.sweep(prompt, temperatures, { model, systemPrompt, samples })
+    if (!res.ok) { out.innerHTML = escHtml(String(res.error)); return }
+    const rows = res.data.results.map(r => `
+      <tr>
+        <td style="font-family:var(--mono);padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top">${r.temperature.toFixed(1)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border)">
+          ${r.responses.map((resp, i) => `<div style="white-space:pre-wrap;font-size:12px${i > 0 ? ';margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)' : ''}">${escHtml(resp)}</div>`).join('')}
+        </td>
+        <td style="font-size:10px;opacity:.5;padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top">${r.latencyMs}ms</td>
+      </tr>`).join('')
+    out.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr>
+        <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Temp</th>
+        <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Response${samples > 1 ? 's' : ''}</th>
+        <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Latency</th>
+      </tr></thead><tbody>${rows}</tbody></table>`
+  } catch (e) { out.innerHTML = escHtml(String(e)) }
+  finally { clearLoading(btn, 'Sweep') }
+}
+
+async function runSensitivity() {
+  const prompt = document.getElementById('wsn-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('wsn-model').value.trim() || undefined
+  const sys = document.getElementById('wsn-sys').value.trim() || undefined
+  const variants = parseInt(document.getElementById('wsn-variants').value, 10)
+  const temp = parseFloat(document.getElementById('wsn-temp').value)
+  const out = document.getElementById('wsn-results')
+  const btn = document.getElementById('btn-sensitivity')
+  setLoading(btn, 'Analysing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Analysing…'
+  try {
+    const data = await client.ai.sensitivity(prompt, { variants, model, systemPrompt: sys, temperature: temp })
+    const simHTML = renderHeatmap(data.similarityMatrix, data.variants.map((v, i) => `V${i+1}`))
+    out.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
+      ${data.variants.map((v, i) => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px">
+          <div style="font-size:11px;opacity:.6;margin-bottom:4px">Variant ${i+1}</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--accent2);margin-bottom:6px;word-break:break-all">${escHtml(v.prompt)}</div>
+          <div style="font-size:13px;white-space:pre-wrap">${escHtml(v.response)}</div>
+        </div>`).join('')}
+      <div><div style="font-size:11px;opacity:.6;margin-bottom:6px">COSINE SIMILARITY MATRIX</div>${simHTML}</div>
+      <div style="font-size:11px;opacity:.5">${data.latencyMs}ms total</div>
+    </div>`
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Analyse') }
+}
+
+async function runCluster() {
+  const texts = document.getElementById('wcl-texts').value.split('\n').map(s => s.trim()).filter(Boolean)
+  if (texts.length < 2) { alert('Enter at least 2 texts (one per line).'); return }
+  const k = parseInt(document.getElementById('wcl-k').value, 10)
+  const out = document.getElementById('wcl-results')
+  const btn = document.getElementById('btn-cluster')
+  setLoading(btn, 'Clustering…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Clustering…'
+  try {
+    const data = await client.ai.cluster(texts, { k })
+    const cols = ['#7c3aed','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#6366f1','#ec4899']
+    const clusterHTML = data.clusters.map(c => `
+      <div style="background:var(--surface);border-left:3px solid ${cols[c.label % cols.length]};border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px">
+        <div style="font-size:11px;opacity:.6;margin-bottom:4px">Cluster ${c.label+1} — ${c.items.length} items</div>
+        ${c.items.map(t => `<div style="font-size:12px;padding:2px 0">${escHtml(t)}</div>`).join('')}
+      </div>`).join('')
+    const simHTML = renderHeatmap(data.similarityMatrix, texts.map((_, i) => String(i+1)))
+    out.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+      <div>${clusterHTML}</div>
+      <div><div style="font-size:11px;opacity:.6;margin-bottom:6px">SIMILARITY MATRIX</div>${simHTML}</div>
+      <div style="font-size:11px;opacity:.5">${data.latencyMs}ms</div>
+    </div>`
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Cluster') }
+}
+
+async function runCoT() {
+  const prompt = document.getElementById('wct-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('wct-model').value.trim() || undefined
+  const sys = document.getElementById('wct-sys').value.trim() || undefined
+  const temp = parseFloat(document.getElementById('wct-temp').value)
+  const samples = parseInt(document.getElementById('wct-samples').value, 10)
+  const out = document.getElementById('wct-results')
+  const btn = document.getElementById('btn-cot')
+  setLoading(btn, 'Probing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Probing…'
+  try {
+    const { results } = await client.ai.cot(prompt, { model, systemPrompt: sys, temperature: temp, samples })
+    const styleLabel = { plain: 'Plain', 'step-by-step': 'Step-by-Step', 'xml-structured': 'XML-Structured', 'self-consistency': 'Self-Consistency' }
+    out.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px">' +
+      results.map(r => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:600;color:var(--accent2)">${escHtml(styleLabel[r.style] ?? r.style)}</span>
+            <span style="font-size:10px;opacity:.5">${r.latencyMs}ms</span>
+          </div>
+          <div style="font-size:13px;white-space:pre-wrap">${escHtml(r.response)}</div>
+        </div>`).join('') + '</div>'
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Probe') }
+}
+
+async function runEntropy() {
+  const prompt = document.getElementById('wen-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('wen-model').value.trim() || undefined
+  const sys = document.getElementById('wen-sys').value.trim() || undefined
+  const temp = parseFloat(document.getElementById('wen-temp').value)
+  const samples = parseInt(document.getElementById('wen-samples').value, 10)
+  const out = document.getElementById('wen-results')
+  const btn = document.getElementById('btn-entropy')
+  setLoading(btn, 'Sampling…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sampling…'
+  try {
+    const data = await client.ai.entropy(prompt, { model, systemPrompt: sys, temperature: temp, samples })
+    const stabPct = Math.round(data.avgCosineSimilarity * 100)
+    const stabColor = stabPct >= 90 ? 'var(--green)' : stabPct >= 70 ? '#f59e0b' : 'var(--red)'
+    out.innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--accent2)">${data.entropy.toFixed(3)}</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Shannon Entropy</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${stabColor}">${stabPct}%</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Cosine Stability</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono)">${data.samples.length}</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Samples</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono)">${data.latencyMs}ms</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Latency</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${data.samples.map((s, i) => `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px">
+            <div style="font-size:10px;opacity:.5;margin-bottom:3px">Sample ${i+1}</div>
+            <div style="font-size:12px;white-space:pre-wrap">${escHtml(s)}</div>
+          </div>`).join('')}
+      </div>`
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Measure') }
+}
+
+async function runArchaeology() {
+  const targetResponse = document.getElementById('war-response').value.trim()
+  if (!targetResponse) return
+  const probe = document.getElementById('war-probe').value.trim() || undefined
+  const model = document.getElementById('war-model').value.trim() || undefined
+  const candidates = parseInt(document.getElementById('war-candidates').value, 10)
+  const out = document.getElementById('war-results')
+  const btn = document.getElementById('btn-archaeology')
+  setLoading(btn, 'Excavating…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Excavating…'
+  try {
+    const data = await client.ai.archaeology(targetResponse, { probe, model, candidates })
+    out.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px">' +
+      data.candidates.map((c, i) => {
+        const simPct = Math.round(c.similarity * 100)
+        const bar = `<div style="height:4px;background:#252530;border-radius:2px;margin-top:6px"><div style="height:100%;width:${simPct}%;background:var(--accent);border-radius:2px"></div></div>`
+        return `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:11px;font-weight:600;color:var(--accent2)">Candidate ${i+1}</span>
+              <span style="font-size:11px;font-family:var(--mono);opacity:.7">${simPct}% similarity</span>
+            </div>
+            <div style="font-size:13px;white-space:pre-wrap;font-family:var(--mono)">${escHtml(c.candidate)}</div>
+            ${bar}
+          </div>`
+      }).join('') + '</div>'
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Excavate') }
+}
+
+async function runPipeline() {
+  const input = document.getElementById('wpl-input').value.trim()
+  const nodesRaw = document.getElementById('wpl-nodes').value.trim()
+  const entryId = document.getElementById('wpl-entry').value.trim()
+  const maxDepth = parseInt(document.getElementById('wpl-depth').value, 10)
+  if (!input || !nodesRaw || !entryId) return
+  let nodes
+  try { nodes = JSON.parse(nodesRaw) } catch (e) { alert('Invalid JSON in pipeline definition: ' + e); return }
+  const out = document.getElementById('wpl-results')
+  const btn = document.getElementById('btn-pipeline')
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running pipeline…'
+  try {
+    const data = await client.ai.pipeline(input, nodes, entryId, { maxDepth })
+    const traceHTML = data.trace.map((step, i) => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:10px;font-family:var(--mono);background:var(--accent);color:#fff;padding:2px 7px;border-radius:99px">step ${i+1}</span>
+          <span style="font-size:11px;font-family:var(--mono);color:var(--accent2)">${escHtml(step.nodeId)}</span>
+          <span style="font-size:10px;opacity:.5">${escHtml(step.type)}</span>
+          <span style="font-size:10px;opacity:.5;margin-left:auto">${step.latencyMs}ms</span>
+        </div>
+        ${step.conditionMet ? `<div style="font-size:10px;opacity:.6;margin-bottom:4px">routed via <code>${escHtml(step.conditionMet)}</code></div>` : ''}
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px">↳</div>
+        <div style="font-size:12px;white-space:pre-wrap;font-family:var(--mono)">${escHtml(step.output)}</div>
+      </div>`).join('')
+    out.innerHTML = `
+      <div style="background:#052e1a;border:1px solid #166534;border-radius:6px;padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;color:var(--green);margin-bottom:6px;font-weight:600">FINAL OUTPUT</div>
+        <div style="font-size:13px;white-space:pre-wrap">${escHtml(data.output)}</div>
+      </div>
+      <div style="font-size:11px;opacity:.6;margin-bottom:8px">EXECUTION TRACE (${data.trace.length} steps)</div>
+      ${traceHTML}`
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Run Pipeline') }
+}
+
+async function runThink() {
+  const prompt = document.getElementById('wth-prompt').value.trim()
+  const sys = document.getElementById('wth-sys').value.trim()
+  const model = document.getElementById('wth-model').value.trim() || 'anthropic:claude-sonnet-4-6'
+  const budget = parseInt(document.getElementById('wth-budget').value, 10) || 8000
+  const maxTok = parseInt(document.getElementById('wth-tokens').value, 10) || 2048
+  if (!prompt) return
+  const out = document.getElementById('wth-results')
+  const btn = document.getElementById('btn-think')
+  setLoading(btn, 'Thinking…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Thinking…'
+  try {
+    const data = await client.ai.think(prompt, { model, systemPrompt: sys || undefined, budgetTokens: budget, maxTokens: maxTok })
+    out.innerHTML = `
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Thinking trace <span style="font-weight:normal;opacity:.6">(${data.latencyMs}ms)</span></div>
+        <pre style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:11px;font-family:var(--mono);white-space:pre-wrap;overflow:auto;max-height:320px;color:var(--muted)">${escHtml(data.thinking || '(no thinking trace — provider may not support extended thinking)')}</pre>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Response</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:13px;white-space:pre-wrap">${escHtml(data.response)}</div>
+      </div>`
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Think') }
+}
+
+// ── Heatmap helper ────────────────────────────────────────────────────────────
+function renderHeatmap(matrix, labels) {
+  const n = matrix.length
+  const cell = v => {
+    const pct = Math.round(v * 100)
+    const bg = `rgba(124,58,237,${(v * 0.8).toFixed(2)})`
+    return `<td style="width:${Math.floor(300/n)}px;height:${Math.floor(300/n)}px;background:${bg};text-align:center;font-size:${n <= 6 ? 10 : 8}px;font-family:var(--mono);color:#fff;opacity:.9;border:1px solid var(--bg)">${pct}</td>`
+  }
+  const rows = matrix.map((row, i) =>
+    `<tr><td style="font-size:9px;padding:0 4px;opacity:.6;white-space:nowrap;font-family:var(--mono)">${escHtml(labels[i] ?? String(i))}</td>${row.map(cell).join('')}</tr>`
+  ).join('')
+  const headers = labels.map(l => `<th style="font-size:9px;padding:0 2px;opacity:.6;font-family:var(--mono);font-weight:normal">${escHtml(String(l).slice(0,6))}</th>`).join('')
+  return `<table style="border-collapse:collapse"><thead><tr><th></th>${headers}</tr></thead><tbody>${rows}</tbody></table>`
+}
+
+// Wire up buttons
+document.getElementById('btn-complete').onclick = doComplete
+document.getElementById('btn-stream').onclick = doStream
+document.getElementById('btn-embed').onclick = doEmbed
+document.getElementById('btn-image').onclick = doImage
+document.getElementById('btn-transcribe').onclick = doTranscribe
+document.getElementById('btn-compare').onclick = runCompare
+document.getElementById('btn-sweep').onclick = runSweep
+document.getElementById('btn-sensitivity').onclick = runSensitivity
+document.getElementById('btn-cluster').onclick = runCluster
+document.getElementById('btn-cot').onclick = runCoT
+document.getElementById('btn-entropy').onclick = runEntropy
+document.getElementById('btn-archaeology').onclick = runArchaeology
+document.getElementById('btn-pipeline').onclick = runPipeline
+document.getElementById('btn-think').onclick = runThink
+
+Object.assign(window, { switchTool })
+</script>
+</body>
+</html>
