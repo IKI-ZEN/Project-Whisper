@@ -68,6 +68,16 @@ export default {
         msg.ack()
       } catch (e) {
         console.error('[queue] job failed:', msg.body.type, e)
+        try {
+          await env.DB.prepare(
+            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+          ).bind(
+            msg.body.sandboxId ?? '',
+            'job_failed',
+            JSON.stringify({ jobType: msg.body.type, error: String(e), attempts: msg.attempts }),
+            Date.now(),
+          ).run()
+        } catch { /* D1 write must not prevent retry */ }
         msg.retry()
       }
     }

@@ -6,6 +6,10 @@ export class AppStateDO {
   private state: DurableObjectState
   private env: Env
 
+  // User KV entries are stored under this prefix so future DO metadata keys
+  // are never accidentally wiped by the user-facing clear endpoint.
+  private static readonly KV_PREFIX = 'kv/'
+
   constructor(state: DurableObjectState, env: Env) {
     this.state = state
     this.env   = env
@@ -26,14 +30,21 @@ export class AppStateDO {
     return json(err('Method not allowed'), 405)
   }
 
+  private storedKey(key: string): string {
+    return `${AppStateDO.KV_PREFIX}${key}`
+  }
+
   private async listAll(): Promise<Response> {
-    const map     = await this.state.storage.list<string>()
-    const entries = Array.from(map.entries()).map(([key, value]) => ({ key, value }))
+    const map     = await this.state.storage.list<string>({ prefix: AppStateDO.KV_PREFIX })
+    const entries = Array.from(map.entries()).map(([k, value]) => ({
+      key: k.slice(AppStateDO.KV_PREFIX.length),
+      value,
+    }))
     return json(ok({ entries }))
   }
 
   private async getKey(key: string): Promise<Response> {
-    const value = await this.state.storage.get<string>(key)
+    const value = await this.state.storage.get<string>(this.storedKey(key))
     if (value === undefined) return json(err('Not found'), 404)
     return json(ok({ key, value }))
   }
@@ -48,17 +59,18 @@ export class AppStateDO {
     if (typeof body?.value !== 'string') return json(err('Body must be { value: string }'), 422)
     if (body.value.length > MAX_APP_STATE_VALUE_LEN)
       return json(err(`value must be <= ${MAX_APP_STATE_VALUE_LEN} characters`), 422)
-    await this.state.storage.put(key, body.value)
+    await this.state.storage.put(this.storedKey(key), body.value)
     return json(ok({ key, value: body.value }))
   }
 
   private async deleteKey(key: string): Promise<Response> {
-    await this.state.storage.delete(key)
+    await this.state.storage.delete(this.storedKey(key))
     return json(ok({ deleted: true, key }))
   }
 
   private async clearAll(): Promise<Response> {
-    await this.state.storage.deleteAll()
+    const map = await this.state.storage.list<string>({ prefix: AppStateDO.KV_PREFIX })
+    if (map.size > 0) await this.state.storage.delete([...map.keys()])
     return json(ok({ cleared: true }))
   }
 }

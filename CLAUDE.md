@@ -316,8 +316,10 @@ When `SIGNING_SECRET` is set: `exportConfig` appends a `signature` field (hex HM
 
 Three layers:
 - *Per-sandbox* (`src/durable/SandboxDO.ts`): persistent sliding-window limiter under `RL_STORAGE_KEY` — 20 run/stream calls per 60 s. Returns 429 in `handleRun` and `handleStream`.
-- *Per-IP on /api/ai/\** (`src/lib/http.ts`, `checkAiRateLimit()`): KV-backed sliding window, 30 calls/60 s, keyed by `CF-Connecting-IP` stored under `rl:ai:{ip}` in `SANDBOX_REGISTRY`. Checked in `Router.handle()` before dispatch.
-- *Per-app email* (`src/routes/appstate.ts`): 5 emails/60 s per build ID, keyed `rl:email:{buildId}`. Uses shared `checkRateLimit()` from `http.ts`.
+- *Per-IP on /api/ai/\** (`src/lib/http.ts`, `checkAiRateLimit()`): KV-backed sliding window, 30 calls/60 s, keyed by `CF-Connecting-IP` stored under `rl:ai:{ip}` in `RATE_LIMITS`. Checked in `Router.handle()` before dispatch.
+- *Per-app email* (`src/routes/appstate.ts`): 5 emails/60 s per build ID, keyed `rl:email:{buildId}` in `RATE_LIMITS`. Uses shared `checkRateLimit()` from `http.ts`.
+
+`RATE_LIMITS` is a dedicated KV namespace for ephemeral rate limit state — kept separate from `SANDBOX_REGISTRY` so rate limit data can be cleared independently without touching sandbox or build metadata.
 
 **Cloudflare Access (`src/lib/access.ts`)**
 
@@ -367,7 +369,7 @@ SDK rename summary:
 
 Used for audit logging (`sandbox_events`) and usage metrics (`usage_metrics`). Schema in `migrations/0001_init.sql`.
 
-Event types logged to `sandbox_events`: `guard_flag` (suspicious/blocked scan hit), `response_flag` (outbound jailbreak detection), `sandbox_deleted`, `vibe_created`.
+Event types logged to `sandbox_events`: `guard_flag` (suspicious/blocked scan hit), `response_flag` (outbound jailbreak detection), `sandbox_deleted`, `vibe_created`, `job_failed` (queue job exhausted retries — includes `jobType`, `error`, `attempts` in metadata), `csp_violation`.
 
 `GET /api/sandbox/:id/metrics` returns aggregated usage: `{ totalRuns, totalTokensIn, totalTokensOut, avgLatencyMs, modelBreakdown[] }` from the `usage_metrics` table.
 
@@ -375,6 +377,7 @@ Event types logged to `sandbox_events`: `guard_flag` (suspicious/blocked scan hi
 
 ```bash
 wrangler kv:namespace create SANDBOX_REGISTRY
+wrangler kv:namespace create RATE_LIMITS
 wrangler d1 create aether-lite
 wrangler r2 bucket create aether-lite-files
 wrangler queues create aether-lite-jobs

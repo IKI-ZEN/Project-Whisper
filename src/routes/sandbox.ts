@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, readJson, sseResponse, parseBody } from '../lib/http'
+import { json, ok, err, readJson, sseResponse, parseBody, listAllKV } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
@@ -77,12 +77,12 @@ export async function registerSandbox(
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const list: Handler = async (_req, env) => {
-  const result = await env.SANDBOX_REGISTRY.list<SandboxMeta>({ prefix: SANDBOX_KEY_PREFIX })
-  const apps = result.keys
+  const keys = await listAllKV<SandboxMeta>(env.SANDBOX_REGISTRY, SANDBOX_KEY_PREFIX)
+  const apps = keys
     .filter(k => k.metadata != null)
     .map(k => k.metadata as SandboxMeta)
     .sort((a, b) => b.createdAt - a.createdAt)
-  return json(ok({ apps, total: apps.length, complete: result.list_complete }))
+  return json(ok({ apps, total: apps.length }))
 }
 
 const create: Handler = async (req, env) => {
