@@ -26,8 +26,9 @@ header{display:flex;align-items:center;gap:12px;padding:0 18px;height:54px;backg
 #app-name{font-size:15px;font-weight:600;color:var(--accent2)}
 #app-desc{font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#7c3aed22;color:var(--accent2);font-family:var(--mono);flex-shrink:0}
-.hbtn{font-size:12px;padding:5px 12px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
+.hbtn{font-size:12px;padding:8px 14px;min-height:36px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
 .hbtn:hover{border-color:var(--accent2);color:var(--accent2)}
+.hbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55}
 .msg.user{align-self:flex-end;background:#7c3aed28;border:1px solid #7c3aed44}
@@ -38,9 +39,12 @@ header{display:flex;align-items:center;gap:12px;padding:0 18px;height:54px;backg
 .input-row{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}
 .input-row textarea{flex:1;resize:none;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
 .input-row textarea:focus{border-color:var(--accent)}
-.input-row button{padding:8px 18px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
+.input-row textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.input-row button{padding:10px 18px;min-height:40px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
 .input-row button:hover:not(:disabled){background:#6d28d9}
 .input-row button:disabled{opacity:.45;cursor:not-allowed}
+.input-row button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+@media(max-width:600px){#messages{padding:12px}.input-row{padding:8px 12px}.input-row textarea{font-size:16px}}
 footer{text-align:center;font-size:11px;color:var(--muted);padding:6px;border-top:1px solid var(--border);flex-shrink:0}
 footer a{color:var(--muted);text-decoration:none}
 footer a:hover{color:var(--accent2)}
@@ -57,29 +61,29 @@ footer a:hover{color:var(--accent2)}
 </head>
 <body>
 <header>
-  <span id="app-name">Loading…</span>
-  <span id="app-desc"></span>
+  <h1 id="app-name" style="font-size:15px;font-weight:600;color:var(--accent2);margin:0">Loading…</h1>
+  <p id="app-desc" style="font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0"></p>
   <span id="model-badge" class="badge" style="display:none"></span>
-  <button class="hbtn" onclick="document.getElementById('embed-panel').classList.add('open')">Embed ↗</button>
+  <button class="hbtn" onclick="openEmbed()" aria-haspopup="dialog">Embed ↗</button>
   <button class="hbtn" onclick="shareConfig(this)">Share config</button>
   <a href="/apps" style="text-decoration:none"><button class="hbtn">All Apps</button></a>
 </header>
-<div id="messages">
+<div id="messages" role="log" aria-live="polite" aria-label="Conversation messages">
   <div class="msg system" id="init-msg">Connecting…</div>
 </div>
 <div class="input-row">
-  <textarea id="user-input" placeholder="Type a message… (Enter to send)" rows="2" disabled></textarea>
-  <button id="send-btn" disabled>Send</button>
+  <textarea id="user-input" placeholder="Type a message… (Enter to send)" rows="2" disabled aria-label="Message input (Enter to send, Shift+Enter for new line)"></textarea>
+  <button id="send-btn" disabled aria-label="Send message">Send</button>
 </div>
 <footer>Powered by <a href="/playground.html">Aether-Lite</a></footer>
 
-<div id="embed-panel" class="embed-panel" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="embed-box">
-    <h3>Embed this app</h3>
-    <textarea id="embed-code" readonly></textarea>
+<div id="embed-panel" class="embed-panel" onclick="if(event.target===this)closeEmbed()" role="presentation">
+  <div class="embed-box" role="dialog" aria-modal="true" aria-labelledby="embed-title">
+    <h3 id="embed-title">Embed this app</h3>
+    <textarea id="embed-code" readonly aria-label="Embed code (read-only)"></textarea>
     <div class="row">
       <button onclick="copyEmbed()">Copy code</button>
-      <button class="outline" onclick="document.getElementById('embed-panel').classList.remove('open')">Close</button>
+      <button class="outline" id="embed-close-btn" onclick="closeEmbed()">Close</button>
     </div>
   </div>
 </div>
@@ -206,6 +210,15 @@ async function send() {
   }
 }
 
+function openEmbed() {
+  document.getElementById('embed-panel').classList.add('open')
+  document.getElementById('embed-close-btn').focus()
+}
+function closeEmbed() {
+  document.getElementById('embed-panel').classList.remove('open')
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEmbed() })
+
 function copyEmbed() {
   const t = document.getElementById('embed-code').value
   navigator.clipboard?.writeText(t).catch(() => {})
@@ -266,11 +279,17 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .card-foot{display:flex;align-items:center;gap:8px}
 .badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#22234a;color:var(--accent2);font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card-date{font-size:10px;color:var(--muted)}
-.open-btn{padding:6px 14px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-block}
+.open-btn{padding:8px 16px;min-height:36px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .open-btn:hover{background:#6d28d9}
-.empty{text-align:center;padding:80px 20px;color:var(--muted)}
+.open-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
 .empty h3{font-size:18px;margin-bottom:8px;color:var(--text)}
-.empty a{color:var(--accent2)}
+.empty-cta{display:inline-block;margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500}
+.empty-cta:hover{background:#6d28d9}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
+.skeleton{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;animation:pulse 1.4s ease-in-out infinite}
+.sk-line{height:12px;background:var(--border);border-radius:4px}
+@media(max-width:480px){.card{padding:14px}}
 .from-vibe{font-size:10px;padding:1px 6px;border-radius:99px;background:#34d39922;color:#34d399}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 </style>
@@ -284,16 +303,17 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 <main>
   <h2>Your Apps</h2>
   <p class="sub">AI-powered apps built with the Vibe Builder or API. Click any card to open the app.</p>
-  <div id="grid" class="grid"></div>
+  <div id="grid" class="grid" role="list"></div>
 </main>
 <script nonce="${nonce}">
 async function load() {
   const grid = document.getElementById('grid')
+  grid.innerHTML = [1,2,3].map(() => \`<div class="skeleton" role="listitem" aria-hidden="true"><div class="sk-line" style="width:60%"></div><div class="sk-line" style="width:90%"></div><div class="sk-line" style="width:40%"></div></div>\`).join('')
   try {
     const r = await fetch('/api/sandbox')
     const d = await r.json()
     if (!d.ok || !d.data.apps.length) {
-      grid.innerHTML = '<div class="empty"><h3>No apps yet</h3><p>Head to the <a href="/playground.html">Playground</a> to build your first AI app with the Vibe Builder.</p></div>'
+      grid.innerHTML = '<div class="empty"><h3>No apps yet</h3><p>Build your first AI app with the Vibe Builder.</p><a href="/playground.html" class="empty-cta">Open Playground →</a></div>'
       return
     }
     grid.innerHTML = ''
@@ -301,7 +321,7 @@ async function load() {
       const date = new Date(app.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
       const modelShort = (app.model || '').split('/').pop() || app.model
       grid.insertAdjacentHTML('beforeend', \`
-        <div class="card">
+        <div class="card" role="listitem">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="card-name">\${esc(app.name)}</span>
             \${app.fromVibe ? '<span class="from-vibe">vibe</span>' : ''}
@@ -311,7 +331,7 @@ async function load() {
             <span class="badge" title="\${esc(app.model)}">\${esc(modelShort)}</span>
             <span class="card-date">\${date}</span>
           </div>
-          <a href="/app/\${esc(app.id)}" class="open-btn">Open App →</a>
+          <a href="/app/\${esc(app.id)}" class="open-btn">Open App <span aria-hidden="true">→</span></a>
         </div>
       \`)
     }

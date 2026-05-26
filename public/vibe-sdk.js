@@ -1038,7 +1038,9 @@ function _renderMd(text) {
 const _CSS = /* css */`
 :host {
   display: block;
+  min-height: 320px;
   height: 420px;
+  max-height: 80dvh;
   --vibe-bg: #ffffff;
   --vibe-fg: #111827;
   --vibe-accent: #6366f1;
@@ -1139,6 +1141,7 @@ button {
   flex-shrink: 0;
 }
 button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--vibe-accent); outline-offset: 2px; }
 `
 
 class VibeChatElement extends HTMLElement {
@@ -1171,10 +1174,10 @@ class VibeChatElement extends HTMLElement {
     const ph = rawPh.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
     this._shadow.innerHTML = `<style>${_CSS}</style>
 <div class="shell">
-  <div class="messages" part="messages"></div>
+  <div class="messages" part="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
   <div class="input-row">
-    <textarea part="input" placeholder="${ph}" rows="1"></textarea>
-    <button part="send" type="button">Send</button>
+    <textarea part="input" placeholder="${ph}" rows="1" aria-label="Type a message (Enter to send, Shift+Enter for new line)"></textarea>
+    <button part="send" type="button" aria-label="Send message">Send</button>
   </div>
 </div>`
     this._shadow.querySelector('button').addEventListener('click', () => this._send())
@@ -1204,6 +1207,7 @@ class VibeChatElement extends HTMLElement {
     ta.value = ''
     this._busy = true
     btn.disabled = true
+    btn.setAttribute('aria-busy', 'true')
 
     this._msg('user', text)
     const botEl = this._msg('bot', '')
@@ -1221,6 +1225,7 @@ class VibeChatElement extends HTMLElement {
     } finally {
       this._busy = false
       btn.disabled = false
+      btn.removeAttribute('aria-busy')
       ta.focus()
     }
   }
