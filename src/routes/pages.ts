@@ -36,6 +36,17 @@ header{display:flex;align-items:center;gap:12px;padding:0 18px;height:54px;backg
 .msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border)}
 .msg.system{align-self:center;color:var(--muted);font-size:12px;font-style:italic}
 .msg.error{align-self:center;color:#f87171;font-size:12px}
+.msg.assistant code{background:#ffffff10;padding:2px 5px;border-radius:4px;font-family:var(--mono);font-size:.88em}
+.msg.assistant pre{background:#ffffff0d;padding:10px 12px;border-radius:6px;overflow-x:auto;margin:6px 0}
+.msg.assistant pre code{background:none;padding:0}
+.msg.assistant h1{font-size:1.1em;font-weight:700;margin:10px 0 4px}
+.msg.assistant h2{font-size:1.05em;font-weight:600;margin:8px 0 3px}
+.msg.assistant h3{font-size:1em;font-weight:600;margin:6px 0 3px}
+.msg.assistant ul,.msg.assistant ol{padding-left:20px;margin:4px 0}
+.msg.assistant li{margin:2px 0}
+.msg.assistant blockquote{border-left:3px solid var(--border);padding-left:10px;color:var(--muted);margin:4px 0}
+.msg.assistant p{margin:4px 0}
+.msg.assistant a{color:var(--accent2);text-decoration:underline;text-underline-offset:2px}
 .typing{opacity:.5}
 .input-row{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}
 .input-row textarea{flex:1;resize:none;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
@@ -266,12 +277,12 @@ function appsGalleryHtml(nonce: string): string { return `<!DOCTYPE html>
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;flex-shrink:0}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;margin-right:8px;letter-spacing:.02em}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
 .navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
 .navlink:hover{color:var(--text)}
 .navlink.active{background:var(--accent);color:#fff}
 .newapp{margin-left:auto}
-main{max-width:1100px;margin:0 auto;padding:32px 24px}
+main{max-width:1100px;margin:0 auto;padding:32px 24px;min-height:calc(100dvh - 48px);display:flex;flex-direction:column}
 h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .sub{color:var(--muted);font-size:13px;margin-bottom:28px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
@@ -285,7 +296,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .open-btn{padding:8px 16px;min-height:36px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .open-btn:hover{background:#6d28d9}
 .open-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
-.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px;color:var(--muted)}
 .empty h3{font-size:18px;margin-bottom:8px;color:var(--text)}
 .empty-cta{display:inline-block;margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500}
 .empty-cta:hover{background:#6d28d9}
@@ -310,7 +321,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 </nav>
 <main>
   <h2>Your Apps</h2>
-  <p class="sub">AI-powered apps built with the Vibe Builder or API. Click any card to open the app.</p>
+  <p class="sub">AI-powered apps built with Vibe or the API. Click any card to open the app.</p>
   <div id="grid" class="grid" role="list"></div>
 </main>
 <script nonce="${nonce}">
@@ -321,7 +332,8 @@ async function load() {
     const r = await fetch('/api/sandbox')
     const d = await r.json()
     if (!d.ok || !d.data.apps.length) {
-      grid.innerHTML = '<div class="empty"><h3>No apps yet</h3><p>Build your first AI app with the Vibe Builder.</p><a href="/vibe.html" class="empty-cta">Open Vibe Builder →</a></div>'
+      grid.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center'
+      grid.innerHTML = '<div class="empty"><h3>No apps yet</h3><p>Build your first AI app with Vibe.</p><a href="/vibe.html" class="empty-cta">Open Vibe →</a></div>'
       return
     }
     grid.innerHTML = ''
@@ -345,6 +357,7 @@ async function load() {
       \`)
     })
   } catch(e) {
+    grid.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center'
     grid.innerHTML = '<div class="empty"><h3>Failed to load apps</h3><p>' + esc(String(e)) + '</p></div>'
   }
 }
@@ -423,7 +436,7 @@ function chatPageHtml(nonce: string): string { return `<!DOCTYPE html>
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;margin-right:8px;letter-spacing:.02em}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
 .navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
 .navlink:hover{color:var(--text)}
 .navlink.active{background:var(--accent);color:#fff}
@@ -445,8 +458,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .cfg-val{font-size:11px;color:var(--muted);font-family:var(--mono);width:28px;text-align:right}
 .cfg-textarea{width:100%;resize:none;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:11px;font-family:inherit;outline:none;line-height:1.5}
 .cfg-textarea:focus{border-color:var(--accent)}
-.save-btn{width:100%;padding:7px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s}
-.save-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.save-btn{width:100%;padding:7px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--text);font-size:11px;cursor:pointer;transition:all .15s;opacity:.7}
+.save-btn:hover{border-color:var(--accent2);color:var(--accent2);opacity:1}
 .chat-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 @keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 #messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
@@ -455,6 +468,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border)}
 .msg.system{align-self:center;color:var(--muted);font-size:12px;font-style:italic}
 .msg.error{align-self:center;color:#f87171;font-size:12px}
+.msg.assistant code{background:#ffffff10;padding:2px 5px;border-radius:4px;font-family:var(--mono);font-size:.88em}
+.msg.assistant pre{background:#ffffff0d;padding:10px 12px;border-radius:6px;overflow-x:auto;margin:6px 0}
+.msg.assistant pre code{background:none;padding:0}
+.msg.assistant h1{font-size:1.1em;font-weight:700;margin:10px 0 4px}
+.msg.assistant h2{font-size:1.05em;font-weight:600;margin:8px 0 3px}
+.msg.assistant h3{font-size:1em;font-weight:600;margin:6px 0 3px}
+.msg.assistant ul,.msg.assistant ol{padding-left:20px;margin:4px 0}
+.msg.assistant li{margin:2px 0}
+.msg.assistant blockquote{border-left:3px solid var(--border);padding-left:10px;color:var(--muted);margin:4px 0}
+.msg.assistant p{margin:4px 0}
+.msg.assistant a{color:var(--accent2);text-decoration:underline;text-underline-offset:2px}
+.chat-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);text-align:center;padding:40px}
+.chat-empty .ce-icon{font-size:28px;opacity:.3}
+.chat-empty h3{font-size:15px;font-weight:600;color:var(--text);opacity:.55;margin:0}
+.chat-empty p{font-size:12px;line-height:1.6;max-width:300px;margin:0}
+.thread-empty{font-size:11px;color:var(--muted);padding:16px 12px;text-align:center;opacity:.6}
 .typing{opacity:.5}
 .input-row{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}
 .input-row textarea{flex:1;resize:none;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
@@ -504,7 +533,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     </div>
   </aside>
   <div class="chat-main">
-    <div id="messages" role="log" aria-live="polite" aria-label="Conversation"></div>
+    <div id="messages" role="log" aria-live="polite" aria-label="Conversation">
+      <div class="chat-empty" id="empty-chat">
+        <div class="ce-icon">✦</div>
+        <h3>Aether-Lite Chat</h3>
+        <p>Ask anything. Adjust model and temperature in the sidebar, then press Enter.</p>
+      </div>
+    </div>
     <div class="input-row">
       <textarea id="user-input" placeholder="Type a message… (Enter to send, Shift+Enter for new line)" rows="2" aria-label="Message input"></textarea>
       <button id="send-btn">Send</button>
@@ -544,6 +579,7 @@ let sessions=JSON.parse(localStorage.getItem(LS_SESS)||'[]')
 let activeSession=localStorage.getItem(LS_ACTIVE)||'default'
 
 function addMsg(role,text){
+  const ce=document.getElementById('empty-chat');if(ce)ce.remove()
   const el=document.createElement('div')
   el.className='msg '+role
   if(role==='assistant'){el.innerHTML=_renderMd(text)}else{el.textContent=text}
@@ -557,6 +593,7 @@ function scroll(){const m=document.getElementById('messages');m.scrollTop=m.scro
 function renderThreadList(){
   const list=document.getElementById('thread-list')
   list.innerHTML=''
+  if(!sessions.length){list.innerHTML='<div class="thread-empty">No threads yet</div>';return}
   sessions.forEach(function(s){
     const div=document.createElement('div')
     div.className='thread-item'+(s.id===activeSession?' active':'')
@@ -699,8 +736,9 @@ async function init(){
         const sel=document.getElementById('model-select')
         if([...sel.options].some(function(o){return o.value===cfg.model}))sel.value=cfg.model
         const temp=typeof cfg.temperature==='number'?cfg.temperature:0.7
-        document.getElementById('temp-slider').value=String(Math.round(temp*10))
-        document.getElementById('temp-val').textContent=temp.toFixed(1)
+        const sl=document.getElementById('temp-slider')
+        sl.value=String(Math.round(temp*10))
+        document.getElementById('temp-val').textContent=(parseFloat(sl.value)/10).toFixed(1)
         document.getElementById('sys-prompt').value=cfg.systemPrompt||''
       }
     }catch{}
