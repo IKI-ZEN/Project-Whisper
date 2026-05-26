@@ -1,5 +1,6 @@
 import type { Env } from '../types/env'
 import { json, ok, err } from '../lib/http'
+import { MAX_APP_STATE_KEY_LEN, MAX_APP_STATE_VALUE_LEN, APP_STATE_KEY_RE } from '../lib/constants'
 
 export class AppStateDO {
   private state: DurableObjectState
@@ -38,9 +39,15 @@ export class AppStateDO {
   }
 
   private async putKey(key: string, req: Request): Promise<Response> {
+    if (key.length > MAX_APP_STATE_KEY_LEN)
+      return json(err(`key must be <= ${MAX_APP_STATE_KEY_LEN} characters`), 422)
+    if (!APP_STATE_KEY_RE.test(key))
+      return json(err('key may only contain alphanumeric, dot, underscore, hyphen, or slash'), 422)
     let body: { value?: unknown }
     try { body = await req.json() as { value?: unknown } } catch { return json(err('Invalid JSON body'), 400) }
     if (typeof body?.value !== 'string') return json(err('Body must be { value: string }'), 422)
+    if (body.value.length > MAX_APP_STATE_VALUE_LEN)
+      return json(err(`value must be <= ${MAX_APP_STATE_VALUE_LEN} characters`), 422)
     await this.state.storage.put(key, body.value)
     return json(ok({ key, value: body.value }))
   }

@@ -1,6 +1,7 @@
 import type { Env, AetherLiteJob } from '../types/env'
 import { embed } from '../lib/ai'
 import { scan } from '../lib/guard'
+import { MAX_PDF_INFLATED } from '../lib/constants'
 
 interface FileProcessPayload {
   docId: string
@@ -93,6 +94,7 @@ async function extractPdfText(buf: ArrayBuffer): Promise<string> {
             start(c) { c.enqueue(streamData); c.close() },
           }).pipeThrough(ds),
         ).arrayBuffer()
+        if (inflatedBuf.byteLength > MAX_PDF_INFLATED) { pos = endKw + 10; continue }
         const inflated = new TextDecoder('latin1').decode(inflatedBuf)
 
         // Extract text operators between BT / ET markers

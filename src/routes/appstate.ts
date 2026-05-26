@@ -1,11 +1,19 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'
+import { doFetch } from './sandbox'
+import { newId } from '../lib/utils'
+import {
+  IMAGE_MAX_BYTES, ALLOWED_IMAGE_TYPES,
+  EMAIL_RATE_LIMIT_WINDOW_MS, EMAIL_RATE_LIMIT_MAX,
+} from '../lib/constants'
 
-const IMAGE_MAX_BYTES    = 5 * 1024 * 1024  // 5 MB
-const IMAGE_TYPES        = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
-const EMAIL_RATE_MAX     = 5
-const EMAIL_RATE_WINDOW  = 60_000  // ms
+// ── Validation helpers ────────────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isUUID(s: string): boolean { return UUID_RE.test(s) }
 
 // ── AppStateDO helpers ────────────────────────────────────────────────────────
 
@@ -13,47 +21,60 @@ function appStateStub(env: Env, buildId: string): DurableObjectStub {
   return env.APP_STATE.get(env.APP_STATE.idFromName(buildId))
 }
 
-function doState(stub: DurableObjectStub, path: string, method = 'GET', body?: unknown): Promise<Response> {
-  return stub.fetch(new Request(`http://do${path}`, {
-    method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body:    body !== undefined ? JSON.stringify(body) : undefined,
-  }))
-}
-
 // ── App State (E1) ────────────────────────────────────────────────────────────
 
-export const listAppStateHandler: Handler = (_req, env, params) =>
-  doState(appStateStub(env, params.id ?? ''), '/kv')
-
-export const getAppStateHandler: Handler = (_req, env, params) =>
-  doState(appStateStub(env, params.id ?? ''), `/kv/${encodeURIComponent(params.key ?? '')}`)
-
-export const putAppStateHandler: Handler = async (req, env, params) => {
-  let body: unknown
-  try { body = await req.json() } catch { return json(err('Invalid JSON body'), 400) }
-  return doState(appStateStub(env, params.id ?? ''), `/kv/${encodeURIComponent(params.key ?? '')}`, 'PUT', body)
+export const listAppStateHandler: Handler = (_req, env, params) => {
+  const id = params.id ?? ''
+  if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
+  return doFetch(appStateStub(env, id), 'kv', 'GET')
 }
 
-export const deleteAppStateKeyHandler: Handler = (_req, env, params) =>
-  doState(appStateStub(env, params.id ?? ''), `/kv/${encodeURIComponent(params.key ?? '')}`, 'DELETE')
+export const getAppStateHandler: Handler = (_req, env, params) => {
+  const id  = params.id  ?? ''
+  const key = params.key ?? ''
+  if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
+  return doFetch(appStateStub(env, id), `kv/${encodeURIComponent(key)}`, 'GET')
+}
 
-export const clearAppStateHandler: Handler = (_req, env, params) =>
-  doState(appStateStub(env, params.id ?? ''), '/', 'DELETE')
+export const putAppStateHandler: Handler = async (req, env, params) => {
+  const id  = params.id  ?? ''
+  const key = params.key ?? ''
+  if (!isUUID(id)) return json(err('Invalid app id'), 422)
+  const parsed = await parseBody(req, (b) => parseAppStateValueRequest(b, key))
+  if (!parsed.ok) return parsed.response
+  return doFetch(appStateStub(env, id), `kv/${encodeURIComponent(key)}`, 'PUT', { value: parsed.data.value })
+}
+
+export const deleteAppStateKeyHandler: Handler = (_req, env, params) => {
+  const id  = params.id  ?? ''
+  const key = params.key ?? ''
+  if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
+  return doFetch(appStateStub(env, id), `kv/${encodeURIComponent(key)}`, 'DELETE')
+}
+
+export const clearAppStateHandler: Handler = (_req, env, params) => {
+  const id = params.id ?? ''
+  if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
+  return doFetch(appStateStub(env, id), '/', 'DELETE')
+}
 
 // ── App Images (E4) ───────────────────────────────────────────────────────────
 
 export const uploadImageHandler: Handler = async (req, env, params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid app id'), 422)
+
   let form: FormData
   try { form = await req.formData() } catch { return json(err('Expected multipart/form-data'), 400) }
 
   const file = form.get('file') as File | null
   if (!file) return json(err('Missing file field'), 422)
-  if (!IMAGE_TYPES.has(file.type)) return json(err('Unsupported image type — use png, jpeg, gif, or webp'), 422)
-  if (file.size > IMAGE_MAX_BYTES)  return json(err('Image exceeds 5 MB limit'), 422)
+  if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(file.type))
+    return json(err('Unsupported image type — use png, jpeg, gif, or webp'), 422)
+  if (file.size > IMAGE_MAX_BYTES)
+    return json(err('Image exceeds 5 MB limit'), 422)
 
-  const imageId = crypto.randomUUID()
+  const imageId = newId()
   const buf     = await file.arrayBuffer()
   await env.FILES.put(`apps/${id}/images/${imageId}`, buf, {
     httpMetadata:   { contentType: file.type },
@@ -63,8 +84,10 @@ export const uploadImageHandler: Handler = async (req, env, params) => {
 }
 
 export const listImagesHandler: Handler = async (_req, env, params) => {
-  const id   = params.id ?? ''
-  const list = await env.FILES.list({ prefix: `apps/${id}/images/` })
+  const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid app id'), 422)
+
+  const list   = await env.FILES.list({ prefix: `apps/${id}/images/` })
   const images = list.objects.map(o => ({
     imageId:     o.key.split('/').pop() ?? '',
     name:        o.customMetadata?.name        ?? '',
@@ -79,6 +102,8 @@ export const listImagesHandler: Handler = async (_req, env, params) => {
 export const serveImageHandler: Handler = async (_req, env, params) => {
   const id      = params.id      ?? ''
   const imageId = params.imageId ?? ''
+  if (!isUUID(id) || !isUUID(imageId)) return json(err('Invalid id'), 422)
+
   const obj = await env.FILES.get(`apps/${id}/images/${imageId}`)
   if (!obj) return json(err('Image not found'), 404)
   const ct = obj.customMetadata?.contentType ?? 'application/octet-stream'
@@ -94,51 +119,40 @@ export const serveImageHandler: Handler = async (_req, env, params) => {
 export const deleteImageHandler: Handler = async (_req, env, params) => {
   const id      = params.id      ?? ''
   const imageId = params.imageId ?? ''
+  if (!isUUID(id) || !isUUID(imageId)) return json(err('Invalid id'), 422)
+
   await env.FILES.delete(`apps/${id}/images/${imageId}`)
   return json(ok({ deleted: true }))
 }
 
 // ── App Email (E5) ────────────────────────────────────────────────────────────
 
-async function checkEmailRateLimit(buildId: string, env: Env): Promise<Response | null> {
-  const key    = `rl:email:${buildId}`
-  const now    = Date.now()
-  const stored = await env.SANDBOX_REGISTRY.get(key, 'json') as number[] | null
-  const window = (stored ?? []).filter(t => t > now - EMAIL_RATE_WINDOW)
-  if (window.length >= EMAIL_RATE_MAX)
-    return json(err('Email rate limit exceeded — max 5 per minute per app.'), 429)
-  window.push(now)
-  void env.SANDBOX_REGISTRY.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(EMAIL_RATE_WINDOW / 1000) })
-  return null
-}
-
 export const sendEmailHandler: Handler = async (req, env, params) => {
   if (!env.SEND_EMAIL) return json(err('Email sending is not configured on this server.'), 503)
 
   const id = params.id ?? ''
-  const rl = await checkEmailRateLimit(id, env)
+  if (!isUUID(id)) return json(err('Invalid app id'), 422)
+
+  const rl = await checkRateLimit(
+    `rl:email:${id}`,
+    EMAIL_RATE_LIMIT_MAX,
+    EMAIL_RATE_LIMIT_WINDOW_MS,
+    env,
+    'Email rate limit exceeded — max 5 per minute per app.',
+  )
   if (rl) return rl
 
-  let body: { to?: unknown; subject?: unknown; text?: unknown; html?: unknown }
-  try { body = await req.json() as typeof body } catch { return json(err('Invalid JSON body'), 400) }
-
-  const { to, subject, text, html } = body
-  if (typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to))
-    return json(err('Invalid or missing to email address'), 422)
-  if (typeof subject !== 'string' || subject.length === 0 || subject.length > 256)
-    return json(err('subject must be a non-empty string ≤ 256 characters'), 422)
-  if (typeof text !== 'string' || text.length === 0 || text.length > 16384)
-    return json(err('text must be a non-empty string ≤ 16 KB'), 422)
-  if (html !== undefined && typeof html !== 'string')
-    return json(err('html must be a string if provided'), 422)
+  const parsed = await parseBody(req, parseEmailRequest)
+  if (!parsed.ok) return parsed.response
+  const { to, subject, text, html } = parsed.data
 
   try {
     await env.SEND_EMAIL.send({
       from:    'noreply@aether-lite.app',
-      to:      to.trim().toLowerCase(),
+      to,
       subject: subject.slice(0, 256),
       text,
-      ...(typeof html === 'string' ? { html } : {}),
+      ...(html !== undefined ? { html } : {}),
     })
     return json(ok({ sent: true }))
   } catch (e) {

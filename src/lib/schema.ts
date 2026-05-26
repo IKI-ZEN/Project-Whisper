@@ -4,6 +4,8 @@ import {
   MAX_SENSITIVITY_VARIANTS, MAX_ENTROPY_SAMPLES, MAX_ARCHAEOLOGY_CANDIDATES,
   MAX_CLUSTER_TEXTS, MAX_PIPELINE_NODES, MAX_PIPELINE_DEPTH,
   MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN, MAX_BUILD_DESCRIPTION_LEN,
+  MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
+  MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -487,6 +489,48 @@ export function parseVibeRequest(body: unknown): VibeRequest {
   return {
     description,
     name: body.name !== undefined ? str(body.name, 'name') : undefined,
+  }
+}
+
+// ── App State / Email parsers ─────────────────────────────────────────────────
+
+export interface AppStateValueRequest { key: string; value: string }
+
+export function parseAppStateValueRequest(body: unknown, key: string): AppStateValueRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const value = str(body.value, 'value')
+  if (value.length > MAX_APP_STATE_VALUE_LEN)
+    throw new Error(`value must be <= ${MAX_APP_STATE_VALUE_LEN} characters`)
+  if (key.length > MAX_APP_STATE_KEY_LEN)
+    throw new Error(`key must be <= ${MAX_APP_STATE_KEY_LEN} characters`)
+  if (!APP_STATE_KEY_RE.test(key))
+    throw new Error('key may only contain alphanumeric, dot, underscore, hyphen, or slash')
+  return { key, value }
+}
+
+export interface EmailRequest {
+  to: string
+  subject: string
+  text: string
+  html?: string
+}
+
+export function parseEmailRequest(body: unknown): EmailRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const to = str(body.to, 'to')
+  if (!/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(to))
+    throw new Error('to must be a valid email address')
+  const subject = str(body.subject, 'subject')
+  if (subject.length === 0 || subject.length > MAX_EMAIL_SUBJECT_LEN)
+    throw new Error(`subject must be a non-empty string <= ${MAX_EMAIL_SUBJECT_LEN} characters`)
+  const text = str(body.text, 'text')
+  if (text.length === 0 || text.length > MAX_EMAIL_TEXT_LEN)
+    throw new Error(`text must be a non-empty string <= ${MAX_EMAIL_TEXT_LEN} characters`)
+  return {
+    to: to.trim().toLowerCase(),
+    subject,
+    text,
+    html: body.html !== undefined ? str(body.html, 'html') : undefined,
   }
 }
 

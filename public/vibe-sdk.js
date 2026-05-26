@@ -810,7 +810,7 @@ export class AppHandle {
  *                    { type: 'file_generating', filename, index, total }
  *                    { type: 'file_chunk', filename, text }
  *                    { type: 'file_complete', filename, bytes }
- *                    { type: 'build_complete', buildId, appUrl, files[] }
+ *                    { type: 'build_complete', buildId, appUrl, files[], thumbnailUrl }
  *                    { type: 'error', message }
  */
 export class AppSession {
@@ -882,7 +882,7 @@ export class AppSession {
         case 'file_generating':    this.#status = 'generating'; if (h.fileStart) h.fileStart({ filename: msg.filename, index: msg.index, total: msg.total }); break
         case 'file_chunk':         if (h.fileChunk) h.fileChunk({ filename: msg.filename, text: msg.text }); break
         case 'file_complete':      if (h.fileComplete) h.fileComplete({ filename: msg.filename, bytes: msg.bytes }); break
-        case 'build_complete':     this.#status = 'complete'; this.#appUrl = msg.appUrl; if (h.complete) h.complete({ buildId: msg.buildId, appUrl: msg.appUrl, files: msg.files }); break
+        case 'build_complete':     this.#status = 'complete'; this.#appUrl = msg.appUrl; if (h.complete) h.complete({ buildId: msg.buildId, appUrl: msg.appUrl, files: msg.files, thumbnailUrl: msg.thumbnailUrl }); break
         case 'error':              this.#status = 'error'; if (h.error) h.error(new VibeError(msg.message)); break
       }
     })

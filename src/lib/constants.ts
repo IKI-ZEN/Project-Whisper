@@ -56,3 +56,21 @@ export const MAX_APP_HTML_LEN            = 51_200   // 50 KB
 export const MAX_BUILD_DESCRIPTION_LEN   = 2_000
 export const MAX_BUILD_FILES             = 6
 export const MAX_FILE_BYTES              = 102_400  // 100 KB per generated file
+
+// App images (E4)
+export const IMAGE_MAX_BYTES             = 5 * 1024 * 1024  // 5 MB
+export const ALLOWED_IMAGE_TYPES         = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
+
+// App email (E5)
+export const EMAIL_RATE_LIMIT_WINDOW_MS  = 60_000
+export const EMAIL_RATE_LIMIT_MAX        = 5
+export const MAX_EMAIL_SUBJECT_LEN       = 256
+export const MAX_EMAIL_TEXT_LEN          = 16_384
+
+// AppStateDO key/value bounds (E1)
+export const MAX_APP_STATE_KEY_LEN       = 512
+export const MAX_APP_STATE_VALUE_LEN     = 16_384
+export const APP_STATE_KEY_RE            = /^[a-zA-Z0-9._\-/]+$/
+
+// PDF decompression size guard (Z9)
+export const MAX_PDF_INFLATED            = 50 * 1024 * 1024  // 50 MB

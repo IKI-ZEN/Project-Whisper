@@ -79,25 +79,33 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   if (!allow) return {}
   return {
     'Access-Control-Allow-Origin':  allow,
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, PATCH, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age':       '86400',
   }
 }
 
-// Sliding-window IP rate limiter for /api/ai/* routes — stored in SANDBOX_REGISTRY KV.
-export async function checkAiRateLimit(req: Request, env: Env): Promise<Response | null> {
-  const ip  = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const key = `rl:ai:${ip}`
-  const now = Date.now()
+// Generic sliding-window rate limiter — stored in SANDBOX_REGISTRY KV.
+export async function checkRateLimit(
+  key: string,
+  max: number,
+  windowMs: number,
+  env: Env,
+  message = 'Rate limit exceeded — try again in a minute.',
+): Promise<Response | null> {
+  const now    = Date.now()
   const stored = await env.SANDBOX_REGISTRY.get(key, 'json') as number[] | null
-  const window = (stored ?? []).filter(t => t > now - AI_RATE_LIMIT_WINDOW_MS)
-  if (window.length >= AI_RATE_LIMIT_MAX) {
-    return json(err('Rate limit exceeded — try again in a minute.'), 429)
-  }
+  const window = (stored ?? []).filter(t => t > now - windowMs)
+  if (window.length >= max) return json(err(message), 429)
   window.push(now)
-  void env.SANDBOX_REGISTRY.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(AI_RATE_LIMIT_WINDOW_MS / 1000) })
+  void env.SANDBOX_REGISTRY.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
   return null
+}
+
+// Sliding-window IP rate limiter for /api/ai/* routes.
+export async function checkAiRateLimit(req: Request, env: Env): Promise<Response | null> {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  return checkRateLimit(`rl:ai:${ip}`, AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_MS, env)
 }
 
 export class Router {
@@ -114,6 +122,7 @@ export class Router {
 
   get(path: string, h: Handler): this    { return this.on('GET',    path, h) }
   post(path: string, h: Handler): this   { return this.on('POST',   path, h) }
+  put(path: string, h: Handler): this    { return this.on('PUT',    path, h) }
   delete(path: string, h: Handler): this { return this.on('DELETE', path, h) }
   patch(path: string, h: Handler): this  { return this.on('PATCH',  path, h) }
 
