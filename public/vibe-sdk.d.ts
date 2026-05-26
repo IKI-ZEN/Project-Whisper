@@ -238,6 +238,14 @@ export interface AppSessionOpts {
   model?: string
 }
 
+export interface BuildMeta {
+  id: string
+  name: string
+  description: string
+  model: string
+  createdAt: number
+}
+
 // ── Sandbox types ─────────────────────────────────────────────────────────────
 
 export interface SandboxExport {
@@ -427,6 +435,8 @@ export class AppHandle {
   readonly files: string[]
   /** URL where the generated app is served. */
   readonly appUrl: string
+  /** URL of the SVG metadata thumbnail for this build. */
+  readonly thumbnailUrl: string
   /** Persistent key-value state store for this app. */
   readonly state: AppStateHandle
 
@@ -474,6 +484,8 @@ export class AppSession {
  */
 export class AppBuilder {
   constructor(baseUrl?: string)
+  /** List all builds (requires metadata stored at creation time). */
+  list(): Promise<BuildMeta[]>
   /** Create a new build session (lazy — call .start() to begin). */
   session(description: string, opts?: AppSessionOpts): AppSession
   /** Load an existing build by ID. */

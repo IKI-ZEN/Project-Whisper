@@ -3,6 +3,13 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
 import { newId } from '../lib/utils'
+import { BUILD_KEY_PREFIX, BUILD_TTL } from '../lib/constants'
+
+// ── Validation helpers ────────────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isUUID(s: string): boolean { return UUID_RE.test(s) }
 
 // ── DO stub helpers ───────────────────────────────────────────────────────────
 
@@ -11,7 +18,7 @@ function buildStub(env: Env, id: string): DurableObjectStub {
 }
 
 function doBuild(stub: DurableObjectStub, path: string, method = 'GET', body?: unknown): Promise<Response> {
-  return stub.fetch(new Request(`http://do${path}`, {
+  return stub.fetch(new Request(`https://do${path}`, {
     method,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body:    body !== undefined ? JSON.stringify(body) : undefined,
@@ -19,6 +26,12 @@ function doBuild(stub: DurableObjectStub, path: string, method = 'GET', body?: u
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
+
+// GET /api/v2/build
+export const listBuildsHandler: Handler = async (_req, env) => {
+  const list = await env.SANDBOX_REGISTRY.list({ prefix: BUILD_KEY_PREFIX })
+  return json(ok({ builds: list.keys.map(k => k.metadata), total: list.keys.length }))
+}
 
 // POST /api/v2/build
 export const createBuildHandler: Handler = async (req, env) => {
@@ -33,12 +46,19 @@ export const createBuildHandler: Handler = async (req, env) => {
   const initData = await initRes.json() as { ok: boolean; error?: string }
   if (!initData.ok) return json(err(initData.error ?? 'Failed to initialise build'), 500)
 
+  // Register in KV so builds are enumerable via GET /api/v2/build
+  await env.SANDBOX_REGISTRY.put(`${BUILD_KEY_PREFIX}${id}`, id, {
+    expirationTtl: BUILD_TTL,
+    metadata: { id, name: name ?? description.slice(0, 64), description, model: model ?? '', createdAt: Date.now() },
+  })
+
   return json(ok({ buildId: id, wsUrl: `/api/v2/build/${id}/ws`, appUrl: `/build/${id}`, status: 'idle' }))
 }
 
 // GET /api/v2/build/:id
 export const getBuildHandler: Handler = async (_req, env, params) => {
-  const id   = params.id ?? ''
+  const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const res  = await doBuild(buildStub(env, id), '/status')
   const data = await res.json() as { ok: boolean; data?: unknown; error?: string }
   if (!data.ok) return json(err(data.error ?? 'Build not found'), 404)
@@ -47,7 +67,8 @@ export const getBuildHandler: Handler = async (_req, env, params) => {
 
 // GET /api/v2/build/:id/files
 export const listBuildFilesHandler: Handler = async (_req, env, params) => {
-  const id   = params.id ?? ''
+  const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const res  = await doBuild(buildStub(env, id), '/files')
   const data = await res.json() as { ok: boolean; data?: unknown; error?: string }
   if (!data.ok) return json(err(data.error ?? 'Build not found'), 404)
@@ -58,6 +79,7 @@ export const listBuildFilesHandler: Handler = async (_req, env, params) => {
 export const getBuildFileHandler: Handler = async (_req, env, params) => {
   const id       = params.id ?? ''
   const filename = params.filename ?? 'index.html'
+  if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const res = await doBuild(buildStub(env, id), `/files/${encodeURIComponent(filename)}`)
   if (!res.ok) return json(err('File not found'), 404)
   // Return the raw file response (already has correct Content-Type from the DO)
@@ -66,16 +88,19 @@ export const getBuildFileHandler: Handler = async (_req, env, params) => {
 
 // DELETE /api/v2/build/:id
 export const deleteBuildHandler: Handler = async (_req, env, params) => {
-  const id   = params.id ?? ''
+  const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const res  = await doBuild(buildStub(env, id), '/', 'DELETE')
   const data = await res.json() as { ok: boolean; error?: string }
   if (!data.ok) return json(err(data.error ?? 'Delete failed'), 500)
+  await env.SANDBOX_REGISTRY.delete(`${BUILD_KEY_PREFIX}${id}`)
   return json(ok({ deleted: true }))
 }
 
 // GET /api/v2/build/:id/thumbnail — E3
 export const getBuildThumbnailHandler: Handler = async (_req, env, params) => {
-  const id  = params.id ?? ''
+  const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const obj = await env.FILES.get(`apps/${id}/.thumbnail.svg`)
   if (!obj) return json(err('Thumbnail not found'), 404)
   return new Response(obj.body, {
@@ -93,6 +118,7 @@ export const deployBuildHandler: Handler = async (_req, env, params) => {
   }
 
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid build id'), 422)
 
   // 1. Verify build is complete
   const statusRes  = await doBuild(buildStub(env, id), '/status')
@@ -154,6 +180,7 @@ export const deployBuildHandler: Handler = async (_req, env, params) => {
 // ── Route table ───────────────────────────────────────────────────────────────
 
 export const buildRoutes: Array<[string, string, Handler]> = [
+  ['GET',    '/api/v2/build',                     listBuildsHandler],
   ['POST',   '/api/v2/build',                     createBuildHandler],
   ['GET',    '/api/v2/build/:id',                 getBuildHandler],
   ['GET',    '/api/v2/build/:id/files',           listBuildFilesHandler],
