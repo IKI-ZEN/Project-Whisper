@@ -642,9 +642,11 @@ function _renderMd(text){
 const LS_SID='aether:sandboxId'
 const LS_SESS='aether:sessions'
 const LS_ACTIVE='aether:activeSession'
+const LS_TOKENS='aether:tokens'
 let sandboxId=localStorage.getItem(LS_SID)
 let sessions=JSON.parse(localStorage.getItem(LS_SESS)||'[]')
 let activeSession=localStorage.getItem(LS_ACTIVE)||'default'
+let sessionTokens=JSON.parse(localStorage.getItem(LS_TOKENS)||'{}')
 let guardMode='strict'
 let docs=[]
 let ctxSession=null
@@ -688,7 +690,16 @@ async function switchSession(id){
   await loadHistory()
 }
 
-function newThread(){
+async function issueSessionToken(sessId){
+  if(!sandboxId)return
+  try{
+    const r=await fetch('/api/sandbox/'+sandboxId+'/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sessId})})
+    const d=await r.json()
+    if(d.ok&&d.data.token){sessionTokens[sessId]=d.data.token;localStorage.setItem(LS_TOKENS,JSON.stringify(sessionTokens))}
+  }catch{}
+}
+
+async function newThread(){
   const id='sess-'+Date.now()
   const name='Thread '+(sessions.length+1)
   sessions.push({id,name,createdAt:Date.now()})
@@ -697,12 +708,15 @@ function newThread(){
   localStorage.setItem(LS_ACTIVE,activeSession)
   document.getElementById('messages').innerHTML=''
   renderThreadList()
+  await issueSessionToken(id)
 }
 
 async function loadHistory(){
   if(!sandboxId)return
   try{
-    const r=await fetch('/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(activeSession))
+    const tok=sessionTokens[activeSession]
+    const histUrl='/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(activeSession)+(tok?'&token='+encodeURIComponent(tok):'')
+    const r=await fetch(histUrl)
     const d=await r.json()
     if(!d.ok)return
     const msgs=document.getElementById('messages')
@@ -746,7 +760,9 @@ async function send(){
   const el=addMsg('assistant','')
   el.classList.add('typing')
   try{
-    const res=await fetch('/api/sandbox/'+sandboxId+'/stream?sessionId='+encodeURIComponent(activeSession),{
+    const tok=sessionTokens[activeSession]
+    const streamUrl='/api/sandbox/'+sandboxId+'/stream?sessionId='+encodeURIComponent(activeSession)+(tok?'&token='+encodeURIComponent(tok):'')
+    const res=await fetch(streamUrl,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:text})
@@ -800,6 +816,9 @@ async function init(){
       const d=await r.json()
       if(d.ok){sandboxId=d.data.id;localStorage.setItem(LS_SID,sandboxId)}
     }catch{}
+  }
+  if(sandboxId&&!sessionTokens[activeSession]){
+    await issueSessionToken(activeSession)
   }
   if(sandboxId){
     try{
@@ -979,10 +998,10 @@ document.getElementById('ctx-export').onclick=async function(){
   const s=closeCtxMenu()
   if(!s||!sandboxId)return
   try{
-    const r=await fetch('/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(s.id))
+    const r=await fetch('/api/sandbox/'+sandboxId+'/export-session?sessionId='+encodeURIComponent(s.id))
     const d=await r.json()
     if(!d.ok)return
-    const blob=new Blob([JSON.stringify({session:s,messages:d.data.messages||[]},null,2)],{type:'application/json'})
+    const blob=new Blob([JSON.stringify(d.data,null,2)],{type:'application/json'})
     const url=URL.createObjectURL(blob)
     const a=document.createElement('a')
     a.href=url

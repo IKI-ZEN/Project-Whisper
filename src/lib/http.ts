@@ -154,10 +154,17 @@ export class Router {
       if (rlRes) return this.addHeaders(rlRes, cors, requestId)
     }
 
-    // Cloudflare Access: gate state-mutation endpoints when CF_ACCESS_AUD is set
+    // Cloudflare Access: gate state-mutation endpoints when CF_ACCESS_AUD is set.
+    // Identity is forwarded on the request as X-Aether-Identity for D1 audit trail.
+    let dispatchReq = req
     if (isProtectedRequest(req.method, url.pathname)) {
-      const authRes = await requireAccess(req, env)
+      const { deny: authRes, identity } = await requireAccess(req, env)
       if (authRes) return this.addHeaders(authRes, cors, requestId)
+      if (identity?.email) {
+        const headers = new Headers(req.headers)
+        headers.set('X-Aether-Identity', identity.email)
+        dispatchReq = new Request(req, { headers })
+      }
     }
 
     for (const route of this.routes) {
@@ -165,7 +172,7 @@ export class Router {
       const match = route.pattern.exec(url)
       if (!match) continue
       const params = match.pathname.groups as Params
-      const res = await route.handler(req, env, params)
+      const res = await route.handler(dispatchReq, env, params)
       return this.addHeaders(res, cors, requestId)
     }
 

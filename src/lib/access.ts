@@ -41,7 +41,7 @@ async function fetchPublicKeys(teamDomain: string): Promise<Map<string, CryptoKe
 
 // ── JWT validation ────────────────────────────────────────────────────────────
 
-interface AccessIdentity {
+export interface AccessIdentity {
   email: string
   sub:   string
 }
@@ -86,36 +86,44 @@ async function validateJWT(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+export interface AccessResult {
+  deny:     Response | null
+  identity: AccessIdentity | null
+}
+
 /**
  * Check for a valid Cloudflare Access JWT on the request.
- * Returns null if the request is authenticated (or if Access is not configured).
- * Returns a 401 Response if Access is configured but the token is missing or invalid.
+ * Returns `{ deny: null, identity }` when authenticated.
+ * Returns `{ deny: 401Response, identity: null }` when auth fails.
+ * Returns `{ deny: null, identity: null }` when Access is not configured.
  *
  * Token is read from:
  *   1. Cf-Access-Jwt-Assertion header (set automatically by the Access proxy)
  *   2. Authorization: Bearer <token> header (for programmatic clients)
  */
-export async function requireAccess(req: Request, env: Env): Promise<Response | null> {
-  if (!env.CF_ACCESS_AUD || !env.CF_ACCESS_TEAM_DOMAIN) return null   // not configured — open
+export async function requireAccess(req: Request, env: Env): Promise<AccessResult> {
+  if (!env.CF_ACCESS_AUD || !env.CF_ACCESS_TEAM_DOMAIN) return { deny: null, identity: null }
 
   const token = req.headers.get('Cf-Access-Jwt-Assertion')
              ?? req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
 
-  const deny = (msg: string): Response =>
-    new Response(JSON.stringify({ ok: false, error: msg }), {
+  const deny = (msg: string): AccessResult => ({
+    deny: new Response(JSON.stringify({ ok: false, error: msg }), {
       status:  401,
       headers: {
         'Content-Type':     'application/json',
         'WWW-Authenticate': `Bearer realm="${env.CF_ACCESS_TEAM_DOMAIN}"`,
       },
-    })
+    }),
+    identity: null,
+  })
 
   if (!token) return deny('Authentication required — provide a Cloudflare Access token')
 
   const identity = await validateJWT(token, env.CF_ACCESS_TEAM_DOMAIN, env.CF_ACCESS_AUD)
   if (!identity) return deny('Invalid or expired Cloudflare Access token')
 
-  return null  // authenticated
+  return { deny: null, identity }
 }
 
 /**
