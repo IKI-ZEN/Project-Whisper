@@ -441,6 +441,7 @@
     <a href="/vibe.html" class="navlink active" aria-current="page">Vibe</a>
     <a href="/apps" class="navlink">Apps</a>
     <a href="/tools.html" class="navlink">Tools</a>
+    <a href="/dashboard" class="navlink">Dashboard</a>
   </nav>
 
   <div class="vibe-layout">
@@ -532,6 +533,25 @@
               <button class="outline" onclick="gotoChatFromVibe()">Open in Chat</button>
             </div>
 
+            <!-- Inline preview (populated by doVibe on success) -->
+            <div id="quick-preview-wrap" style="display:none;margin-top:12px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border)">
+                <span style="font-size:11px;color:var(--muted)">App Preview</span>
+                <button id="quick-edit-html-btn" style="display:none;font-size:11px;padding:4px 10px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer" onclick="openHtmlEditor()">Edit HTML</button>
+              </div>
+              <iframe id="quick-preview-frame" title="Quick sandbox preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" style="width:100%;height:320px;border:none;display:block"></iframe>
+            </div>
+
+            <!-- appHtml editor (hidden until Edit HTML clicked) -->
+            <div id="html-editor-wrap" style="display:none;margin-top:10px;flex-direction:column;gap:8px">
+              <div style="font-size:11px;color:var(--muted)">Custom App HTML — replaces the default chat UI for this sandbox</div>
+              <textarea id="html-editor-ta" style="width:100%;height:200px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:8px;font-size:11px;font-family:var(--mono);resize:vertical;outline:none" spellcheck="false" aria-label="Custom app HTML"></textarea>
+              <div style="display:flex;gap:8px">
+                <button class="green" style="font-size:11px;padding:6px 14px" onclick="saveHtml()">Save HTML</button>
+                <button class="outline" style="font-size:11px;padding:6px 14px" onclick="closeHtmlEditor()">Cancel</button>
+              </div>
+            </div>
+
             <div class="action-field">
               <div class="field-label">Embed code</div>
               <div class="input-copy-row">
@@ -583,8 +603,10 @@
               <a id="build-open-link" href="#" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
                 <button class="green">Open App ↗</button>
               </a>
+              <button id="deploy-btn" class="outline" onclick="deployApp()">Deploy to Pages →</button>
               <button class="outline" onclick="stopBuild()">Stop Build</button>
             </div>
+            <div id="deploy-status" style="display:none;font-size:11px;padding:6px 10px;border-radius:var(--radius);margin-top:6px"></div>
             <iframe id="build-preview-frame" title="App preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
           </div>
 
@@ -691,6 +713,16 @@
           tools: [],
         })
         document.getElementById('vibe-actions').style.display = 'flex'
+        // Show iframe preview of the generated app
+        const previewWrap = document.getElementById('quick-preview-wrap')
+        previewWrap.style.display = 'block'
+        document.getElementById('quick-preview-frame').src = vibeResult.appUrl
+        // Show Edit HTML button if appHtml is present
+        if (vibeResult.config?.appHtml) {
+          const editBtn = document.getElementById('quick-edit-html-btn')
+          editBtn.style.display = 'inline-block'
+          document.getElementById('html-editor-ta').value = vibeResult.config.appHtml
+        }
       } catch (e) {
         out.textContent = `Error: ${e}`
         setStatus('vibe', String(e), true)
@@ -745,12 +777,14 @@
           addLog(`  ✓ ${filename}  (${(bytes / 1024).toFixed(1)} KB)`)
           renderBuildFileTabs()
         })
-        .onComplete(({ appUrl, files }) => {
+        .onComplete(({ appUrl, files, buildId }) => {
           setBuildStatus(`✓ Build complete — ${files.length} file(s)`)
           addLog(`\n✓ App is live at ${appUrl}`)
           document.getElementById('build-open-link').href = appUrl
           document.getElementById('build-actions').style.display = 'flex'
           document.getElementById('build-preview-frame').src = appUrl
+          if (buildId) currentBuildId = buildId
+          document.getElementById('deploy-status').style.display = 'none'
           clearLoading(btn, 'Build App →')
         })
         .onError(err => {
@@ -816,6 +850,70 @@
       window.location.href = '/'
     }
 
+    // ── Quick sandbox appHtml editor ──
+    function openHtmlEditor() {
+      document.getElementById('html-editor-wrap').style.display = 'flex'
+      document.getElementById('quick-edit-html-btn').style.display = 'none'
+    }
+    function closeHtmlEditor() {
+      document.getElementById('html-editor-wrap').style.display = 'none'
+      document.getElementById('quick-edit-html-btn').style.display = 'inline-block'
+    }
+    async function saveHtml() {
+      if (!vibeResult) return
+      const html = document.getElementById('html-editor-ta').value
+      try {
+        const r = await fetch('/api/sandbox/' + vibeResult.sandboxId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appHtml: html }),
+        })
+        const d = await r.json()
+        if (d.ok) {
+          document.getElementById('quick-preview-frame').src = vibeResult.appUrl + '?v=' + Date.now()
+          closeHtmlEditor()
+        }
+      } catch {}
+    }
+
+    // ── App Builder deploy ──
+    let currentBuildId = null
+    async function deployApp() {
+      if (!currentBuildId) return
+      const btn = document.getElementById('deploy-btn')
+      const statusEl = document.getElementById('deploy-status')
+      btn.disabled = true
+      btn.textContent = 'Deploying…'
+      statusEl.style.display = 'block'
+      statusEl.style.background = '#7c3aed22'
+      statusEl.style.color = 'var(--accent2)'
+      statusEl.textContent = 'Deploying to Cloudflare Pages…'
+      try {
+        const r = await fetch('/api/v2/build/' + currentBuildId + '/deploy', { method: 'POST' })
+        const d = await r.json()
+        if (r.status === 503 || (d.error && d.error.includes('token'))) {
+          statusEl.style.background = '#f59e0b22'
+          statusEl.style.color = '#f59e0b'
+          statusEl.textContent = 'Set CLOUDFLARE_API_TOKEN in .dev.vars to enable Pages deployment.'
+        } else if (d.ok && d.url) {
+          statusEl.style.background = '#34d39922'
+          statusEl.style.color = '#34d399'
+          statusEl.innerHTML = 'Deployed → <a href="' + d.url + '" target="_blank" rel="noopener noreferrer" style="color:#34d399">' + d.url + '</a>'
+        } else {
+          statusEl.style.background = '#f8717122'
+          statusEl.style.color = '#f87171'
+          statusEl.textContent = 'Deploy failed: ' + (d.error || 'Unknown error')
+        }
+      } catch (e) {
+        statusEl.style.background = '#f8717122'
+        statusEl.style.color = '#f87171'
+        statusEl.textContent = 'Deploy failed: ' + e
+      } finally {
+        btn.disabled = false
+        btn.textContent = 'Deploy to Pages →'
+      }
+    }
+
     // ── Copy helpers ──
     function copyEmbed() {
       const val = document.getElementById('embed-out').value
@@ -869,7 +967,7 @@
     document.getElementById('mode-app-btn').onclick = () => setVibeMode('app')
     document.getElementById('import-btn').onclick = doImport
 
-    Object.assign(window, { setVibeMode, doVibeAction, gotoChatFromVibe, stopBuild, copyEmbed, copyExport })
+    Object.assign(window, { setVibeMode, doVibeAction, gotoChatFromVibe, stopBuild, copyEmbed, copyExport, openHtmlEditor, closeHtmlEditor, saveHtml, deployApp })
 
     loadTemplates()
   </script>

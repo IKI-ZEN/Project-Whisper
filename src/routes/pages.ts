@@ -317,6 +317,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink active" aria-current="page">Apps</a>
   <a href="/tools.html" class="navlink">Tools</a>
+  <a href="/dashboard" class="navlink">Dashboard</a>
   <a href="/vibe.html" class="navlink newapp">+ New App</a>
 </nav>
 <main>
@@ -494,6 +495,43 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 @media(max-width:768px){.sidebar{display:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+.guard-seg{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:calc(var(--radius)+2px);padding:2px;gap:2px}
+.guard-btn{flex:1;padding:4px 4px;border-radius:var(--radius);border:none;background:none;color:var(--muted);font-size:10px;font-weight:500;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;text-align:center}
+.guard-btn.g-strict{background:var(--accent);color:#fff}
+.guard-btn.g-audit{background:#f59e0b22;color:#f59e0b}
+.guard-btn.g-off{background:#f8717122;color:#f87171}
+.kb-section{border-top:1px solid var(--border)}
+.kb-section.kb-collapsed .kb-body{display:none}
+.kb-section.kb-collapsed .kb-arrow{transform:rotate(-90deg)}
+.kb-head{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;cursor:pointer;user-select:none}
+.kb-head>span:first-child{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kb-arrow{font-size:9px;color:var(--muted);transition:transform .15s;flex-shrink:0}
+.kb-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px}
+.kb-drop{border:1px dashed var(--border);border-radius:var(--radius);padding:9px;text-align:center;font-size:11px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s}
+.kb-drop:hover,.kb-drop.drag-over{border-color:var(--accent2);color:var(--accent2)}
+.doc-list{display:flex;flex-direction:column;gap:3px;max-height:88px;overflow-y:auto}
+.doc-item{display:flex;align-items:center;gap:5px;padding:3px 6px;background:var(--surface);border-radius:4px}
+.doc-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--text)}
+.doc-st{font-size:9px;padding:1px 5px;border-radius:99px;flex-shrink:0}
+.doc-st.processing{background:#f59e0b22;color:#f59e0b}
+.doc-st.indexed{background:#34d39922;color:#34d399}
+.doc-st.error,.doc-st.blocked{background:#f8717122;color:#f87171}
+.doc-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 1px;flex-shrink:0}
+.doc-del:hover{color:#f87171}
+.rag-row{display:flex;align-items:center;justify-content:space-between}
+.rag-lbl{font-size:11px;color:var(--muted)}
+.rag-sw{position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0}
+.rag-sw input{opacity:0;width:0;height:0;position:absolute}
+.rag-track{position:absolute;inset:0;background:var(--border);border-radius:99px;transition:background .15s;cursor:pointer}
+.rag-sw input:checked+.rag-track{background:var(--accent)}
+.rag-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:99px;transition:transform .15s;pointer-events:none}
+.rag-sw input:checked+.rag-track .rag-thumb{transform:translateX(14px)}
+.ctx-menu{position:fixed;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:4px;min-width:144px;display:none;box-shadow:0 4px 24px #00000077}
+.ctx-menu.open{display:block}
+.ctx-item{padding:6px 12px;font-size:12px;color:var(--text);cursor:pointer;border-radius:4px;white-space:nowrap}
+.ctx-item:hover{background:#7c3aed22;color:var(--accent2)}
+.ctx-item.danger{color:var(--muted)}
+.ctx-item.danger:hover{background:#f8717122;color:#f87171}
 </style>
 </head>
 <body>
@@ -503,6 +541,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink">Apps</a>
   <a href="/tools.html" class="navlink">Tools</a>
+  <a href="/dashboard" class="navlink">Dashboard</a>
 </nav>
 <div class="layout">
   <aside class="sidebar" aria-label="Sidebar">
@@ -510,6 +549,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
       <button class="new-thread-btn" id="new-thread-btn">+ New Thread</button>
     </div>
     <div id="thread-list" class="thread-list" role="list" aria-label="Threads"></div>
+    <div class="kb-section kb-collapsed" id="kb-section">
+      <div class="kb-head" id="kb-head" role="button" tabindex="0" aria-expanded="false" aria-label="Knowledge Base">
+        <span>Knowledge Base</span>
+        <span class="kb-arrow">▾</span>
+      </div>
+      <div class="kb-body">
+        <div class="kb-drop" id="kb-drop" role="button" tabindex="0" aria-label="Drop file or click to upload document">Drop or click to upload</div>
+        <input type="file" id="kb-file" accept=".txt,.md,.csv,.html,.json,.pdf" style="display:none" aria-hidden="true"/>
+        <div id="doc-list" class="doc-list" role="list" aria-label="Documents"></div>
+        <div class="rag-row">
+          <span class="rag-lbl">Use in chat</span>
+          <label class="rag-sw" aria-label="Enable knowledge retrieval">
+            <input type="checkbox" id="rag-toggle" role="switch"/>
+            <span class="rag-track"><span class="rag-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="config-section">
       <span class="cfg-label">Model</span>
       <select id="model-select" class="cfg-select" aria-label="AI model">
@@ -530,6 +587,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
       <span class="cfg-label">System Prompt</span>
       <textarea id="sys-prompt" class="cfg-textarea" rows="3" placeholder="Optional system prompt…" aria-label="System prompt"></textarea>
       <button id="save-btn" class="save-btn">Save config</button>
+      <span class="cfg-label">Guard Mode</span>
+      <div class="guard-seg" role="group" aria-label="Guard mode">
+        <button id="guard-strict-btn" class="guard-btn" aria-pressed="true">Strict</button>
+        <button id="guard-audit-btn" class="guard-btn" aria-pressed="false">Audit</button>
+        <button id="guard-off-btn" class="guard-btn" aria-pressed="false">Off</button>
+      </div>
     </div>
   </aside>
   <div class="chat-main">
@@ -545,6 +608,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
       <button id="send-btn">Send</button>
     </div>
   </div>
+</div>
+<div id="ctx-menu" class="ctx-menu" role="menu" aria-label="Thread actions">
+  <div id="ctx-rename" class="ctx-item" role="menuitem" tabindex="-1">Rename</div>
+  <div id="ctx-export" class="ctx-item" role="menuitem" tabindex="-1">Export JSON</div>
+  <div id="ctx-delete" class="ctx-item danger" role="menuitem" tabindex="-1">Delete</div>
 </div>
 <script nonce="${nonce}">
 function _esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -577,6 +645,10 @@ const LS_ACTIVE='aether:activeSession'
 let sandboxId=localStorage.getItem(LS_SID)
 let sessions=JSON.parse(localStorage.getItem(LS_SESS)||'[]')
 let activeSession=localStorage.getItem(LS_ACTIVE)||'default'
+let guardMode='strict'
+let docs=[]
+let ctxSession=null
+let ctxTarget=null
 
 function addMsg(role,text){
   const ce=document.getElementById('empty-chat');if(ce)ce.remove()
@@ -600,7 +672,9 @@ function renderThreadList(){
     div.setAttribute('role','listitem')
     div.setAttribute('tabindex','0')
     div.textContent=s.name
-    div.onclick=function(){switchSession(s.id)}
+    div.onclick=function(){if(div.contentEditable!=='true')switchSession(s.id)}
+    div.ondblclick=function(e){e.preventDefault();startRename(div,s)}
+    div.oncontextmenu=function(e){openCtxMenu(e,s,div)}
     div.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();switchSession(s.id)}}
     list.appendChild(div)
   })
@@ -740,6 +814,9 @@ async function init(){
         sl.value=String(Math.round(temp*10))
         document.getElementById('temp-val').textContent=(parseFloat(sl.value)/10).toFixed(1)
         document.getElementById('sys-prompt').value=cfg.systemPrompt||''
+        initGuardMode(cfg.guardMode||'strict')
+        document.getElementById('rag-toggle').checked=!!(cfg.ragEnabled)
+        loadDocs()
       }
     }catch{}
   }
@@ -754,12 +831,180 @@ async function init(){
   document.getElementById('user-input').focus()
 }
 
+// ── Guard mode ────────────────────────────────────────────────────────────────
+function initGuardMode(mode){
+  guardMode=mode||'strict'
+  updateGuardUI()
+}
+function updateGuardUI(){
+  const pairs=[['guard-strict-btn','g-strict'],['guard-audit-btn','g-audit'],['guard-off-btn','g-off']]
+  const modes=['strict','audit','off']
+  pairs.forEach(function(pair,i){
+    const btn=document.getElementById(pair[0])
+    btn.className='guard-btn'
+    btn.setAttribute('aria-pressed',modes[i]===guardMode?'true':'false')
+    if(modes[i]===guardMode)btn.classList.add(pair[1])
+  })
+}
+async function setGuardMode(mode){
+  guardMode=mode
+  updateGuardUI()
+  if(!sandboxId)return
+  try{await fetch('/api/sandbox/'+sandboxId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({guardMode:mode})})}catch{}
+}
+
+// ── Knowledge base ────────────────────────────────────────────────────────────
+async function loadDocs(){
+  if(!sandboxId)return
+  try{
+    const r=await fetch('/api/sandbox/'+sandboxId+'/documents')
+    const d=await r.json()
+    if(d.ok){docs=d.data.docs||[];renderDocList()}
+  }catch{}
+}
+function renderDocList(){
+  const list=document.getElementById('doc-list')
+  if(!docs.length){list.innerHTML='<div style="font-size:10px;color:var(--muted);text-align:center;padding:3px 0">No documents</div>';return}
+  list.innerHTML=''
+  docs.forEach(function(doc){
+    const item=document.createElement('div')
+    item.className='doc-item'
+    item.setAttribute('role','listitem')
+    const name=doc.name||'Document'
+    const st=doc.status||'processing'
+    item.innerHTML='<span class="doc-name">'+_esc(name)+'</span><span class="doc-st '+_esc(st)+'">'+_esc(st)+'</span><button class="doc-del" aria-label="Remove '+_esc(name)+'">×</button>'
+    item.querySelector('.doc-del').onclick=function(e){e.stopPropagation();deleteDoc(doc.id)}
+    list.appendChild(item)
+  })
+}
+async function deleteDoc(docId){
+  if(!sandboxId)return
+  try{
+    await fetch('/api/sandbox/'+sandboxId+'/documents/'+docId,{method:'DELETE'})
+    docs=docs.filter(function(d){return d.id!==docId})
+    renderDocList()
+  }catch{}
+}
+async function uploadDoc(file){
+  if(!sandboxId||!file)return
+  const kbSec=document.getElementById('kb-section')
+  if(kbSec.classList.contains('kb-collapsed'))toggleKb()
+  const fd=new FormData()
+  fd.append('file',file)
+  const tempId='_tmp_'+Date.now()
+  docs.push({id:tempId,name:file.name,status:'processing'})
+  renderDocList()
+  try{
+    const r=await fetch('/api/sandbox/'+sandboxId+'/documents',{method:'POST',body:fd})
+    const d=await r.json()
+    docs=docs.filter(function(x){return x.id!==tempId})
+    if(d.ok&&d.data)docs.push({id:d.data.docId,name:d.data.name,status:d.data.status||'processing'})
+    renderDocList()
+  }catch{docs=docs.filter(function(x){return x.id!==tempId});renderDocList()}
+}
+async function setRag(val){
+  if(!sandboxId)return
+  try{await fetch('/api/sandbox/'+sandboxId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({ragEnabled:val})})}catch{}
+}
+function toggleKb(){
+  const sec=document.getElementById('kb-section')
+  const head=document.getElementById('kb-head')
+  const isCollapsed=sec.classList.toggle('kb-collapsed')
+  head.setAttribute('aria-expanded',isCollapsed?'false':'true')
+}
+
+// ── Thread rename & context menu ──────────────────────────────────────────────
+function startRename(div,s){
+  div.contentEditable='true'
+  div.focus()
+  const range=document.createRange()
+  range.selectNodeContents(div)
+  const sel=window.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+  div.onblur=function(){
+    div.contentEditable='false'
+    const newName=div.textContent.trim()||s.name
+    div.textContent=newName
+    s.name=newName
+    localStorage.setItem(LS_SESS,JSON.stringify(sessions))
+    div.onblur=null
+    div.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();switchSession(s.id)}}
+  }
+  div.onkeydown=function(e){
+    if(e.key==='Enter'){e.preventDefault();div.blur()}
+    else if(e.key==='Escape'){div.textContent=s.name;div.onblur=null;div.contentEditable='false';div.onkeydown=function(e2){if(e2.key==='Enter'||e2.key===' '){e2.preventDefault();switchSession(s.id)}}}
+  }
+}
+function openCtxMenu(e,s,div){
+  e.preventDefault()
+  ctxSession=s
+  ctxTarget=div
+  const menu=document.getElementById('ctx-menu')
+  menu.classList.add('open')
+  const x=Math.min(e.clientX,window.innerWidth-160)
+  const y=Math.min(e.clientY,window.innerHeight-120)
+  menu.style.left=x+'px'
+  menu.style.top=y+'px'
+  document.getElementById('ctx-rename').focus()
+}
+function closeCtxMenu(){
+  const s=ctxSession
+  ctxSession=null
+  ctxTarget=null
+  document.getElementById('ctx-menu').classList.remove('open')
+  return s
+}
+
 document.getElementById('temp-slider').oninput=function(){
   document.getElementById('temp-val').textContent=(this.value/10).toFixed(1)
 }
 document.getElementById('send-btn').onclick=send
 document.getElementById('new-thread-btn').onclick=newThread
 document.getElementById('save-btn').onclick=saveConfig
+document.getElementById('guard-strict-btn').onclick=function(){setGuardMode('strict')}
+document.getElementById('guard-audit-btn').onclick=function(){setGuardMode('audit')}
+document.getElementById('guard-off-btn').onclick=function(){setGuardMode('off')}
+document.getElementById('kb-head').onclick=toggleKb
+document.getElementById('kb-head').onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleKb()}}
+document.getElementById('kb-drop').onclick=function(){document.getElementById('kb-file').click()}
+document.getElementById('kb-drop').onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('kb-file').click()}}
+document.getElementById('kb-drop').addEventListener('dragover',function(e){e.preventDefault();this.classList.add('drag-over')})
+document.getElementById('kb-drop').addEventListener('dragleave',function(){this.classList.remove('drag-over')})
+document.getElementById('kb-drop').addEventListener('drop',function(e){e.preventDefault();this.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)uploadDoc(f)})
+document.getElementById('kb-file').onchange=function(){if(this.files[0])uploadDoc(this.files[0]);this.value=''}
+document.getElementById('rag-toggle').onchange=function(){setRag(this.checked)}
+document.getElementById('ctx-rename').onclick=function(){const s=ctxSession,div=ctxTarget;closeCtxMenu();if(s&&div)startRename(div,s)}
+document.getElementById('ctx-export').onclick=async function(){
+  const s=closeCtxMenu()
+  if(!s||!sandboxId)return
+  try{
+    const r=await fetch('/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(s.id))
+    const d=await r.json()
+    if(!d.ok)return
+    const blob=new Blob([JSON.stringify({session:s,messages:d.data.messages||[]},null,2)],{type:'application/json'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a')
+    a.href=url
+    a.download=(s.name||'thread').replace(/[^a-zA-Z0-9_-]/g,'_')+'.json'
+    document.body.appendChild(a);a.click();document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }catch{}
+}
+document.getElementById('ctx-delete').onclick=function(){
+  const s=closeCtxMenu()
+  if(!s)return
+  sessions=sessions.filter(function(x){return x.id!==s.id})
+  localStorage.setItem(LS_SESS,JSON.stringify(sessions))
+  if(activeSession===s.id){
+    activeSession=sessions.length?sessions[0].id:'default'
+    localStorage.setItem(LS_ACTIVE,activeSession)
+    document.getElementById('messages').innerHTML=''
+    if(sessions.length)loadHistory()
+  }
+  renderThreadList()
+}
+document.addEventListener('click',function(e){if(!document.getElementById('ctx-menu').contains(e.target))closeCtxMenu()})
 document.getElementById('user-input').onkeydown=function(e){
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
 }
@@ -771,6 +1016,160 @@ init()
 export const chatRoute: Handler = (_req, _env) => {
   const nonce = genNonce()
   return Promise.resolve(new Response(chatPageHtml(nonce), { headers: htmlHeaders(nonce) }))
+}
+
+// ── Dashboard page ────────────────────────────────────────────────────────────
+
+function dashboardHtml(nonce: string): string { return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Aether-Lite — Dashboard</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
+.navlink:hover{color:var(--text)}
+.navlink.active{background:var(--accent);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:32px 24px}
+h2{font-size:22px;font-weight:700;margin-bottom:6px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:28px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px}
+.stat-value{font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono);line-height:1}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}
+.section-title{font-size:13px;font-weight:600;color:var(--accent2);margin-bottom:16px}
+.chart-wrap{overflow-x:auto}
+.sandboxes-table{width:100%;border-collapse:collapse;font-size:12px}
+.sandboxes-table th{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.sandboxes-table td{padding:8px 10px;border-bottom:1px solid #ffffff08;color:var(--text)}
+.sandboxes-table tr:last-child td{border-bottom:none}
+.sandboxes-table tr:hover td{background:#ffffff04}
+.badge-model{font-size:10px;padding:2px 7px;border-radius:99px;background:#7c3aed22;color:var(--accent2);font-family:var(--mono)}
+.guard-badge{font-size:10px;padding:2px 7px;border-radius:99px}
+.guard-badge.strict{background:var(--accent);color:#fff}
+.guard-badge.audit{background:#f59e0b22;color:#f59e0b}
+.guard-badge.off{background:#f8717122;color:#f87171}
+.empty-note{color:var(--muted);font-size:12px;font-style:italic;padding:12px 0}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
+.sk{background:var(--border);border-radius:4px;animation:pulse 1.4s ease-in-out infinite}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+@media(max-width:600px){.stats-grid{grid-template-columns:1fr 1fr}main{padding:20px 16px}}
+</style>
+</head>
+<body>
+<nav class="topnav" role="navigation" aria-label="Main">
+  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="navlink">Chat</a>
+  <a href="/vibe.html" class="navlink">Vibe</a>
+  <a href="/apps" class="navlink">Apps</a>
+  <a href="/tools.html" class="navlink">Tools</a>
+  <a href="/dashboard" class="navlink active" aria-current="page">Dashboard</a>
+</nav>
+<main>
+  <h2>Dashboard</h2>
+  <p class="sub">Aggregate usage metrics across all sandboxes.</p>
+  <div id="stats-grid" class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Total Sandboxes</div><div class="stat-value sk" id="stat-sandboxes" style="height:36px;width:60px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Total Runs</div><div class="stat-value sk" id="stat-runs" style="height:36px;width:60px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Tokens In</div><div class="stat-value sk" id="stat-tin" style="height:36px;width:80px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Tokens Out</div><div class="stat-value sk" id="stat-tout" style="height:36px;width:80px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Avg Latency</div><div class="stat-value sk" id="stat-lat" style="height:36px;width:80px">&nbsp;</div></div>
+  </div>
+  <div class="section">
+    <div class="section-title">Model Breakdown</div>
+    <div id="model-chart" class="chart-wrap"><div class="empty-note">Loading…</div></div>
+  </div>
+  <div class="section">
+    <div class="section-title">Recent Sandboxes</div>
+    <div id="sandboxes-wrap"><div class="empty-note">Loading…</div></div>
+  </div>
+</main>
+<script nonce="${nonce}" type="module" src="/chart.js"></script>
+<script nonce="${nonce}">
+async function load(){
+  try{
+    const r=await fetch('/api/sandbox')
+    const d=await r.json()
+    if(!d.ok)return
+    const apps=d.data.apps||[]
+    document.getElementById('stat-sandboxes').textContent=apps.length
+    document.getElementById('stat-sandboxes').className='stat-value'
+
+    // Aggregate metrics across all sandboxes
+    let totalRuns=0,totalTin=0,totalTout=0,latencies=[],modelMap={}
+    await Promise.all(apps.slice(0,20).map(async function(app){
+      try{
+        const mr=await fetch('/api/sandbox/'+app.id+'/metrics')
+        const md=await mr.json()
+        if(!md.ok)return
+        const m=md.data
+        totalRuns+=m.totalRuns||0
+        totalTin+=m.totalTokensIn||0
+        totalTout+=m.totalTokensOut||0
+        if(m.avgLatencyMs)latencies.push(m.avgLatencyMs)
+        ;(m.modelBreakdown||[]).forEach(function(b){
+          const k=b.model||'unknown'
+          modelMap[k]=(modelMap[k]||0)+(b.count||0)
+        })
+      }catch{}
+    }))
+
+    document.getElementById('stat-runs').textContent=totalRuns.toLocaleString()
+    document.getElementById('stat-runs').className='stat-value'
+    document.getElementById('stat-tin').textContent=fmtTokens(totalTin)
+    document.getElementById('stat-tin').className='stat-value'
+    document.getElementById('stat-tout').textContent=fmtTokens(totalTout)
+    document.getElementById('stat-tout').className='stat-value'
+    const avgLat=latencies.length?Math.round(latencies.reduce(function(a,b){return a+b},0)/latencies.length):0
+    document.getElementById('stat-lat').textContent=avgLat?avgLat+'ms':'—'
+    document.getElementById('stat-lat').className='stat-value'
+
+    // Model chart
+    const chartEl=document.getElementById('model-chart')
+    const modelEntries=Object.entries(modelMap).map(function(e){return{label:e[0].split('/').pop()||e[0],value:e[1]}}).sort(function(a,b){return b.value-a.value}).slice(0,8)
+    if(modelEntries.length&&window.chart){
+      chartEl.innerHTML=window.chart(modelEntries,{type:'bar',width:600,height:180,label:'Runs'})
+    }else{
+      chartEl.innerHTML='<div class="empty-note">'+(totalRuns?'Chart unavailable':'No runs yet')+'</div>'
+    }
+
+    // Sandboxes table
+    const wrap=document.getElementById('sandboxes-wrap')
+    if(!apps.length){wrap.innerHTML='<div class="empty-note">No sandboxes yet.</div>';return}
+    const rows=apps.slice(0,10).map(function(app){
+      const date=new Date(app.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
+      const model=(app.model||'').split('/').pop()||app.model||'—'
+      return '<tr><td><a href="/app/'+esc(app.id)+'" style="color:var(--accent2);text-decoration:none">'+esc(app.name)+'</a></td><td><span class="badge-model">'+esc(model)+'</span></td><td>'+esc(date)+'</td></tr>'
+    }).join('')
+    wrap.innerHTML='<table class="sandboxes-table"><thead><tr><th>Name</th><th>Model</th><th>Created</th></tr></thead><tbody>'+rows+'</tbody></table>'
+  }catch(e){
+    document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">Failed to load: '+esc(String(e))+'</div>'
+  }
+}
+
+function fmtTokens(n){
+  if(n>=1000000)return(n/1000000).toFixed(1)+'M'
+  if(n>=1000)return(n/1000).toFixed(1)+'k'
+  return String(n||'—')
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// chart.js is a module — wait for it to be parsed
+window.addEventListener('load',load)
+</script>
+</body>
+</html>` }
+
+export const dashboardRoute: Handler = (_req, _env) => {
+  const nonce = genNonce()
+  return Promise.resolve(new Response(dashboardHtml(nonce), { headers: htmlHeaders(nonce) }))
 }
 
 // ── Built app serving (/build/:id) ───────────────────────────────────────────
@@ -831,6 +1230,7 @@ export const buildFileRoute: Handler = (_req, env, params) =>
 
 export const pageRoutes: Array<[string, string, Handler]> = [
   ['GET', '/',                    chatRoute],
+  ['GET', '/dashboard',           dashboardRoute],
   ['GET', '/vibe',                (_req, _env) => Promise.resolve(new Response(null, { status: 301, headers: { Location: '/vibe.html' } }))],
   ['GET', '/tools',               (_req, _env) => Promise.resolve(new Response(null, { status: 301, headers: { Location: '/tools.html' } }))],
   ['GET', '/app/:id',             appPageRoute],

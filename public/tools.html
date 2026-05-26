@@ -56,6 +56,17 @@ hr{border:none;border-top:1px solid var(--border)}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 @media(max-width:700px){.tool-sidebar{width:100%;max-height:44px;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:0 4px}.layout{flex-direction:column}.sidebar-section{display:none}.tool-nav-btn{border-left:none;border-bottom:3px solid transparent;white-space:nowrap;min-width:max-content;padding:8px 12px}.tool-nav-btn.active{border-left-color:transparent;border-bottom-color:var(--accent)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.hist-bar{display:flex;align-items:center;justify-content:flex-end;margin-top:6px;gap:8px}
+.hist-btn{font-size:10px;padding:3px 9px;border-radius:99px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:none;font-family:inherit;transition:all .15s}
+.hist-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.hist-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-top:6px;display:none}
+.hist-item{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid #ffffff08;cursor:pointer;transition:color .15s}
+.hist-item:last-child{border-bottom:none}
+.hist-item:hover{color:var(--accent2)}
+.hist-time{font-size:10px;color:var(--muted);flex-shrink:0;font-family:var(--mono)}
+.hist-summary{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.chain-link{font-size:11px;color:var(--muted);cursor:pointer;background:none;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;transition:all .15s;font-family:inherit}
+.chain-link:hover{border-color:var(--accent2);color:var(--accent2)}
 </style>
 </head>
 <body>
@@ -65,6 +76,7 @@ hr{border:none;border-top:1px solid var(--border)}
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink">Apps</a>
   <a href="/tools.html" class="navlink active" aria-current="page">Tools</a>
+  <a href="/dashboard" class="navlink">Dashboard</a>
 </nav>
 <div class="layout">
   <nav class="tool-sidebar" aria-label="Tools navigation">
@@ -171,6 +183,8 @@ hr{border:none;border-top:1px solid var(--border)}
         <button id="btn-compare">Compare</button>
       </div>
       <div id="wc-results" style="display:flex;flex-wrap:wrap;gap:12px"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-compare" onclick="toggleHist('compare')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-compare"></div>
     </div>
 
     <!-- Sweep -->
@@ -186,6 +200,8 @@ hr{border:none;border-top:1px solid var(--border)}
         <button id="btn-sweep">Sweep</button>
       </div>
       <div id="ws-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-sweep" onclick="toggleHist('sweep')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-sweep"></div>
     </div>
 
     <!-- Sensitivity -->
@@ -201,6 +217,8 @@ hr{border:none;border-top:1px solid var(--border)}
         <button id="btn-sensitivity">Analyse</button>
       </div>
       <div id="wsn-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-sensitivity" onclick="toggleHist('sensitivity')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-sensitivity"></div>
     </div>
 
     <!-- Cluster -->
@@ -243,6 +261,8 @@ hr{border:none;border-top:1px solid var(--border)}
         <button id="btn-entropy">Measure</button>
       </div>
       <div id="wen-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-entropy" onclick="toggleHist('entropy')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-entropy"></div>
     </div>
 
     <!-- Archaeology -->
@@ -514,7 +534,8 @@ async function runCompare() {
         <div style="font-size:11px;font-family:var(--mono);opacity:.7;margin-bottom:6px;word-break:break-all">${escHtml(r.model)}</div>
         <div style="white-space:pre-wrap;font-size:13px">${r.error ? '<span style="color:#ef4444">'+escHtml(r.error)+'</span>' : escHtml(r.response ?? '')}</div>
         <div style="font-size:10px;opacity:.5;margin-top:6px">${r.latencyMs}ms</div>
-      </div>`).join('')
+      </div>`).join('') + `<div style="width:100%;margin-top:4px"><button class="chain-link" onclick="feedToSensitivity()">→ Sensitivity analysis on this prompt</button></div>`
+    pushToolHistory('compare', prompt.slice(0, 60), out.innerHTML)
   } catch (e) { out.innerHTML = escHtml(String(e)) }
   finally { clearLoading(btn, 'Compare') }
 }
@@ -548,6 +569,7 @@ async function runSweep() {
         <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Response${samples > 1 ? 's' : ''}</th>
         <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Latency</th>
       </tr></thead><tbody>${rows}</tbody></table>`
+    pushToolHistory('sweep', prompt.slice(0, 60), out.innerHTML)
   } catch (e) { out.innerHTML = escHtml(String(e)) }
   finally { clearLoading(btn, 'Sweep') }
 }
@@ -575,7 +597,9 @@ async function runSensitivity() {
         </div>`).join('')}
       <div><div style="font-size:11px;opacity:.6;margin-bottom:6px">COSINE SIMILARITY MATRIX</div>${simHTML}</div>
       <div style="font-size:11px;opacity:.5">${data.latencyMs}ms total</div>
+      <div><button class="chain-link" onclick="feedToEntropy()">→ Entropy analysis on this prompt</button></div>
     </div>`
+    pushToolHistory('sensitivity', prompt.slice(0, 60), out.innerHTML)
   } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
   finally { clearLoading(btn, 'Analyse') }
 }
@@ -674,6 +698,7 @@ async function runEntropy() {
             <div style="font-size:12px;white-space:pre-wrap">${escHtml(s)}</div>
           </div>`).join('')}
       </div>`
+    pushToolHistory('entropy', prompt.slice(0, 60), out.innerHTML)
   } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
   finally { clearLoading(btn, 'Measure') }
 }
@@ -787,6 +812,65 @@ function renderHeatmap(matrix, labels) {
 }
 
 // Wire up buttons
+// ── Per-pane result history ───────────────────────────────────────────────────
+const HIST_SS_KEY = 'aether:tool-history'
+const HIST_RESULT_IDS = { compare:'wc-results', sweep:'ws-results', sensitivity:'wsn-results', entropy:'wen-results' }
+
+function pushToolHistory(toolName, inputSummary, html) {
+  let hist
+  try { hist = JSON.parse(sessionStorage.getItem(HIST_SS_KEY) || '{}') } catch { hist = {} }
+  if (!hist[toolName]) hist[toolName] = []
+  hist[toolName].unshift({ ts: Date.now(), summary: inputSummary, html })
+  if (hist[toolName].length > 8) hist[toolName] = hist[toolName].slice(0, 8)
+  sessionStorage.setItem(HIST_SS_KEY, JSON.stringify(hist))
+  const btn = document.getElementById('hist-btn-' + toolName)
+  if (btn) { btn.style.display = 'inline-block'; btn.textContent = '↩ ' + hist[toolName].length }
+}
+
+function toggleHist(toolName) {
+  const panel = document.getElementById('hist-panel-' + toolName)
+  if (!panel) return
+  const open = panel.style.display === 'none' || !panel.style.display
+  panel.style.display = open ? 'block' : 'none'
+  if (open) renderHist(toolName, panel)
+}
+
+function renderHist(toolName, panel) {
+  let hist
+  try { hist = JSON.parse(sessionStorage.getItem(HIST_SS_KEY) || '{}') } catch { hist = {} }
+  const entries = hist[toolName] || []
+  const resId = HIST_RESULT_IDS[toolName]
+  if (!entries.length) { panel.innerHTML = '<div class="hist-summary" style="padding:6px 0">No history this session</div>'; return }
+  panel.innerHTML = ''
+  entries.forEach(function(e) {
+    const item = document.createElement('div')
+    item.className = 'hist-item'
+    item.innerHTML = '<span class="hist-time">' + new Date(e.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + '</span><span class="hist-summary">' + escHtml(e.summary) + '</span>'
+    item.onclick = function() {
+      if (resId) document.getElementById(resId).innerHTML = e.html
+      panel.style.display = 'none'
+    }
+    panel.appendChild(item)
+  })
+}
+
+// ── Tool chaining ─────────────────────────────────────────────────────────────
+function feedToSensitivity() {
+  const prompt = document.getElementById('wc-prompt').value.trim()
+  if (!prompt) return
+  switchTool('sensitivity', document.querySelector('[data-tool="sensitivity"]'))
+  document.getElementById('wsn-prompt').value = prompt
+  document.getElementById('wsn-prompt').focus()
+}
+
+function feedToEntropy() {
+  const prompt = document.getElementById('wsn-prompt').value.trim()
+  if (!prompt) return
+  switchTool('entropy', document.querySelector('[data-tool="entropy"]'))
+  document.getElementById('wen-prompt').value = prompt
+  document.getElementById('wen-prompt').focus()
+}
+
 document.getElementById('btn-complete').onclick = doComplete
 document.getElementById('btn-stream').onclick = doStream
 document.getElementById('btn-embed').onclick = doEmbed
@@ -802,7 +886,7 @@ document.getElementById('btn-archaeology').onclick = runArchaeology
 document.getElementById('btn-pipeline').onclick = runPipeline
 document.getElementById('btn-think').onclick = runThink
 
-Object.assign(window, { switchTool })
+Object.assign(window, { switchTool, toggleHist, feedToSensitivity, feedToEntropy })
 </script>
 </body>
 </html>

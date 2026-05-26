@@ -140,10 +140,33 @@ const del: Handler = async (_req, env, params: Params) => {
   return json(ok({ deleted: true, docId }))
 }
 
+// ── Reindex handler ───────────────────────────────────────────────────────────
+
+const reindex: Handler = async (req, env, params: Params) => {
+  const sandboxId = params.id ?? ''
+  if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
+
+  let docIds: string[] | undefined
+  try {
+    const body = await req.json() as { docIds?: string[] }
+    if (Array.isArray(body.docIds)) docIds = body.docIds
+  } catch { /* no body = re-index all */ }
+
+  const job: AetherLiteJob = {
+    type: 'embedding_batch',
+    sandboxId,
+    payload: docIds ? { docIds } : {},
+    createdAt: Date.now(),
+  }
+  await env.JOB_QUEUE.send(job)
+  return json(ok({ queued: true, sandboxId }), 202)
+}
+
 // ── Route table ───────────────────────────────────────────────────────────────
 
 export const documentRoutes: Array<[string, string, Handler]> = [
   ['POST',   '/api/sandbox/:id/documents',          upload],
   ['GET',    '/api/sandbox/:id/documents',          list],
   ['DELETE', '/api/sandbox/:id/documents/:docId',   del],
+  ['POST',   '/api/sandbox/:id/documents/reindex',  reindex],
 ]
