@@ -470,20 +470,30 @@ function streamGoogle(env: Env, model: string, opts: CompletionOpts): ReadableSt
 // ── Public complete ───────────────────────────────────────────────────────────
 
 export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<string> {
+  const t0 = Date.now()
   const gw = parseGateway(opts.model ?? '')
+  let result: string
   if (gw) {
-    if (gw.provider === 'openai')    return completeOpenAI(env, gw.id, opts)
-    if (gw.provider === 'anthropic') return completeAnthropic(env, gw.id, opts)
-    return completeGoogle(env, gw.id, opts)
+    if (gw.provider === 'openai')    result = await completeOpenAI(env, gw.id, opts)
+    else if (gw.provider === 'anthropic') result = await completeAnthropic(env, gw.id, opts)
+    else result = await completeGoogle(env, gw.id, opts)
+  } else {
+    const response = await run(ai)(opts.model ?? MODELS.text, {
+      messages: buildMessages(opts),
+      temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
+    })
+    result = (response as { response?: string }).response ?? String(response)
   }
-  const response = await run(ai)(opts.model ?? MODELS.text, {
-    messages: buildMessages(opts),
-    temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
-    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
-  })
-  const r = response as { response?: string }
-  return r.response ?? String(response)
+  if (env.ANALYTICS) {
+    env.ANALYTICS.writeDataPoint({
+      blobs:   [opts.model ?? MODELS.text, opts.sandboxId ?? '', gw?.provider ?? 'workers-ai'],
+      doubles: [0, 0, Date.now() - t0],
+      indexes: [opts.sandboxId ?? 'anon'],
+    })
+  }
+  return result
 }
 
 // ── Extended thinking ─────────────────────────────────────────────────────────

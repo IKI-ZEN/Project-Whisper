@@ -213,6 +213,28 @@ export async function processFile(job: AetherLiteJob, env: Env): Promise<void> {
   })
 }
 
-export async function processEmbeddingBatch(_job: AetherLiteJob, _env: Env): Promise<void> {
-  // Reserved for future bulk re-indexing
+interface EmbeddingBatchPayload {
+  docIds?: string[]
+}
+
+export async function processEmbeddingBatch(job: AetherLiteJob, env: Env): Promise<void> {
+  const { sandboxId } = job
+  const { docIds } = (job.payload ?? {}) as EmbeddingBatchPayload
+
+  const prefix = `sandboxes/${sandboxId}/documents/`
+  const listed = await env.FILES.list({ prefix })
+
+  const targets = docIds
+    ? listed.objects.filter(o => docIds.includes(o.key.slice(prefix.length)))
+    : listed.objects
+
+  for (const obj of targets) {
+    const meta = (obj.customMetadata ?? {}) as Record<string, string>
+    const docId   = obj.key.slice(prefix.length)
+    const mimeType = meta.mimeType ?? 'text/plain'
+    await processFile(
+      { type: 'file_process', sandboxId, payload: { docId, key: obj.key, mimeType }, createdAt: Date.now() },
+      env,
+    )
+  }
 }
