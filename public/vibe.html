@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vibe — Aether-Lite</title>
+  <style>
+    :root {
+      --bg: #0c0c0f;
+      --surface: #141418;
+      --border: #252530;
+      --muted: #4a4a60;
+      --text: #d8d8e8;
+      --accent: #7c3aed;
+      --accent2: #a78bfa;
+      --radius: 8px;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 14px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top nav ── */
+    .topnav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 16px;
+      height: 48px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .brand {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--accent2);
+      text-decoration: none;
+      margin-right: 12px;
+      letter-spacing: -0.3px;
+    }
+    .brand:hover { color: #fff; }
+
+    .navlink {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 5px 10px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      transition: color 0.15s, background 0.15s;
+    }
+    .navlink:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .navlink.active { color: var(--accent2); background: rgba(124,58,237,0.15); }
+
+    /* ── Main layout ── */
+    .vibe-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left sidebar ── */
+    .vibe-left {
+      width: 300px;
+      min-width: 260px;
+      max-width: 380px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar-inner {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ── Right main area ── */
+    .vibe-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Mode toggle row ── */
+    .mode-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* ── Form elements ── */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    label, .field-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    textarea, input[type="text"], select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+      resize: vertical;
+    }
+    textarea:focus, input[type="text"]:focus, select:focus {
+      border-color: var(--accent2);
+    }
+    select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a4a60' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 28px;
+      cursor: pointer;
+    }
+    textarea.mono, input.mono {
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    /* ── Buttons ── */
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      padding: 8px 14px;
+      transition: background 0.15s, opacity 0.15s, color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    button.primary:hover:not(:disabled) { background: #6d28d9; }
+
+    button.outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.outline:hover:not(:disabled) { background: rgba(255,255,255,0.05); border-color: var(--muted); }
+    button.outline.active { border-color: var(--accent2); color: var(--accent2); background: rgba(124,58,237,0.1); }
+
+    button.green {
+      background: #065f46;
+      color: #6ee7b7;
+      border: 1px solid #047857;
+    }
+    button.green:hover:not(:disabled) { background: #047857; }
+
+    button.full { width: 100%; justify-content: center; }
+
+    /* ── Dividers / labels ── */
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    #templates {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* ── App builder opts ── */
+    #app-builder-opts {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ── Panels ── */
+    #quick-panel, #app-panel {
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-inner {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 14px;
+      overflow-y: auto;
+    }
+
+    .panel-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    /* ── Output / code areas ── */
+    #vibe-out, #build-log, #build-file-content {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-y: auto;
+    }
+    #vibe-out { max-height: 260px; }
+    #build-log { min-height: 80px; max-height: 200px; flex-shrink: 0; }
+    #build-file-content { flex: 1; overflow-y: auto; min-height: 120px; }
+
+    /* ── Status messages ── */
+    .status {
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .status.ok { background: rgba(16,185,129,0.12); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.25); }
+    .status.err { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); }
+
+    /* ── Vibe actions ── */
+    #vibe-actions {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .input-copy-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .input-copy-row input {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .input-copy-row button {
+      flex-shrink: 0;
+      font-size: 11px;
+      padding: 6px 10px;
+    }
+
+    .action-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .action-field .field-label { margin-bottom: 0; }
+
+    /* ── Build status bar ── */
+    #build-status-bar {
+      background: rgba(124,58,237,0.1);
+      border: 1px solid rgba(124,58,237,0.25);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--accent2);
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    /* ── Build files section ── */
+    #build-files {
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .build-files-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #build-file-count {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    #build-file-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    /* ── Build actions ── */
+    #build-actions {
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* ── Preview iframe ── */
+    #build-preview-frame {
+      width: 100%;
+      height: 280px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    /* ── Spinner ── */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* ── Reduced motion ── */
+    @media (prefers-reduced-motion: reduce) {
+      .spinner { animation: none; border-top-color: rgba(255,255,255,0.6); }
+      button, .navlink, textarea, input, select { transition: none; }
+    }
+
+    /* ── Responsive: narrow sidebar ── */
+    @media (max-width: 680px) {
+      .vibe-left { width: 100%; max-width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+      .vibe-layout { flex-direction: column; }
+      .vibe-left { max-height: 50dvh; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="topnav" role="navigation" aria-label="Main">
+    <a href="/" class="brand">Aether-Lite</a>
+    <a href="/" class="navlink">Chat</a>
+    <a href="/vibe.html" class="navlink active" aria-current="page">Vibe</a>
+    <a href="/apps" class="navlink">Apps</a>
+    <a href="/tools.html" class="navlink">Tools</a>
+  </nav>
+
+  <div class="vibe-layout">
+
+    <!-- ── Left sidebar ── -->
+    <aside class="vibe-left" aria-label="Vibe controls">
+      <div class="sidebar-inner">
+
+        <!-- Mode toggle -->
+        <div class="mode-row">
+          <button id="mode-quick-btn" class="outline active" style="flex:1;justify-content:center" aria-pressed="true">Quick Sandbox</button>
+          <button id="mode-app-btn" class="outline" style="flex:1;justify-content:center" aria-pressed="false">App Builder</button>
+        </div>
+
+        <!-- Description -->
+        <div class="field">
+          <label for="vibe-desc">Describe your app</label>
+          <textarea id="vibe-desc" rows="5" placeholder="e.g. A customer support chatbot that speaks only in haikus and never breaks character…"></textarea>
+        </div>
+
+        <!-- Name -->
+        <div class="field">
+          <label for="vibe-name">Name (optional)</label>
+          <input type="text" id="vibe-name" placeholder="My cool sandbox" />
+        </div>
+
+        <!-- App Builder extra opts -->
+        <div id="app-builder-opts" style="display:none">
+          <div class="field">
+            <label for="build-sandbox-id">Sandbox ID (optional)</label>
+            <input type="text" id="build-sandbox-id" placeholder="Use existing sandbox" />
+          </div>
+          <div class="field">
+            <label for="build-framework">Framework</label>
+            <select id="build-framework">
+              <option value="vanilla">vanilla</option>
+              <option value="alpine">alpine</option>
+              <option value="react">react</option>
+              <option value="vue">vue</option>
+              <option value="svelte">svelte</option>
+              <option value="worker">worker</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Generate button -->
+        <button id="vibe-btn" class="primary full">Generate Sandbox →</button>
+
+        <hr />
+
+        <!-- Starter templates -->
+        <div class="section-label">Starter templates</div>
+        <div id="templates">
+          <div style="font-size:12px;color:var(--muted)">Loading templates…</div>
+        </div>
+
+        <hr />
+
+        <!-- Import sandbox -->
+        <div class="section-label">Import sandbox</div>
+        <div class="field">
+          <textarea id="import-json" rows="4" class="mono" placeholder='{"version":1,"name":"My Sandbox",...}'></textarea>
+        </div>
+        <button id="import-btn" class="outline full">Import →</button>
+
+      </div>
+    </aside>
+
+    <!-- ── Right main area ── -->
+    <main class="vibe-right" aria-label="Vibe output">
+
+      <!-- Quick Sandbox panel -->
+      <div id="quick-panel" style="display:flex">
+        <div class="panel-inner">
+
+          <div class="panel-label">Generated sandbox config</div>
+
+          <div id="vibe-out" aria-live="polite" aria-label="Sandbox config output">Describe your app and click Generate.</div>
+
+          <div id="vibe-status" style="display:none" role="status"></div>
+
+          <!-- Actions (shown after generation) -->
+          <div id="vibe-actions" style="display:none">
+
+            <div class="action-row">
+              <a id="launch-app-link" href="#" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+                <button class="green">Launch App ↗</button>
+              </a>
+              <button class="outline" onclick="gotoChatFromVibe()">Open in Chat</button>
+            </div>
+
+            <div class="action-field">
+              <div class="field-label">Embed code</div>
+              <div class="input-copy-row">
+                <input type="text" id="embed-out" readonly aria-label="Embed code" />
+                <button class="outline" onclick="copyEmbed()">Copy</button>
+              </div>
+            </div>
+
+            <div class="action-field">
+              <div class="field-label">Short API</div>
+              <div class="input-copy-row">
+                <input type="text" id="short-api-out" readonly aria-label="Short API URL" />
+              </div>
+            </div>
+
+            <div class="action-field">
+              <div class="field-label">Export config</div>
+              <div class="input-copy-row">
+                <input type="text" id="export-out" readonly aria-label="Exported config JSON" />
+                <button class="outline" onclick="copyExport()">Copy</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- App Builder panel -->
+      <div id="app-panel" style="display:none">
+        <div class="panel-inner">
+
+          <div id="build-status-bar" aria-live="polite">Configure your app and click Build App →</div>
+
+          <div id="build-log" aria-live="polite" aria-label="Build log"></div>
+
+          <!-- Generated files -->
+          <div id="build-files" style="display:none">
+            <div class="build-files-header">
+              <div class="panel-label">Generated files</div>
+              <span id="build-file-count" aria-live="polite"></span>
+            </div>
+            <div id="build-file-tabs" role="tablist" aria-label="Generated files"></div>
+            <pre id="build-file-content" tabindex="0" aria-label="File content"></pre>
+          </div>
+
+          <!-- Build actions -->
+          <div id="build-actions" style="display:none">
+            <div class="action-row">
+              <a id="build-open-link" href="#" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+                <button class="green">Open App ↗</button>
+              </a>
+              <button class="outline" onclick="stopBuild()">Stop Build</button>
+            </div>
+            <iframe id="build-preview-frame" title="App preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script type="module">
+    import { AetherLiteClient } from '/vibe-sdk.js'
+
+    const client = new AetherLiteClient()
+    let vibeResult = null
+    let vibeMode = 'quick'
+    let buildFileContent = {}
+    let currentSession = null
+
+    // ── Loading helpers ──
+    function setLoading(btn, label = 'Loading…') {
+      if (!btn) return
+      btn._originalHTML = btn.innerHTML
+      btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + label
+      btn.disabled = true
+      btn.setAttribute('aria-busy', 'true')
+    }
+    function clearLoading(btn, label) {
+      if (!btn) return
+      btn.innerHTML = label !== undefined ? label : (btn._originalHTML ?? btn.textContent)
+      btn.disabled = false
+      btn.removeAttribute('aria-busy')
+    }
+
+    // ── Mode toggle ──
+    function setVibeMode(mode) {
+      vibeMode = mode
+      const qBtn = document.getElementById('mode-quick-btn')
+      const aBtn = document.getElementById('mode-app-btn')
+      qBtn.classList.toggle('active', mode === 'quick')
+      aBtn.classList.toggle('active', mode === 'app')
+      qBtn.setAttribute('aria-pressed', String(mode === 'quick'))
+      aBtn.setAttribute('aria-pressed', String(mode === 'app'))
+      document.getElementById('app-builder-opts').style.display = mode === 'app' ? 'flex' : 'none'
+      document.getElementById('quick-panel').style.display = mode === 'quick' ? 'flex' : 'none'
+      document.getElementById('app-panel').style.display = mode === 'app' ? 'flex' : 'none'
+      document.getElementById('vibe-btn').textContent = mode === 'quick' ? 'Generate Sandbox →' : 'Build App →'
+    }
+
+    function doVibeAction() {
+      if (vibeMode === 'quick') doVibe()
+      else doAppBuild()
+    }
+
+    // ── Load templates ──
+    async function loadTemplates() {
+      try {
+        const templates = await client.vibes.templates()
+        const el = document.getElementById('templates')
+        el.innerHTML = ''
+        for (const t of templates) {
+          const btn = document.createElement('button')
+          btn.className = 'outline full'
+          btn.style.cssText = 'text-align:left;font-size:12px;padding:7px 10px'
+          btn.textContent = t.name
+          btn.title = t.description
+          btn.onclick = () => {
+            document.getElementById('vibe-desc').value = t.description
+            document.getElementById('vibe-name').value = t.name
+          }
+          el.appendChild(btn)
+        }
+      } catch {
+        document.getElementById('templates').innerHTML =
+          '<div style="font-size:12px;color:var(--muted)">Could not load templates.</div>'
+      }
+    }
+
+    // ── Quick Sandbox creator ──
+    async function doVibe() {
+      const desc = document.getElementById('vibe-desc').value.trim()
+      if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
+      const name = document.getElementById('vibe-name').value.trim() || undefined
+      const btn = document.getElementById('vibe-btn')
+      const out = document.getElementById('vibe-out')
+      setLoading(btn, 'Generating…')
+      out.textContent = 'Asking AI to design your sandbox…'
+      setStatus('vibe', null)
+      try {
+        vibeResult = await client.vibes.create(desc, name)
+        out.textContent = JSON.stringify(vibeResult, null, 2)
+        setStatus('vibe', `Sandbox created: ${vibeResult.name}`)
+        document.getElementById('launch-app-link').href = vibeResult.appUrl
+        document.getElementById('embed-out').value = vibeResult.embedCode
+        document.getElementById('short-api-out').value = vibeResult.shortApi.run
+        document.getElementById('export-out').value = JSON.stringify({
+          version: 1,
+          name: vibeResult.name,
+          description: vibeResult.description,
+          model: vibeResult.model,
+          systemPrompt: vibeResult.config.systemPrompt,
+          temperature: vibeResult.config.temperature,
+          maxTokens: vibeResult.config.maxTokens,
+          tools: [],
+        })
+        document.getElementById('vibe-actions').style.display = 'flex'
+      } catch (e) {
+        out.textContent = `Error: ${e}`
+        setStatus('vibe', String(e), true)
+      } finally {
+        clearLoading(btn, 'Generate Sandbox →')
+      }
+    }
+
+    // ── App Builder ──
+    async function doAppBuild() {
+      const desc = document.getElementById('vibe-desc').value.trim()
+      if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
+      const name = document.getElementById('vibe-name').value.trim() || undefined
+      const sandboxId = document.getElementById('build-sandbox-id').value.trim() || undefined
+      const btn = document.getElementById('vibe-btn')
+      setLoading(btn, 'Building…')
+      buildFileContent = {}
+      document.getElementById('build-log').textContent = ''
+      document.getElementById('build-status-bar').textContent = 'Initializing build...'
+      document.getElementById('build-files').style.display = 'none'
+      document.getElementById('build-actions').style.display = 'none'
+      document.getElementById('build-file-tabs').innerHTML = ''
+      document.getElementById('build-file-content').textContent = ''
+
+      function addLog(line) {
+        const el = document.getElementById('build-log')
+        el.textContent += (el.textContent ? '\n' : '') + line
+        el.scrollTop = el.scrollHeight
+      }
+      function setBuildStatus(text) {
+        document.getElementById('build-status-bar').textContent = text
+      }
+
+      currentSession = client.builder.session(desc, { name, sandboxId })
+        .onBlueprintStart(() => {
+          setBuildStatus('Generating blueprint...')
+          addLog('◦ Designing app structure...')
+        })
+        .onBlueprintReady(bp => {
+          addLog(`✓ Blueprint: ${bp.name}  [${bp.techStack}, ${bp.files.length} file(s)]`)
+          addLog(`  Files: ${bp.files.map(f => f.filename).join(', ')}`)
+        })
+        .onFileStart(({ filename, index, total }) => {
+          setBuildStatus(`Writing ${index + 1}/${total}: ${filename}`)
+          addLog(`◦ ${filename}`)
+          buildFileContent[filename] = ''
+        })
+        .onFileChunk(({ filename, text }) => {
+          buildFileContent[filename] = (buildFileContent[filename] || '') + text
+        })
+        .onFileComplete(({ filename, bytes }) => {
+          addLog(`  ✓ ${filename}  (${(bytes / 1024).toFixed(1)} KB)`)
+          renderBuildFileTabs()
+        })
+        .onComplete(({ appUrl, files }) => {
+          setBuildStatus(`✓ Build complete — ${files.length} file(s)`)
+          addLog(`\n✓ App is live at ${appUrl}`)
+          document.getElementById('build-open-link').href = appUrl
+          document.getElementById('build-actions').style.display = 'flex'
+          document.getElementById('build-preview-frame').src = appUrl
+          clearLoading(btn, 'Build App →')
+        })
+        .onError(err => {
+          addLog(`\n✗ Error: ${err.message}`)
+          setBuildStatus('Build failed')
+          clearLoading(btn, 'Build App →')
+        })
+
+      try {
+        await currentSession.start()
+      } catch (e) {
+        addLog(`✗ Failed to start: ${e}`)
+        btn.disabled = false
+        btn.textContent = 'Build App →'
+      }
+    }
+
+    function stopBuild() {
+      currentSession?.stop()
+      currentSession = null
+      clearLoading(document.getElementById('vibe-btn'), 'Build App →')
+    }
+
+    function renderBuildFileTabs() {
+      const tabsEl = document.getElementById('build-file-tabs')
+      const contentEl = document.getElementById('build-file-content')
+      const filesEl = document.getElementById('build-files')
+      const filenames = Object.keys(buildFileContent)
+      if (!filenames.length) return
+      filesEl.style.display = 'flex'
+      document.getElementById('build-file-count').textContent = `(${filenames.length} files)`
+      const prevActive = tabsEl.querySelector('button.active')?.textContent
+      tabsEl.innerHTML = ''
+      for (const fname of filenames) {
+        const b = document.createElement('button')
+        b.className = 'outline'
+        b.style.cssText = 'font-size:10px;padding:3px 8px;font-family:var(--mono)'
+        b.textContent = fname
+        b.setAttribute('role', 'tab')
+        b.setAttribute('aria-selected', String(fname === (prevActive || filenames[0])))
+        b.onclick = () => {
+          contentEl.textContent = buildFileContent[fname]
+          tabsEl.querySelectorAll('button').forEach(x => {
+            x.classList.remove('active')
+            x.setAttribute('aria-selected', 'false')
+          })
+          b.classList.add('active')
+          b.setAttribute('aria-selected', 'true')
+        }
+        if (fname === prevActive || (!prevActive && filenames.indexOf(fname) === 0)) {
+          b.classList.add('active')
+        }
+        tabsEl.appendChild(b)
+      }
+      const activeFile = prevActive || filenames[0]
+      if (buildFileContent[activeFile]) contentEl.textContent = buildFileContent[activeFile]
+    }
+
+    // ── Open in Chat ──
+    function gotoChatFromVibe() {
+      if (!vibeResult) return
+      localStorage.setItem('aether:sandboxId', vibeResult.sandboxId)
+      window.location.href = '/'
+    }
+
+    // ── Copy helpers ──
+    function copyEmbed() {
+      const val = document.getElementById('embed-out').value
+      navigator.clipboard?.writeText(val).catch(() => {})
+      const btn = event.target
+      const prev = btn.textContent
+      btn.textContent = 'Copied!'
+      setTimeout(() => { btn.textContent = prev }, 1500)
+    }
+    function copyExport() {
+      const val = document.getElementById('export-out').value
+      navigator.clipboard?.writeText(val).catch(() => {})
+      const btn = event.target
+      const prev = btn.textContent
+      btn.textContent = 'Copied!'
+      setTimeout(() => { btn.textContent = prev }, 1500)
+    }
+
+    // ── Import sandbox ──
+    async function doImport() {
+      const raw = document.getElementById('import-json').value.trim()
+      if (!raw) { alert('Paste exported sandbox JSON first.'); return }
+      const btn = document.getElementById('import-btn')
+      setLoading(btn, 'Importing…')
+      try {
+        const config = JSON.parse(raw)
+        const sandbox = await client.sandbox.import(config)
+        localStorage.setItem('aether:sandboxId', sandbox.id)
+        document.getElementById('import-json').value = ''
+        window.location.href = '/'
+      } catch (e) {
+        alert(`Import failed: ${e}`)
+      } finally {
+        clearLoading(btn, 'Import →')
+      }
+    }
+
+    // ── Status helper ──
+    function setStatus(panel, msg, isErr = false) {
+      const el = document.getElementById(`${panel}-status`)
+      if (!el) return
+      if (!msg) { el.style.display = 'none'; return }
+      el.style.display = 'block'
+      el.className = `status ${isErr ? 'err' : 'ok'}`
+      el.textContent = msg
+    }
+
+    // ── Wire up ──
+    document.getElementById('vibe-btn').onclick = doVibeAction
+    document.getElementById('mode-quick-btn').onclick = () => setVibeMode('quick')
+    document.getElementById('mode-app-btn').onclick = () => setVibeMode('app')
+    document.getElementById('import-btn').onclick = doImport
+
+    Object.assign(window, { setVibeMode, doVibeAction, gotoChatFromVibe, stopBuild, copyEmbed, copyExport })
+
+    loadTemplates()
+  </script>
+
+</body>
+</html>
