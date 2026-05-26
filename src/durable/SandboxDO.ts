@@ -7,6 +7,7 @@ import { now } from '../lib/utils'
 import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
 import { scan, type ScanResult } from '../lib/guard'
+import { sealPrompt, openPrompt, signPayload } from '../lib/vault'
 
 const RL_STORAGE_KEY = 'rlState'
 const MAX_TOOL_LOOPS = 10
@@ -27,14 +28,24 @@ export class SandboxDO extends DurableObject<Env> {
     if (this.config) return this.config
     const stored = await this.ctx.storage.get<SandboxConfig>(DO_STORAGE_KEY)
     if (!stored) throw new Error('Sandbox not initialized')
+    // Unseal systemPrompt if stored sealed (v1: prefix) and key is available.
+    // openPrompt passes plaintext through unchanged if no v1: prefix.
+    if (this.env.SIGNING_SECRET && stored.systemPrompt) {
+      stored.systemPrompt = await openPrompt(stored.systemPrompt, this.env.SIGNING_SECRET, stored.id)
+    }
     this.config = stored
     return stored
   }
 
   private async save(config: SandboxConfig): Promise<void> {
     config.integrityHash = await computeConfigHash(config)
-    this.config = config
-    await this.ctx.storage.put(DO_STORAGE_KEY, config)
+    this.config = config   // always keep unsealed in memory
+    // Seal systemPrompt before writing to DO storage when key is available.
+    const sp = config.systemPrompt
+    const toStore = (this.env.SIGNING_SECRET && sp && !sp.startsWith('v1:'))
+      ? { ...config, systemPrompt: await sealPrompt(sp, this.env.SIGNING_SECRET, config.id) }
+      : config
+    await this.ctx.storage.put(DO_STORAGE_KEY, toStore)
   }
 
   // ── Per-session memory ────────────────────────────────────────────────────
@@ -274,7 +285,8 @@ export class SandboxDO extends DurableObject<Env> {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   private async handleInit(req: Request): Promise<Response> {
-    const config = await req.json() as SandboxConfig
+    const config   = await req.json() as SandboxConfig
+    const identity = req.headers.get('X-Aether-Identity') ?? null
 
     const guard = this.guardedScan(config.systemPrompt ?? '', config.guardMode)
     if (guard) {
@@ -283,8 +295,8 @@ export class SandboxDO extends DurableObject<Env> {
       }
       if (guard.riskLevel !== 'clean') {
         void this.env.DB.prepare(
-          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'init', patterns: guard.patterns }), now()).run()
+          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'init', patterns: guard.patterns }), identity, now()).run()
       }
     }
 
@@ -301,8 +313,9 @@ export class SandboxDO extends DurableObject<Env> {
   }
 
   private async handlePatchConfig(req: Request): Promise<Response> {
-    const patch = await req.json() as Partial<SandboxConfig>
-    const config = await this.load()
+    const patch    = await req.json() as Partial<SandboxConfig>
+    const config   = await this.load()
+    const identity = req.headers.get('X-Aether-Identity') ?? null
 
     if (patch.systemPrompt !== undefined) {
       const effectiveMode = patch.guardMode ?? config.guardMode ?? 'strict'
@@ -313,8 +326,8 @@ export class SandboxDO extends DurableObject<Env> {
         }
         if (guard.riskLevel !== 'clean') {
           void this.env.DB.prepare(
-            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-          ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'patch', patterns: guard.patterns }), now()).run()
+            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+          ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'patch', patterns: guard.patterns }), identity, now()).run()
         }
       }
     }
@@ -329,10 +342,11 @@ export class SandboxDO extends DurableObject<Env> {
       return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
     }
 
-    const body = await req.json() as { message: string; sessionId?: string }
+    const body     = await req.json() as { message: string; sessionId?: string }
     const { message, sessionId } = body
-    const config = await this.load()
-    const gMode = config.guardMode ?? 'strict'
+    const identity = req.headers.get('X-Aether-Identity') ?? null
+    const config   = await this.load()
+    const gMode    = config.guardMode ?? 'strict'
 
     const guard = this.guardedScan(message, gMode)
     if (guard) {
@@ -341,31 +355,40 @@ export class SandboxDO extends DurableObject<Env> {
       }
       if (guard.riskLevel !== 'clean') {
         void this.env.DB.prepare(
-          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns }), now()).run()
+          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns }), identity, now()).run()
       }
     }
 
     const startMs = Date.now()
-    const memory = await this.loadSessionMemory(sessionId, config)
+    const memory  = await this.loadSessionMemory(sessionId, config)
     const { reply, memory: updatedMemory } = await this.runWithToolLoop(config, memory, message)
     const latencyMs = Date.now() - startMs
 
     void this.env.DB.prepare(
-      'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ).bind(config.id, config.model, Math.ceil(message.length / 4), Math.ceil(reply.length / 4), latencyMs, now()).run()
+      'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, identity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).bind(config.id, config.model, Math.ceil(message.length / 4), Math.ceil(reply.length / 4), latencyMs, identity, now()).run()
 
     const replyGuard = this.guardedScan(reply, gMode)
     if (replyGuard && replyGuard.riskLevel !== 'clean') {
       void this.env.DB.prepare(
-        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-      ).bind(config.id, 'response_flag', JSON.stringify({ patterns: replyGuard.patterns }), now()).run()
+        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+      ).bind(config.id, 'response_flag', JSON.stringify({ patterns: replyGuard.patterns }), identity, now()).run()
     }
 
     const trimmed = updatedMemory.slice(-MAX_MESSAGES)
     await this.saveSessionMemory(sessionId, trimmed, config)
 
-    return json({ ok: true, data: { reply, turns: Math.floor(trimmed.length / 2) } })
+    // Signal E: HMAC over the response so clients can verify provenance.
+    const resData    = { ok: true, data: { reply, turns: Math.floor(trimmed.length / 2) } }
+    const resHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (this.env.SIGNING_SECRET) {
+      resHeaders['X-Response-Sig'] = await signPayload(
+        JSON.stringify({ response: reply, messageCount: trimmed.length, sandboxId: config.id }),
+        this.env.SIGNING_SECRET,
+      )
+    }
+    return new Response(JSON.stringify(resData), { status: 200, headers: resHeaders })
   }
 
   private async handleStream(req: Request): Promise<Response> {
@@ -373,10 +396,11 @@ export class SandboxDO extends DurableObject<Env> {
       return json({ ok: false, error: 'Rate limit exceeded — try again in a moment' }, 429)
     }
 
-    const body = await req.json() as { message: string; sessionId?: string }
+    const body     = await req.json() as { message: string; sessionId?: string }
     const { message } = body
-    const config = await this.load()
-    const gMode = config.guardMode ?? 'strict'
+    const identity = req.headers.get('X-Aether-Identity') ?? null
+    const config   = await this.load()
+    const gMode    = config.guardMode ?? 'strict'
 
     const guard = this.guardedScan(message, gMode)
     if (guard) {
@@ -385,8 +409,8 @@ export class SandboxDO extends DurableObject<Env> {
       }
       if (guard.riskLevel !== 'clean') {
         void this.env.DB.prepare(
-          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns }), now()).run()
+          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns }), identity, now()).run()
       }
     }
 
