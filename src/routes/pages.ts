@@ -22,9 +22,13 @@ function appPageHtml(sandboxId: string, nonce: string): string {
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-header{display:flex;align-items:center;gap:12px;padding:0 18px;height:54px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-#app-name{font-size:15px;font-weight:600;color:var(--accent2)}
-#app-desc{font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
+.navlink:hover{color:var(--text)}
+.navlink.active{background:var(--accent);color:#fff}
+#app-name{font-size:13px;font-weight:600;color:var(--accent2);margin-left:auto}
+#app-desc{display:none}
 .badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#7c3aed22;color:var(--accent2);font-family:var(--mono);flex-shrink:0}
 .hbtn{font-size:12px;padding:8px 14px;min-height:36px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
 .hbtn:hover{border-color:var(--accent2);color:var(--accent2)}
@@ -58,9 +62,6 @@ header{display:flex;align-items:center;gap:12px;padding:0 18px;height:54px;backg
 .input-row button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 @media(max-width:600px){#messages{padding:12px}.input-row{padding:8px 12px}.input-row textarea{font-size:16px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
-footer{text-align:center;font-size:11px;color:var(--muted);padding:6px;border-top:1px solid var(--border);flex-shrink:0}
-footer a{color:var(--muted);text-decoration:none}
-footer a:hover{color:var(--accent2)}
 .embed-panel{position:fixed;inset:0;background:#00000088;z-index:100;display:flex;align-items:center;justify-content:center;visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}
 .embed-panel.open{visibility:visible;opacity:1}
 .embed-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;width:480px;max-width:90vw;display:flex;flex-direction:column;gap:12px;transform:translateY(10px);transition:transform .2s}
@@ -74,14 +75,19 @@ footer a:hover{color:var(--accent2)}
 </style>
 </head>
 <body>
-<header>
-  <h1 id="app-name" style="font-size:15px;font-weight:600;color:var(--accent2);margin:0">Loading…</h1>
-  <p id="app-desc" style="font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0"></p>
+<nav class="topnav" role="navigation" aria-label="Main">
+  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="navlink">Chat</a>
+  <a href="/vibe.html" class="navlink">Vibe</a>
+  <a href="/apps" class="navlink active" aria-current="page">Apps</a>
+  <a href="/tools.html" class="navlink">Tools</a>
+  <a href="/dashboard" class="navlink">Dashboard</a>
+  <span id="app-name" style="margin-left:auto">Loading…</span>
+  <span id="app-desc" style="display:none"></span>
   <span id="model-badge" class="badge" style="display:none"></span>
-  <button class="hbtn" onclick="openEmbed()" aria-haspopup="dialog">Embed ↗</button>
-  <button class="hbtn" onclick="shareConfig(this)">Share config</button>
-  <a href="/apps" style="text-decoration:none"><button class="hbtn">All Apps</button></a>
-</header>
+  <button class="hbtn" id="embed-btn" aria-haspopup="dialog">Embed ↗</button>
+  <button class="hbtn" id="share-btn">Share config</button>
+</nav>
 <div id="messages" role="log" aria-live="polite" aria-label="Conversation messages">
   <div class="msg system" id="init-msg">Connecting…</div>
 </div>
@@ -89,15 +95,13 @@ footer a:hover{color:var(--accent2)}
   <textarea id="user-input" placeholder="Type a message… (Enter to send)" rows="2" disabled aria-label="Message input (Enter to send, Shift+Enter for new line)"></textarea>
   <button id="send-btn" disabled aria-label="Send message">Send</button>
 </div>
-<footer>Powered by <a href="/">Aether-Lite</a></footer>
-
-<div id="embed-panel" class="embed-panel" onclick="if(event.target===this)closeEmbed()" role="presentation">
+<div id="embed-panel" class="embed-panel" role="presentation">
   <div class="embed-box" role="dialog" aria-modal="true" aria-labelledby="embed-title">
     <h3 id="embed-title">Embed this app</h3>
     <textarea id="embed-code" readonly aria-label="Embed code (read-only)"></textarea>
     <div class="row">
-      <button onclick="copyEmbed()">Copy code</button>
-      <button class="outline" id="embed-close-btn" onclick="closeEmbed()">Close</button>
+      <button id="embed-copy-btn">Copy code</button>
+      <button class="outline" id="embed-close-btn">Close</button>
     </div>
   </div>
 </div>
@@ -257,6 +261,11 @@ document.getElementById('send-btn').addEventListener('click', send)
 document.getElementById('user-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
 })
+document.getElementById('embed-btn').addEventListener('click', openEmbed)
+document.getElementById('share-btn').addEventListener('click', () => shareConfig(document.getElementById('share-btn')))
+document.getElementById('embed-panel').addEventListener('click', e => { if (e.target === document.getElementById('embed-panel')) closeEmbed() })
+document.getElementById('embed-copy-btn').addEventListener('click', copyEmbed)
+document.getElementById('embed-close-btn').addEventListener('click', closeEmbed)
 
 init()
 </script>
@@ -552,6 +561,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <div class="kb-section kb-collapsed" id="kb-section">
       <div class="kb-head" id="kb-head" role="button" tabindex="0" aria-expanded="false" aria-label="Knowledge Base">
         <span>Knowledge Base</span>
+        <button id="kb-reindex-btn" style="font-size:10px;padding:2px 6px;border-radius:4px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;line-height:1.4" aria-label="Reindex documents">↺</button>
         <span class="kb-arrow">▾</span>
       </div>
       <div class="kb-body">
@@ -587,12 +597,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
       <span class="cfg-label">System Prompt</span>
       <textarea id="sys-prompt" class="cfg-textarea" rows="3" placeholder="Optional system prompt…" aria-label="System prompt"></textarea>
       <button id="save-btn" class="save-btn">Save config</button>
+      <span id="integrity-badge" style="font-size:10px;display:none;text-align:center"></span>
       <span class="cfg-label">Guard Mode</span>
       <div class="guard-seg" role="group" aria-label="Guard mode">
         <button id="guard-strict-btn" class="guard-btn" aria-pressed="true">Strict</button>
         <button id="guard-audit-btn" class="guard-btn" aria-pressed="false">Audit</button>
         <button id="guard-off-btn" class="guard-btn" aria-pressed="false">Off</button>
       </div>
+      <button id="delete-sandbox-btn" style="width:100%;padding:7px;border-radius:var(--radius);background:none;border:1px solid #f8717144;color:#f87171;font-size:11px;cursor:pointer;margin-top:4px;transition:all .15s" aria-label="Delete sandbox">Delete sandbox</button>
     </div>
   </aside>
   <div class="chat-main">
@@ -836,6 +848,7 @@ async function init(){
         initGuardMode(cfg.guardMode||'strict')
         document.getElementById('rag-toggle').checked=!!(cfg.ragEnabled)
         loadDocs()
+        const ib=document.getElementById('integrity-badge');if(ib){ib.style.display='';ib.textContent=cfg.tampered?'⚠ Tampered':'✓ Verified';ib.style.color=cfg.tampered?'#f59e0b':'#34d399'}
       }
     }catch{}
   }
@@ -1027,6 +1040,23 @@ document.addEventListener('click',function(e){if(!document.getElementById('ctx-m
 document.getElementById('user-input').onkeydown=function(e){
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
 }
+document.getElementById('kb-reindex-btn').onclick=async function(e){
+  e.stopPropagation()
+  if(!sandboxId)return
+  const btn=this,prev=btn.textContent
+  btn.textContent='Reindexing…'
+  try{await fetch('/api/sandbox/'+sandboxId+'/documents/reindex',{method:'POST'});btn.textContent='Done'}catch{btn.textContent='Error'}
+  setTimeout(function(){btn.textContent=prev},2000)
+}
+document.getElementById('delete-sandbox-btn').onclick=async function(){
+  if(!sandboxId)return
+  if(!confirm('Delete this sandbox and all its data?'))return
+  try{
+    await fetch('/api/sandbox/'+sandboxId,{method:'DELETE'})
+    localStorage.removeItem(LS_SID);localStorage.removeItem(LS_SESS);localStorage.removeItem(LS_ACTIVE);localStorage.removeItem(LS_TOKENS)
+    location.reload()
+  }catch{}
+}
 init()
 </script>
 </body>
@@ -1123,7 +1153,7 @@ async function load(){
 
     // Aggregate metrics across all sandboxes
     let totalRuns=0,totalTin=0,totalTout=0,latencies=[],modelMap={}
-    await Promise.all(apps.slice(0,20).map(async function(app){
+    await Promise.all(apps.map(async function(app){
       try{
         const mr=await fetch('/api/sandbox/'+app.id+'/metrics')
         const md=await mr.json()
@@ -1162,7 +1192,7 @@ async function load(){
     // Sandboxes table
     const wrap=document.getElementById('sandboxes-wrap')
     if(!apps.length){wrap.innerHTML='<div class="empty-note">No sandboxes yet.</div>';return}
-    const rows=apps.slice(0,10).map(function(app){
+    const rows=apps.map(function(app){
       const date=new Date(app.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
       const model=(app.model||'').split('/').pop()||app.model||'—'
       return '<tr><td><a href="/app/'+esc(app.id)+'" style="color:var(--accent2);text-decoration:none">'+esc(app.name)+'</a></td><td><span class="badge-model">'+esc(model)+'</span></td><td>'+esc(date)+'</td></tr>'

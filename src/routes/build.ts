@@ -4,6 +4,7 @@ import { json, ok, err, parseBody, listAllKV } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
 import { newId } from '../lib/utils'
 import { BUILD_KEY_PREFIX, BUILD_TTL } from '../lib/constants'
+import { identityHeader } from './sandbox'
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
@@ -17,10 +18,12 @@ function buildStub(env: Env, id: string): DurableObjectStub {
   return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(id))
 }
 
-function doBuild(stub: DurableObjectStub, path: string, method = 'GET', body?: unknown): Promise<Response> {
+function doBuild(stub: DurableObjectStub, path: string, method = 'GET', body?: unknown, extraHeaders?: Record<string, string>): Promise<Response> {
+  const headers: Record<string, string> = { ...extraHeaders }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
   return stub.fetch(new Request(`https://do${path}`, {
     method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    headers: Object.keys(headers).length ? headers : undefined,
     body:    body !== undefined ? JSON.stringify(body) : undefined,
   }))
 }
@@ -42,7 +45,7 @@ export const createBuildHandler: Handler = async (req, env) => {
   const id   = newId()
   const stub = buildStub(env, id)
 
-  const initRes  = await doBuild(stub, '/init', 'POST', { id, description, name, sandboxId, model })
+  const initRes  = await doBuild(stub, '/init', 'POST', { id, description, name, sandboxId, model }, identityHeader(req))
   const initData = await initRes.json() as { ok: boolean; error?: string }
   if (!initData.ok) return json(err(initData.error ?? 'Failed to initialise build'), 500)
 

@@ -506,6 +506,7 @@
           <textarea id="import-json" rows="4" class="mono" placeholder='{"version":1,"name":"My Sandbox",...}'></textarea>
         </div>
         <button id="import-btn" class="outline full">Import →</button>
+        <div id="import-status" style="display:none;font-size:11px;margin-top:6px;padding:6px 8px;border-radius:4px"></div>
 
       </div>
     </aside>
@@ -564,6 +565,7 @@
               <div class="field-label">Short API</div>
               <div class="input-copy-row">
                 <input type="text" id="short-api-out" readonly aria-label="Short API URL" />
+                <button class="outline" onclick="copyShortApi()">Copy</button>
               </div>
             </div>
 
@@ -931,21 +933,37 @@
       btn.textContent = 'Copied!'
       setTimeout(() => { btn.textContent = prev }, 1500)
     }
+    function copyShortApi() {
+      const val = document.getElementById('short-api-out').value
+      navigator.clipboard?.writeText(val).catch(() => {})
+      const btn = event.target
+      const prev = btn.textContent
+      btn.textContent = 'Copied!'
+      setTimeout(() => { btn.textContent = prev }, 1500)
+    }
 
     // ── Import sandbox ──
     async function doImport() {
       const raw = document.getElementById('import-json').value.trim()
-      if (!raw) { alert('Paste exported sandbox JSON first.'); return }
+      const statusEl = document.getElementById('import-status')
+      if (!raw) { statusEl.style.display='block'; statusEl.style.background='#f8717122'; statusEl.style.color='#f87171'; statusEl.textContent='Paste exported sandbox JSON first.'; return }
       const btn = document.getElementById('import-btn')
       setLoading(btn, 'Importing…')
+      statusEl.style.display = 'none'
       try {
         const config = JSON.parse(raw)
         const sandbox = await client.sandbox.import(config)
         localStorage.setItem('aether:sandboxId', sandbox.id)
         document.getElementById('import-json').value = ''
-        window.location.href = '/'
+        statusEl.style.display = 'block'
+        statusEl.style.background = '#34d39922'
+        statusEl.style.color = '#34d399'
+        statusEl.innerHTML = 'Imported → <a href="/" style="color:inherit;font-weight:600">Open in Chat</a>'
       } catch (e) {
-        alert(`Import failed: ${e}`)
+        statusEl.style.display = 'block'
+        statusEl.style.background = '#f8717122'
+        statusEl.style.color = '#f87171'
+        statusEl.textContent = 'Import failed: ' + e
       } finally {
         clearLoading(btn, 'Import →')
       }

@@ -8,8 +8,8 @@ const cspReport: Handler = async (req, env) => {
     const body = await req.text()
     const now  = Date.now()
     await env.DB.prepare(
-      'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-    ).bind('system', 'csp_violation', body.slice(0, 4096), now).run()
+      'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).bind('system', 'csp_violation', body.slice(0, 4096), null, now).run()
   } catch { /* non-fatal — never let logging break the response */ }
   return new Response(null, { status: 204 })
 }

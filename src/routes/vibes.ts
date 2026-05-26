@@ -1,10 +1,10 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, readJson } from '../lib/http'
+import { json, ok, err, parseBody } from '../lib/http'
 import { generateVibeConfig } from '../lib/ai'
 import { parseVibeRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
-import { registerSandbox, stub, doFetch } from './sandbox'
+import { registerSandbox, stub, doFetch, identityHeader } from './sandbox'
 import { EMBED_WIDTH, EMBED_HEIGHT } from '../lib/constants'
 
 const TEMPLATES = [
@@ -19,14 +19,13 @@ const listTemplates: Handler = (_req, _env) =>
   Promise.resolve(json(ok({ templates: TEMPLATES })))
 
 const createVibe: Handler = async (req, env) => {
-  let body: unknown
-  try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-  let parsed
-  try { parsed = parseVibeRequest(body) } catch (e) { return json(err(String(e)), 422) }
+  const p = await parseBody(req, parseVibeRequest)
+  if (!p.ok) return p.response
+  const { description, name } = p.data
 
   let vibeConfig
   try {
-    vibeConfig = await generateVibeConfig(env.AI, env, parsed.description, parsed.name)
+    vibeConfig = await generateVibeConfig(env.AI, env, description, name)
   } catch (e) {
     return json(err('Vibe generation failed — try a more detailed description', String(e)), 500)
   }
@@ -35,14 +34,13 @@ const createVibe: Handler = async (req, env) => {
     return json(err('Generated config was invalid — try a more detailed description'), 422)
   }
 
-  const id = newId()
-  const ts = now()
+  const id       = newId()
+  const ts       = now()
+  const identity = req.headers.get('X-Aether-Identity')
   const config: SandboxConfig = { ...vibeConfig, id, memory: [], createdAt: ts, updatedAt: ts }
 
-  // Initialise the Durable Object
-  await doFetch(stub(env, id), 'init', 'POST', config)
+  await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))
 
-  // Register in KV with rich metadata for gallery listing
   await registerSandbox(env, {
     id,
     name:        config.name,
@@ -52,20 +50,19 @@ const createVibe: Handler = async (req, env) => {
     fromVibe:    true,
   })
 
-  // Audit log
   await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-  ).bind(id, 'vibe_created', JSON.stringify({ description: parsed.description.slice(0, 256) }), ts).run()
+    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).bind(id, 'vibe_created', JSON.stringify({ description: description.slice(0, 256) }), identity, ts).run()
 
   const embedCode = `<iframe src="/app/${id}" width="${EMBED_WIDTH}" height="${EMBED_HEIGHT}" frameborder="0" allow="microphone"></iframe>`
 
   return json(ok({
-    sandboxId:  id,
-    name:       config.name,
+    sandboxId:   id,
+    name:        config.name,
     description: config.description,
-    model:      config.model,
-    appUrl:     `/app/${id}`,
-    shortLink:  `/s/${id}`,
+    model:       config.model,
+    appUrl:      `/app/${id}`,
+    shortLink:   `/s/${id}`,
     embedCode,
     shortApi: {
       run:    `/s/${id}/run`,
