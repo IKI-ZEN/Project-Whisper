@@ -29,8 +29,9 @@ header{display:flex;align-items:center;gap:12px;padding:0 18px;height:54px;backg
 .hbtn{font-size:12px;padding:8px 14px;min-height:36px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
 .hbtn:hover{border-color:var(--accent2);color:var(--accent2)}
 .hbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 #messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
-.msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55}
+.msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55;animation:msgIn .15s ease-out both}
 .msg.user{align-self:flex-end;background:#7c3aed28;border:1px solid #7c3aed44}
 .msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border)}
 .msg.system{align-self:center;color:var(--muted);font-size:12px;font-style:italic}
@@ -45,12 +46,14 @@ header{display:flex;align-items:center;gap:12px;padding:0 18px;height:54px;backg
 .input-row button:disabled{opacity:.45;cursor:not-allowed}
 .input-row button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 @media(max-width:600px){#messages{padding:12px}.input-row{padding:8px 12px}.input-row textarea{font-size:16px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 footer{text-align:center;font-size:11px;color:var(--muted);padding:6px;border-top:1px solid var(--border);flex-shrink:0}
 footer a{color:var(--muted);text-decoration:none}
 footer a:hover{color:var(--accent2)}
-.embed-panel{display:none;position:fixed;inset:0;background:#00000088;z-index:100;align-items:center;justify-content:center}
-.embed-panel.open{display:flex}
-.embed-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;width:480px;max-width:90vw;display:flex;flex-direction:column;gap:12px}
+.embed-panel{position:fixed;inset:0;background:#00000088;z-index:100;display:flex;align-items:center;justify-content:center;visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}
+.embed-panel.open{visibility:visible;opacity:1}
+.embed-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;width:480px;max-width:90vw;display:flex;flex-direction:column;gap:12px;transform:translateY(10px);transition:transform .2s}
+.embed-panel.open .embed-box{transform:translateY(0)}
 .embed-box h3{font-size:14px;color:var(--accent2)}
 .embed-box textarea{width:100%;height:80px;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-family:var(--mono);font-size:12px;resize:none}
 .embed-box .row{display:flex;gap:8px}
@@ -287,9 +290,11 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .empty-cta{display:inline-block;margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500}
 .empty-cta:hover{background:#6d28d9}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .skeleton{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;animation:pulse 1.4s ease-in-out infinite}
 .sk-line{height:12px;background:var(--border);border-radius:4px}
 @media(max-width:480px){.card{padding:14px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 .from-vibe{font-size:10px;padding:1px 6px;border-radius:99px;background:#34d39922;color:#34d399}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 </style>
@@ -317,11 +322,12 @@ async function load() {
       return
     }
     grid.innerHTML = ''
-    for (const app of d.data.apps) {
+    d.data.apps.forEach((app, i) => {
       const date = new Date(app.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
       const modelShort = (app.model || '').split('/').pop() || app.model
+      const delay = Math.min(i, 10) * 50
       grid.insertAdjacentHTML('beforeend', \`
-        <div class="card" role="listitem">
+        <div class="card" role="listitem" style="animation:cardIn .2s ease-out both;animation-delay:\${delay}ms">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="card-name">\${esc(app.name)}</span>
             \${app.fromVibe ? '<span class="from-vibe">vibe</span>' : ''}
@@ -334,7 +340,7 @@ async function load() {
           <a href="/app/\${esc(app.id)}" class="open-btn">Open App <span aria-hidden="true">→</span></a>
         </div>
       \`)
-    }
+    })
   } catch(e) {
     grid.innerHTML = '<div class="empty"><h3>Failed to load apps</h3><p>' + esc(String(e)) + '</p></div>'
   }

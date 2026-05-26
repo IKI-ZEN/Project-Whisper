@@ -49,7 +49,9 @@
 
     /* ── Panels ── */
     .panels { flex: 1; display: none; overflow: hidden; }
-    .panels.active { display: flex; }
+    .panels.active { display: flex; animation: panelIn 0.18s ease-out both; }
+    @keyframes panelIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes msgIn   { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
     /* ── Vibe Builder panel ── */
     #panel-vibe { gap: 0; }
@@ -74,7 +76,7 @@
       flex: 1; overflow-y: auto; padding: 20px;
       display: flex; flex-direction: column; gap: 12px;
     }
-    .msg { max-width: 78%; padding: 10px 14px; border-radius: var(--radius); font-size: 13.5px; line-height: 1.55; }
+    .msg { max-width: 78%; padding: 10px 14px; border-radius: var(--radius); font-size: 13.5px; line-height: 1.55; animation: msgIn 0.15s ease-out both; }
     .msg.user      { align-self: flex-end;   background: #7c3aed28; border: 1px solid #7c3aed44; }
     .msg.assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); }
     .msg.system    { align-self: center; color: var(--muted); font-size: 12px; font-style: italic; border: none; }
@@ -85,7 +87,7 @@
 
     /* ── Workbench panel ── */
     #panel-bench { display: none; flex-direction: column; gap: 0; }
-    #panel-bench.active { display: flex; }
+    #panel-bench.active { display: flex; animation: panelIn 0.18s ease-out both; }
     .bench-layout { display: flex; flex: 1; overflow: hidden; gap: 0; }
     .bench-sidebar {
       width: clamp(160px, 20vw, 200px); flex-shrink: 0;
@@ -100,7 +102,9 @@
     .bench-nav button.active, .bench-nav button:hover { color: var(--text); background: var(--bg); }
     .bench-nav button.active { border-left-color: var(--accent); }
     .bench-pane { flex: 1; display: none; flex-direction: column; padding: 20px; gap: 12px; overflow-y: auto; }
-    .bench-pane.active { display: flex; }
+    .bench-pane.active { display: flex; animation: panelIn 0.18s ease-out both; }
+    .wh-pane { display: none; flex-direction: column; gap: 12px; padding: 20px; }
+    .wh-pane.active { display: flex; animation: panelIn 0.18s ease-out both; }
 
     /* ── Shared form elements ── */
     label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
@@ -161,8 +165,8 @@
       font-family: var(--mono);
     }
     .status { font-size: 12px; padding: 6px 10px; border-radius: var(--radius); }
-    .status.ok  { background: #052e1a; color: var(--green); }
-    .status.err { background: #2e0505; color: var(--red);   }
+    .status.ok  { background: #052e1a; color: var(--green); animation: msgIn 0.2s ease-out both; }
+    .status.err { background: #2e0505; color: var(--red);   animation: msgIn 0.2s ease-out both; }
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
@@ -221,6 +225,9 @@
       /* Prevent iOS auto-zoom on input focus (requires ≥16px) */
       .chat-input-row textarea, .input-row textarea { font-size: 16px; }
     }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
   </style>
 </head>
 <body>
@@ -239,7 +246,7 @@
 </header>
 
 <!-- ── Vibe Builder ── -->
-<div id="panel-vibe" class="panels active" role="tabpanel" aria-labelledby="tab-vibe" style="display:flex">
+<div id="panel-vibe" class="panels active" role="tabpanel" aria-labelledby="tab-vibe">
   <div class="vibe-left">
     <div class="row" style="gap:4px;margin-bottom:2px">
       <button id="mode-quick-btn" class="tab active" style="flex:1;font-size:11px" onclick="setVibeMode('quick')">Quick Sandbox</button>
@@ -333,7 +340,7 @@
 </div>
 
 <!-- ── Sandbox Chat ── -->
-<div id="panel-chat" class="panels" role="tabpanel" aria-labelledby="tab-chat" style="display:none">
+<div id="panel-chat" class="panels" role="tabpanel" aria-labelledby="tab-chat">
   <div class="chat-sidebar">
     <div class="field">
       <label>Sandbox ID</label>
@@ -423,7 +430,7 @@
 </div>
 
 <!-- ── AI Workbench ── -->
-<div id="panel-bench" class="panels" role="tabpanel" aria-labelledby="tab-bench" style="display:none">
+<div id="panel-bench" class="panels" role="tabpanel" aria-labelledby="tab-bench">
   <div class="bench-layout">
     <div class="bench-sidebar">
       <div class="bench-nav" style="padding-top:8px">
@@ -555,7 +562,7 @@
       <div style="flex:1;overflow-y:auto">
 
         <!-- Compare -->
-        <div id="wh-compare" class="wh-pane" style="display:flex;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-compare" class="wh-pane active">
           <h3 style="margin:0">Model Comparison</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Run the same prompt across multiple models in parallel.</p>
           <div class="field"><label>Prompt</label><textarea id="wc-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
@@ -569,7 +576,7 @@
         </div>
 
         <!-- Sweep -->
-        <div id="wh-sweep" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-sweep" class="wh-pane">
           <h3 style="margin:0">Temperature Sweep</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Map attractor basin behavior across a temperature gradient.</p>
           <div class="field"><label>Prompt</label><textarea id="ws-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
@@ -584,7 +591,7 @@
         </div>
 
         <!-- Sensitivity -->
-        <div id="wh-sensitivity" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-sensitivity" class="wh-pane">
           <h3 style="margin:0">Prompt Sensitivity Analysis</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Generate paraphrases of your prompt and measure how much the model's response varies across them.</p>
           <div class="field"><label>Prompt</label><textarea id="wsn-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
@@ -599,7 +606,7 @@
         </div>
 
         <!-- Cluster -->
-        <div id="wh-cluster" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-cluster" class="wh-pane">
           <h3 style="margin:0">Semantic Response Clustering</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Embed texts and group them by semantic similarity using k-means with cosine distance.</p>
           <div class="field"><label>Texts (one per line)</label><textarea id="wcl-texts" rows="8" class="mono" placeholder="The sky is blue&#10;Clouds appear white&#10;Water boils at 100°C&#10;Ice melts at 0°C&#10;Fire burns hot&#10;Stars shine at night"></textarea></div>
@@ -611,7 +618,7 @@
         </div>
 
         <!-- CoT Probe -->
-        <div id="wh-cot" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-cot" class="wh-pane">
           <h3 style="margin:0">Chain-of-Thought Probing</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Run 4 reasoning styles in parallel: plain, step-by-step, XML-structured, and self-consistency.</p>
           <div class="field"><label>Prompt</label><textarea id="wct-prompt" rows="3" placeholder="Enter a question that benefits from reasoning…"></textarea></div>
@@ -626,7 +633,7 @@
         </div>
 
         <!-- Entropy -->
-        <div id="wh-entropy" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-entropy" class="wh-pane">
           <h3 style="margin:0">Token Entropy / Attractor Stability</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Sample the model multiple times at the same temperature and measure how much the responses diverge (high entropy = unstable attractor).</p>
           <div class="field"><label>Prompt</label><textarea id="wen-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
@@ -641,7 +648,7 @@
         </div>
 
         <!-- Archaeology -->
-        <div id="wh-archaeology" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-archaeology" class="wh-pane">
           <h3 style="margin:0">Prompt Archaeology</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Given an AI response, reverse-engineer candidate system prompts that could have produced it, ranked by embedding similarity.</p>
           <div class="field"><label>Target Response (the AI reply you want to reverse-engineer)</label><textarea id="war-response" rows="4" class="mono" placeholder="Paste an AI response here…"></textarea></div>
@@ -655,7 +662,7 @@
         </div>
 
         <!-- Pipeline -->
-        <div id="wh-pipeline" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-pipeline" class="wh-pane">
           <h3 style="margin:0">Pipeline Executor</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Define a declarative node graph where each node routes through a specific model. Full control over which model processes each step.</p>
           <div class="field"><label>Input</label><textarea id="wpl-input" rows="2" placeholder="The input text to flow through the pipeline…"></textarea></div>
@@ -706,7 +713,7 @@
         </div>
 
         <!-- Think -->
-        <div id="wh-think" class="wh-pane" style="display:none;flex-direction:column;gap:12px;padding:20px">
+        <div id="wh-think" class="wh-pane">
           <h3 style="margin:0">Extended Thinking</h3>
           <p style="margin:0;opacity:0.6;font-size:12px">Generate an explicit reasoning trace before the final answer. Uses Anthropic extended thinking for <code>anthropic:*</code> models; falls back to XML-prompted reasoning for all others.</p>
           <div class="field"><label>Prompt</label><textarea id="wth-prompt" rows="4" placeholder="Ask something that benefits from deliberate reasoning…"></textarea></div>
@@ -736,6 +743,21 @@
   let buildFileContent = {}   // filename → accumulated text
   let currentSession   = null
 
+  // ── Loading state helpers ─────────────────────────────────────────────────────
+  function setLoading(btn, label = 'Loading…') {
+    if (!btn) return
+    btn._originalHTML = btn.innerHTML
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + label
+    btn.disabled = true
+    btn.setAttribute('aria-busy', 'true')
+  }
+  function clearLoading(btn, label) {
+    if (!btn) return
+    btn.innerHTML = label !== undefined ? label : (btn._originalHTML ?? btn.textContent)
+    btn.disabled = false
+    btn.removeAttribute('aria-busy')
+  }
+
   // ── Tab switching ─────────────────────────────────────────────────────────────
   function switchTab(name) {
     document.querySelectorAll('.tabs [role="tab"]').forEach(t => {
@@ -744,7 +766,6 @@
       t.setAttribute('aria-selected', String(active))
     })
     document.querySelectorAll('.panels').forEach(p => {
-      p.style.display = p.id === `panel-${name}` ? 'flex' : 'none'
       p.classList.toggle('active', p.id === `panel-${name}`)
     })
   }
@@ -803,7 +824,7 @@
     const name = document.getElementById('vibe-name').value.trim() || undefined
     const btn  = document.getElementById('vibe-btn')
     const out  = document.getElementById('vibe-out')
-    btn.disabled = true; btn.textContent = 'Generating…'
+    setLoading(btn, 'Generating…')
     out.textContent = 'Asking AI to design your sandbox…'
     setStatus('vibe', null)
 
@@ -829,7 +850,7 @@
       out.textContent = `Error: ${e}`
       setStatus('vibe', String(e), true)
     } finally {
-      btn.disabled = false; btn.textContent = 'Generate Sandbox →'
+      clearLoading(btn, 'Generate Sandbox →')
     }
   }
 
@@ -841,7 +862,7 @@
     const sandboxId = document.getElementById('build-sandbox-id').value.trim() || undefined
 
     const btn = document.getElementById('vibe-btn')
-    btn.disabled = true; btn.textContent = 'Building…'
+    setLoading(btn, 'Building…')
 
     // Reset UI
     buildFileContent = {}
@@ -888,12 +909,12 @@
         document.getElementById('build-open-link').href = appUrl
         document.getElementById('build-actions').style.display = 'flex'
         document.getElementById('build-preview-frame').src = appUrl
-        btn.disabled = false; btn.textContent = 'Build App →'
+        clearLoading(btn, 'Build App →')
       })
       .onError(err => {
         addLog(`\n✗ Error: ${err.message}`)
         setBuildStatus('Build failed')
-        btn.disabled = false; btn.textContent = 'Build App →'
+        clearLoading(btn, 'Build App →')
       })
 
     try { await currentSession.start() }
@@ -903,8 +924,7 @@
   function stopBuild() {
     currentSession?.stop()
     currentSession = null
-    document.getElementById('vibe-btn').disabled = false
-    document.getElementById('vibe-btn').textContent = 'Build App →'
+    clearLoading(document.getElementById('vibe-btn'), 'Build App →')
   }
 
   function renderBuildFileTabs() {
@@ -966,7 +986,7 @@
     const raw = document.getElementById('import-json').value.trim()
     if (!raw) { alert('Paste exported sandbox JSON first.'); return }
     const btn = document.getElementById('import-btn')
-    btn.disabled = true; btn.textContent = 'Importing…'
+    setLoading(btn, 'Importing…')
     try {
       const config = JSON.parse(raw)
       const sandbox = await client.sandbox.import(config)
@@ -979,7 +999,7 @@
     } catch (e) {
       alert(`Import failed: ${e}`)
     } finally {
-      btn.disabled = false; btn.textContent = 'Import →'
+      clearLoading(btn, 'Import →')
     }
   }
 
@@ -1049,7 +1069,8 @@
     const text = input.value.trim()
     if (!text || !activeSandbox) return
     input.value = ''
-    document.getElementById('send-btn').disabled = true
+    const sendBtn = document.getElementById('send-btn')
+    setLoading(sendBtn, 'Sending…')
     addMsg('user', text)
 
     const sessionId = document.getElementById('chat-session').value.trim() || undefined
@@ -1060,7 +1081,7 @@
     } else {
       await sendMessageHTTP(text, sessionId)
     }
-    document.getElementById('send-btn').disabled = false
+    clearLoading(sendBtn, 'Send')
     document.getElementById('chat-input').focus()
   }
 
@@ -1213,7 +1234,9 @@
   // ── Workbench ─────────────────────────────────────────────────────────────────
   async function doComplete() {
     const out = document.getElementById('bc-out')
-    out.textContent = '…'
+    const btn = document.querySelector('[onclick="doComplete()"]')
+    setLoading(btn, 'Running…')
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
     const toolsRaw = document.getElementById('bc-tools').value.trim()
     const toolsErr = document.getElementById('bc-tools-err')
     let tools
@@ -1239,15 +1262,19 @@
         groundingEnabled: grounding || undefined,
       })
     } catch (e) { out.textContent = String(e) }
+    finally { clearLoading(btn, 'Run') }
   }
 
   async function doStream() {
     const out = document.getElementById('bs-out')
-    out.textContent = ''
+    const btn = document.querySelector('[onclick="doStream()"]')
+    setLoading(btn, 'Streaming…')
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
     const grounding = document.getElementById('bs-grounding').checked
     const bsTemp = parseFloat(document.getElementById('bs-temp').value)
     const bsTok = parseInt(document.getElementById('bs-tokens').value)
     try {
+      let first = true
       for await (const token of client.ai.stream({
         prompt:           document.getElementById('bs-prompt').value,
         systemPrompt:     document.getElementById('bs-sys').value || undefined,
@@ -1256,14 +1283,18 @@
         maxTokens:        isNaN(bsTok)  ? undefined : bsTok,
         groundingEnabled: grounding || undefined,
       })) {
+        if (first) { out.textContent = ''; first = false }
         out.textContent += token
       }
     } catch (e) { out.textContent = String(e) }
+    finally { clearLoading(btn, 'Stream') }
   }
 
   async function doEmbed() {
     const out = document.getElementById('be-out')
-    out.textContent = '…'
+    const btn = document.querySelector('[onclick="doEmbed()"]')
+    setLoading(btn, 'Generating…')
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
     const lines = document.getElementById('be-text').value.split('\n').filter(Boolean)
     try {
       const vecs = await client.ai.embed(lines)
@@ -1271,11 +1302,14 @@
         `[${i}] dim=${v.length}  [${v.slice(0,4).map(x => x.toFixed(4)).join(', ')} …]`
       ).join('\n')
     } catch (e) { out.textContent = String(e) }
+    finally { clearLoading(btn, 'Generate Embeddings') }
   }
 
   async function doImage() {
     const out = document.getElementById('bi-out')
-    out.innerHTML = '<span style="opacity:0.5">Generating…</span>'
+    const btn = document.querySelector('[onclick="doImage()"]')
+    setLoading(btn, 'Generating…')
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
     try {
       const b64 = await client.ai.image(
         document.getElementById('bi-prompt').value,
@@ -1286,16 +1320,20 @@
       out.innerHTML = ''
       out.appendChild(img)
     } catch (e) { out.textContent = String(e) }
+    finally { clearLoading(btn, 'Generate Image') }
   }
 
   async function doTranscribe() {
     const fileInput = document.getElementById('bt-file')
     const out = document.getElementById('bt-out')
     if (!fileInput.files?.length) { out.textContent = 'Select an audio file first.'; return }
-    out.textContent = 'Transcribing…'
+    const btn = document.querySelector('[onclick="doTranscribe()"]')
+    setLoading(btn, 'Transcribing…')
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
     try {
       out.textContent = await client.ai.transcribe(fileInput.files[0])
     } catch (e) { out.textContent = String(e) }
+    finally { clearLoading(btn, 'Transcribe') }
   }
 
   // ── Config editor ─────────────────────────────────────────────────────────────
@@ -1327,7 +1365,7 @@
       tools,
     }
     const btn = document.getElementById('cfg-save-btn')
-    btn.disabled = true; btn.textContent = 'Saving…'
+    setLoading(btn, 'Saving…')
     try {
       await activeSandbox.update(patch)
       activeSandbox = await client.sandbox.get(activeSandbox.id)
@@ -1336,7 +1374,7 @@
     } catch (e) {
       setStatus('cfg', String(e), true)
     } finally {
-      btn.disabled = false; btn.textContent = 'Save changes'
+      clearLoading(btn, 'Save changes')
     }
   }
 
@@ -1346,7 +1384,7 @@
     const msgs = document.getElementById('messages')
     msgs.innerHTML = ''
     const btn = document.getElementById('history-btn')
-    btn.disabled = true; btn.textContent = 'Loading…'
+    setLoading(btn, 'Loading…')
     try {
       const history = await activeSandbox.history()
       if (!history.length) {
@@ -1359,7 +1397,7 @@
     } catch (e) {
       addMsg('error', String(e))
     } finally {
-      btn.disabled = false; btn.textContent = 'Load history'
+      clearLoading(btn, 'Load history')
     }
   }
 
@@ -1367,7 +1405,7 @@
 
   function switchWhisper(name, btn) {
     document.querySelectorAll('.wh-pane').forEach(p => {
-      p.style.display = p.id === `wh-${name}` ? 'flex' : 'none'
+      p.classList.toggle('active', p.id === `wh-${name}`)
     })
     document.querySelectorAll('.wh-tab').forEach(b => {
       b.style.borderLeftColor = 'transparent'
@@ -1414,7 +1452,7 @@
     const temperature = parseFloat(document.getElementById('wc-temp').value)
     const systemPrompt = document.getElementById('wc-sys').value.trim() || undefined
     const out = document.getElementById('wc-results')
-    out.innerHTML = '<span style="opacity:0.6">Running…</span>'
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Comparing…'
     try {
       const res = await client.ai.compare(models, prompt, { temperature, systemPrompt })
       if (!res.ok) { out.innerHTML = escHtml(String(res.error)); return }
@@ -1437,7 +1475,7 @@
     const temperatures = tempsRaw.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
     if (!temperatures.length) { alert('Enter at least one temperature value.'); return }
     const out = document.getElementById('ws-results')
-    out.innerHTML = '<span style="opacity:0.6">Sweeping…</span>'
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sweeping…'
     try {
       const res = await client.ai.sweep(prompt, temperatures, { model, systemPrompt, samples })
       if (!res.ok) { out.innerHTML = escHtml(String(res.error)); return }
@@ -1467,7 +1505,7 @@
     const variants = parseInt(document.getElementById('wsn-variants').value, 10)
     const temp     = parseFloat(document.getElementById('wsn-temp').value)
     const out      = document.getElementById('wsn-results')
-    out.innerHTML  = '<span style="opacity:0.6">Analysing…</span>'
+    out.innerHTML  = '<span class="spinner" aria-hidden="true"></span> Analysing…'
     try {
       const data = await client.ai.sensitivity(prompt, { variants, model, systemPrompt: sys, temperature: temp })
       const simHTML = renderHeatmap(data.similarityMatrix, data.variants.map(v => `Variant ${data.variants.indexOf(v) + 1}`))
@@ -1492,7 +1530,7 @@
     if (texts.length < 2) { alert('Enter at least 2 texts (one per line).'); return }
     const k   = parseInt(document.getElementById('wcl-k').value, 10)
     const out = document.getElementById('wcl-results')
-    out.innerHTML = '<span style="opacity:0.6">Clustering…</span>'
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Clustering…'
     try {
       const data = await client.ai.cluster(texts, { k })
       const cols = ['#7c3aed','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#6366f1','#ec4899']
@@ -1520,7 +1558,7 @@
     const temp    = parseFloat(document.getElementById('wct-temp').value)
     const samples = parseInt(document.getElementById('wct-samples').value, 10)
     const out     = document.getElementById('wct-results')
-    out.innerHTML = '<span style="opacity:0.6">Probing…</span>'
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Probing…'
     try {
       const { results } = await client.ai.cot(prompt, { model, systemPrompt: sys, temperature: temp, samples })
       const styleLabel = { plain: 'Plain', 'step-by-step': 'Step-by-Step', 'xml-structured': 'XML-Structured', 'self-consistency': 'Self-Consistency' }
@@ -1545,7 +1583,7 @@
     const temp    = parseFloat(document.getElementById('wen-temp').value)
     const samples = parseInt(document.getElementById('wen-samples').value, 10)
     const out     = document.getElementById('wen-results')
-    out.innerHTML = '<span style="opacity:0.6">Sampling…</span>'
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sampling…'
     try {
       const data = await client.ai.entropy(prompt, { model, systemPrompt: sys, temperature: temp, samples })
       const stabPct = Math.round(data.avgCosineSimilarity * 100)
@@ -1587,7 +1625,7 @@
     const model      = document.getElementById('war-model').value.trim() || undefined
     const candidates = parseInt(document.getElementById('war-candidates').value, 10)
     const out        = document.getElementById('war-results')
-    out.innerHTML    = '<span style="opacity:0.6">Excavating…</span>'
+    out.innerHTML    = '<span class="spinner" aria-hidden="true"></span> Excavating…'
     try {
       const data = await client.ai.archaeology(targetResponse, { probe, model, candidates })
       out.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">` +
@@ -1617,7 +1655,7 @@
     let nodes
     try { nodes = JSON.parse(nodesRaw) } catch (e) { alert('Invalid JSON in pipeline definition: ' + e); return }
     const out = document.getElementById('wpl-results')
-    out.innerHTML = '<span style="opacity:0.6">Running pipeline…</span>'
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running pipeline…'
     try {
       const data = await client.ai.pipeline(input, nodes, entryId, { maxDepth })
       const traceHTML = data.trace.map((step, i) => `
@@ -1651,7 +1689,7 @@
     const maxTok  = parseInt(document.getElementById('wth-tokens').value, 10) || 2048
     if (!prompt) return
     const out = document.getElementById('wth-results')
-    out.innerHTML = '<span style="opacity:0.6">Thinking…</span>'
+    out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Thinking…'
     try {
       const data = await client.ai.think(prompt, {
         model,
@@ -1704,7 +1742,7 @@
   // ── Expose to inline onclick handlers ────────────────────────────────────────
   Object.assign(window, {
     switchTab, switchBench, switchWhisper,
-    doVibe, gotoChatFromVibe,
+    setVibeMode, doVibeAction, doVibe, gotoChatFromVibe, stopBuild,
     copyEmbed, copyExport, loadSandbox, sendMessage, deleteSandbox, doImport,
     saveConfig, loadHistory, genSessionId,
     doComplete, doStream, doEmbed, doImage, doTranscribe,

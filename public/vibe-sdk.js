@@ -1127,6 +1127,7 @@ textarea {
   max-height: 120px;
   overflow-y: auto;
   field-sizing: content;
+  transition: border-color 0.15s;
 }
 textarea:focus { border-color: var(--vibe-accent); }
 button {
@@ -1140,8 +1141,14 @@ button {
   font-weight: 600;
   flex-shrink: 0;
 }
+button { transition: opacity 0.15s, background 0.15s; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button:focus-visible, textarea:focus-visible { outline: 2px solid var(--vibe-accent); outline-offset: 2px; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }
+.typing-dots { display: inline-flex; gap: 4px; padding: 4px 0; align-items: center; }
+.typing-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0; animation: blink 1.2s infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
 `
 
 class VibeChatElement extends HTMLElement {
@@ -1211,10 +1218,13 @@ class VibeChatElement extends HTMLElement {
 
     this._msg('user', text)
     const botEl = this._msg('bot', '')
+    botEl.innerHTML = '<span class="typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></span>'
 
     try {
       let buf = ''
+      let firstToken = true
       for await (const token of this._handle.stream(text)) {
+        if (firstToken) { botEl.innerHTML = ''; firstToken = false }
         buf += token
         botEl.innerHTML = _renderMd(buf)
         this._scroll()
