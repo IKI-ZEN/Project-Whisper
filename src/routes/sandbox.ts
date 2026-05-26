@@ -37,7 +37,7 @@ export async function doFetch(
   })
 }
 
-function identityHeader(req: Request): Record<string, string> {
+export function identityHeader(req: Request): Record<string, string> {
   const id = req.headers.get('X-Aether-Identity')
   return id ? { 'X-Aether-Identity': id } : {}
 }
@@ -87,10 +87,9 @@ const list: Handler = async (_req, env) => {
 }
 
 const create: Handler = async (req, env) => {
-  let body: unknown
-  try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-  let parsed
-  try { parsed = parseCreateSandboxRequest(body) } catch (e) { return json(err(String(e)), 422) }
+  const p = await parseBody(req, parseCreateSandboxRequest)
+  if (!p.ok) return p.response
+  const parsed = p.data
 
   const id = newId()
   const ts = now()
@@ -191,19 +190,17 @@ const metrics: Handler = async (_req, env, params: Params) => {
 export const runHandler: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
-  let body: unknown
-  try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-  let parsed
-  try { parsed = parseRunSandboxRequest(body) } catch (e) { return json(err(String(e)), 422) }
+  const p = await parseBody(req, parseRunSandboxRequest)
+  if (!p.ok) return p.response
 
-  const tokenDeny = await validateSessionToken(id, parsed.sessionId, req, env)
+  const tokenDeny = await validateSessionToken(id, p.data.sessionId, req, env)
   if (tokenDeny) return tokenDeny
 
-  const res = await doFetch(stub(env, id), 'run', 'POST', { message: parsed.message, sessionId: parsed.sessionId })
+  const res = await doFetch(stub(env, id), 'run', 'POST', { message: p.data.message, sessionId: p.data.sessionId })
 
   void env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-  ).bind(id, 'run', '{}', now()).run()
+    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).bind(id, 'run', '{}', null, now()).run()
 
   return res
 }
@@ -211,12 +208,10 @@ export const runHandler: Handler = async (req, env, params: Params) => {
 export const streamHandler: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
-  let body: unknown
-  try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-  let parsed
-  try { parsed = parseRunSandboxRequest(body) } catch (e) { return json(err(String(e)), 422) }
+  const p = await parseBody(req, parseRunSandboxRequest)
+  if (!p.ok) return p.response
 
-  const doRes = await doFetch(stub(env, id), 'stream', 'POST', { message: parsed.message, sessionId: parsed.sessionId })
+  const doRes = await doFetch(stub(env, id), 'stream', 'POST', { message: p.data.message, sessionId: p.data.sessionId })
   return sseResponse(doRes.body as ReadableStream)
 }
 

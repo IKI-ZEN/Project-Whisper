@@ -70,11 +70,12 @@ export default {
         console.error('[queue] job failed:', msg.body.type, e)
         try {
           await env.DB.prepare(
-            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
+            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
           ).bind(
             msg.body.sandboxId ?? '',
             'job_failed',
             JSON.stringify({ jobType: msg.body.type, error: String(e), attempts: msg.attempts }),
+            null,
             Date.now(),
           ).run()
         } catch { /* D1 write must not prevent retry */ }

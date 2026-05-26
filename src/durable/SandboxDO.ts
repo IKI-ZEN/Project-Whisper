@@ -237,8 +237,8 @@ export class SandboxDO extends DurableObject<Env> {
           }
           if (guard.riskLevel !== 'clean') {
             void this.env.DB.prepare(
-              'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?)',
-            ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'ws', patterns: guard.patterns }), now()).run()
+              'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+            ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'ws', patterns: guard.patterns }), null, now()).run()
           }
         }
 
