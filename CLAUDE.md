@@ -61,11 +61,12 @@ Request → src/index.ts (Worker entry)
 
 **Document routes** (`/api/sandbox/:id/documents`): upload (POST multipart), list (GET), delete (DELETE). See [Documents / RAG](#documents--rag) section.
 
-**Build routes** (`/api/v2/build/*`): create (POST), status (GET), file list (GET), file content (GET), delete (DELETE), thumbnail (GET), deploy (POST). WebSocket at `/api/v2/build/:id/ws` — bypasses router, dispatched directly to `AppBuilderDO`.
+**Build routes** (`/api/v2/build/*`): list (GET), create (POST), status (GET), file list (GET), file content (GET), delete (DELETE), thumbnail (GET), deploy (POST). WebSocket at `/api/v2/build/:id/ws` — bypasses router, dispatched directly to `AppBuilderDO`.
 
 | Route | Handler | Purpose |
 |-------|---------|---------|
-| `POST /api/v2/build` | build.ts | Create build, init DO, return wsUrl |
+| `GET /api/v2/build` | build.ts | List all builds (KV-backed metadata index) |
+| `POST /api/v2/build` | build.ts | Create build, init DO, store KV metadata, return wsUrl |
 | `GET /api/v2/build/:id` | build.ts | Build status + file list |
 | `GET /api/v2/build/:id/files` | build.ts | List generated filenames |
 | `GET /api/v2/build/:id/files/:filename` | build.ts | Serve a generated file from R2 |
@@ -275,6 +276,12 @@ MAX_VIBE_DESCRIPTION = 5000 MAX_EMBED_CHARS = 100_000      MAX_REQUEST_BODY = 1_
 MAX_AUDIO_BYTES = 26_214_400
 RATE_LIMIT_WINDOW_MS = 60_000    RATE_LIMIT_MAX_REQUESTS = 20
 MAX_BUILD_DESCRIPTION_LEN = 2000  MAX_BUILD_FILES = 6  MAX_FILE_BYTES = 102_400
+IMAGE_MAX_BYTES = 5_242_880  ALLOWED_IMAGE_TYPES = [png,jpeg,gif,webp]
+IMAGE_RATE_LIMIT_WINDOW_MS = 60_000  IMAGE_RATE_LIMIT_MAX = 20
+EMAIL_RATE_LIMIT_WINDOW_MS = 60_000  EMAIL_RATE_LIMIT_MAX = 5
+MAX_APP_STATE_KEY_LEN = 512  MAX_APP_STATE_VALUE_LEN = 16_384  APP_STATE_KEY_RE = /^[a-zA-Z0-9._\-/]+$/
+BUILD_KEY_PREFIX = 'build:'  BUILD_TTL = 604800
+MAX_PDF_INFLATED = 52_428_800
 ```
 
 Key parsers: `parseCompleteRequest`, `parseCreateSandboxRequest`, `parseBuildRequest`, `parseVibeRequest`, `parseSensitivityRequest`, `parseClusterRequest`, `parseCotRequest`, `parseEntropyRequest`, `parseArchaeologyRequest`, `parsePipelineRequest`, `parseThinkRequest`, `parseAppStateValueRequest`, `parseEmailRequest`.
@@ -351,9 +358,9 @@ SDK rename summary:
 | `VibeClient` | `AetherLiteClient` | `window.VibeClient` alias kept for one release |
 | `VibeResult` | `VibeBuilderResult` | `export const VibeResult` alias kept |
 | `<vibe-chat>` | `<aether-lite-chat>` | All three elements registered; `VibeChatElement` is base class; `<aether-chat>` kept as alias |
-| (new) | `AppBuilder` | Multi-file app generation client |
+| (new) | `AppBuilder` | Multi-file app generation client (`session`, `get`, `list`, `delete`) |
 | (new) | `AppSession` | WS-driven build session with fluent event handlers |
-| (new) | `AppHandle` | Handle to a completed build (file access, state, deploy, delete) |
+| (new) | `AppHandle` | Handle to a completed build (`getFile`, `deploy`, `delete`, `state`, `thumbnailUrl`) |
 | (new) | `AppStateHandle` | Per-app persistent KV store (get/set/list/delete/clear) |
 
 ### D1 database
