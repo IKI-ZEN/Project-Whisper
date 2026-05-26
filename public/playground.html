@@ -39,9 +39,10 @@
     .pill { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: #7c3aed22; color: var(--accent2); font-weight: 500; }
     .tabs { display: flex; gap: 2px; margin-left: auto; }
     .tab {
-      font-size: 12px; padding: 5px 14px; border-radius: var(--radius);
+      font-size: 12px; padding: 6px 14px; border-radius: var(--radius);
       background: none; border: 1px solid transparent;
       color: var(--muted); cursor: pointer; transition: all 0.15s;
+      min-height: 36px;
     }
     .tab:hover { color: var(--text); }
     .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -53,7 +54,7 @@
     /* ── Vibe Builder panel ── */
     #panel-vibe { gap: 0; }
     .vibe-left {
-      width: 380px; flex-shrink: 0;
+      width: clamp(260px, 32vw, 380px); flex-shrink: 0;
       background: var(--surface); border-right: 1px solid var(--border);
       padding: 20px; overflow-y: auto;
       display: flex; flex-direction: column; gap: 16px;
@@ -63,7 +64,7 @@
     /* ── Sandbox Chat panel ── */
     #panel-chat { gap: 0; }
     .chat-sidebar {
-      width: 280px; flex-shrink: 0;
+      width: clamp(220px, 28vw, 280px); flex-shrink: 0;
       background: var(--surface); border-right: 1px solid var(--border);
       padding: 16px; display: flex; flex-direction: column; gap: 12px;
       overflow-y: auto;
@@ -87,7 +88,7 @@
     #panel-bench.active { display: flex; }
     .bench-layout { display: flex; flex: 1; overflow: hidden; gap: 0; }
     .bench-sidebar {
-      width: 200px; flex-shrink: 0;
+      width: clamp(160px, 20vw, 200px); flex-shrink: 0;
       background: var(--surface); border-right: 1px solid var(--border);
       display: flex; flex-direction: column;
     }
@@ -102,7 +103,7 @@
     .bench-pane.active { display: flex; }
 
     /* ── Shared form elements ── */
-    label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
     input, textarea, select {
       width: 100%; padding: 8px 10px;
       background: var(--bg); border: 1px solid var(--border);
@@ -111,6 +112,9 @@
       transition: border-color 0.15s;
     }
     input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
     textarea { resize: vertical; min-height: 72px; }
     textarea.mono { font-family: var(--mono); font-size: 12px; }
     select option { background: var(--surface); }
@@ -119,6 +123,7 @@
       padding: 8px 16px; border-radius: var(--radius);
       background: var(--accent); color: #fff; border: none;
       font-size: 13px; font-weight: 500; cursor: pointer;
+      min-height: 36px;
       transition: background 0.15s, opacity 0.15s;
     }
     button:hover:not(:disabled) { background: #6d28d9; }
@@ -140,7 +145,7 @@
     .output.img-out img { max-width: 100%; max-height: 400px; border-radius: var(--radius); }
 
     /* ── Misc ── */
-    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field { display: flex; flex-direction: column; gap: 8px; }
     .row   { display: flex; gap: 8px; align-items: flex-end; }
     .row > * { flex: 1; }
     hr { border: none; border-top: 1px solid var(--border); }
@@ -161,6 +166,61 @@
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+    /* ── Whisperer inner nav ── */
+    .wh-nav {
+      width: 130px; flex-shrink: 0;
+      background: var(--bg); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; padding-top: 8px;
+    }
+
+    /* ── Loading spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block; width: 13px; height: 13px;
+      border: 2px solid #ffffff44; border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+
+    /* ── Responsive layout ── */
+    @media (max-width: 700px) {
+      header { height: auto; min-height: 52px; padding: 8px 12px; flex-wrap: wrap; row-gap: 6px; }
+      header h1 { font-size: 14px; }
+      .tabs { order: 2; width: 100%; margin-left: 0 !important; flex-wrap: wrap; gap: 4px; }
+      .tab { padding: 5px 10px; font-size: 11px; }
+
+      /* Vibe Builder: sidebar stacks above output */
+      #panel-vibe { flex-direction: column; overflow-y: auto; }
+      .vibe-left { width: 100% !important; border-right: none; border-bottom: 1px solid var(--border); max-height: 52vh; overflow-y: auto; }
+
+      /* Sandbox Chat: sidebar stacks above chat */
+      #panel-chat { flex-direction: column; }
+      .chat-sidebar { width: 100% !important; border-right: none; border-bottom: 1px solid var(--border); max-height: 44vh; overflow-y: auto; }
+      .chat-main { min-height: 0; }
+
+      /* AI Workbench: sidebar becomes horizontal scroll bar */
+      .bench-layout { flex-direction: column; }
+      .bench-sidebar { width: 100% !important; border-right: none; border-bottom: 1px solid var(--border); overflow: hidden; }
+      .bench-nav { flex-direction: row; overflow-x: auto; }
+      .bench-nav button { border-left: none !important; border-bottom: 3px solid transparent; white-space: nowrap; }
+      .bench-nav button.active { border-left-color: transparent !important; border-bottom-color: var(--accent) !important; background: none; }
+
+      /* Whisperer inner nav becomes horizontal on mobile */
+      #bench-whisper { flex-direction: column !important; }
+      .wh-nav { width: 100% !important; flex-direction: row; border-right: none; border-bottom: 1px solid var(--border); overflow-x: auto; padding: 0 4px; height: 44px; flex-shrink: 0; }
+      .wh-tab { border-left-width: 0 !important; border-bottom: 3px solid transparent; white-space: nowrap; min-width: max-content; }
+
+      /* Override inline input widths in Whisperer panes */
+      .bench-pane input[style*="width"] { width: auto !important; min-width: 60px; flex: 1 1 60px; max-width: 180px; }
+
+      /* Spacing + touch targets */
+      #messages { padding: 12px; }
+      .chat-input-row { padding: 8px 12px; }
+      .bench-pane { padding: 14px; }
+      /* Prevent iOS auto-zoom on input focus (requires ≥16px) */
+      .chat-input-row textarea, .input-row textarea { font-size: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -168,10 +228,10 @@
 <header>
   <h1>Aether-Lite</h1>
   <span class="pill">Playground</span>
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('vibe')">Vibe Builder</button>
-    <button class="tab" onclick="switchTab('chat')">Sandbox Chat</button>
-    <button class="tab" onclick="switchTab('bench')">AI Workbench</button>
+  <div class="tabs" role="tablist" aria-label="Playground sections">
+    <button id="tab-vibe" class="tab active" role="tab" aria-selected="true"  aria-controls="panel-vibe" onclick="switchTab('vibe')">Vibe Builder</button>
+    <button id="tab-chat" class="tab"        role="tab" aria-selected="false" aria-controls="panel-chat" onclick="switchTab('chat')">Sandbox Chat</button>
+    <button id="tab-bench" class="tab"       role="tab" aria-selected="false" aria-controls="panel-bench" onclick="switchTab('bench')">AI Workbench</button>
   </div>
   <a href="/apps" style="margin-left:auto;text-decoration:none">
     <button style="padding:5px 14px;border-radius:8px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;cursor:pointer" onmouseover="this.style.borderColor='var(--accent2)';this.style.color='var(--accent2)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">My Apps ↗</button>
@@ -179,7 +239,7 @@
 </header>
 
 <!-- ── Vibe Builder ── -->
-<div id="panel-vibe" class="panels active" style="display:flex">
+<div id="panel-vibe" class="panels active" role="tabpanel" aria-labelledby="tab-vibe" style="display:flex">
   <div class="vibe-left">
     <div class="row" style="gap:4px;margin-bottom:2px">
       <button id="mode-quick-btn" class="tab active" style="flex:1;font-size:11px" onclick="setVibeMode('quick')">Quick Sandbox</button>
@@ -187,7 +247,7 @@
     </div>
     <div class="field">
       <label>Describe your app</label>
-      <textarea id="vibe-desc" rows="5" placeholder="e.g. A customer support agent that helps users troubleshoot login issues, escalates billing problems, and always responds in a friendly, concise tone."></textarea>
+      <textarea id="vibe-desc" rows="5" aria-required="true" placeholder="e.g. A customer support agent that helps users troubleshoot login issues, escalates billing problems, and always responds in a friendly, concise tone."></textarea>
     </div>
     <div class="field">
       <label>Name (optional)</label>
@@ -273,7 +333,7 @@
 </div>
 
 <!-- ── Sandbox Chat ── -->
-<div id="panel-chat" class="panels" style="display:none">
+<div id="panel-chat" class="panels" role="tabpanel" aria-labelledby="tab-chat" style="display:none">
   <div class="chat-sidebar">
     <div class="field">
       <label>Sandbox ID</label>
@@ -352,18 +412,18 @@
     </div>
   </div>
   <div class="chat-main">
-    <div id="messages">
+    <div id="messages" role="log" aria-live="polite" aria-label="Chat messages">
       <div class="msg system">Load or create a sandbox to start chatting.</div>
     </div>
     <div class="chat-input-row">
-      <textarea id="chat-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" rows="2" disabled></textarea>
+      <textarea id="chat-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" rows="2" disabled aria-label="Chat message (Enter to send, Shift+Enter for newline)"></textarea>
       <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
     </div>
   </div>
 </div>
 
 <!-- ── AI Workbench ── -->
-<div id="panel-bench" class="panels" style="display:none">
+<div id="panel-bench" class="panels" role="tabpanel" aria-labelledby="tab-bench" style="display:none">
   <div class="bench-layout">
     <div class="bench-sidebar">
       <div class="bench-nav" style="padding-top:8px">
@@ -479,7 +539,7 @@
     <!-- Whisperer: multi-tool analysis pane with internal tabs -->
     <div id="bench-whisper" class="bench-pane" style="padding:0;flex-direction:row;overflow:hidden">
       <!-- inner nav -->
-      <div style="width:130px;flex-shrink:0;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;padding-top:8px">
+      <div class="wh-nav">
         <button class="wh-tab active" onclick="switchWhisper('compare',this)" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-left:3px solid var(--accent);color:var(--text);font-size:12px;cursor:pointer">Compare</button>
         <button class="wh-tab" onclick="switchWhisper('sweep',this)" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer">Sweep</button>
         <button class="wh-tab" onclick="switchWhisper('sensitivity',this)" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer">Sensitivity</button>
@@ -678,8 +738,10 @@
 
   // ── Tab switching ─────────────────────────────────────────────────────────────
   function switchTab(name) {
-    document.querySelectorAll('.tab').forEach((t, i) => {
-      t.classList.toggle('active', ['vibe','chat','bench'][i] === name)
+    document.querySelectorAll('.tabs [role="tab"]').forEach(t => {
+      const active = t.getAttribute('aria-controls') === `panel-${name}`
+      t.classList.toggle('active', active)
+      t.setAttribute('aria-selected', String(active))
     })
     document.querySelectorAll('.panels').forEach(p => {
       p.style.display = p.id === `panel-${name}` ? 'flex' : 'none'
