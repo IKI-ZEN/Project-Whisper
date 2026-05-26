@@ -9,16 +9,18 @@
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--green:#34d399;--red:#f87171;--radius:8px;--mono:"JetBrains Mono","Fira Code",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;margin-right:8px;letter-spacing:.02em}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
 .navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
 .navlink:hover{color:var(--text)}
 .navlink.active{background:var(--accent);color:#fff}
 .layout{display:flex;flex:1;overflow:hidden}
 .tool-sidebar{width:160px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:8px 0}
 .sidebar-section{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:8px 14px 4px}
+.sidebar-section+.sidebar-section{margin-top:12px}
+.out-placeholder{color:var(--muted);font-size:12px;opacity:.5;font-style:italic;padding:2px 0}
 .tool-nav-btn{width:100%;text-align:left;padding:8px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:color .1s,background .1s,border-color .1s;min-height:34px;font-family:inherit}
 .tool-nav-btn:hover{color:var(--text);background:var(--bg)}
-.tool-nav-btn.active{color:var(--text);background:var(--bg);border-left-color:var(--accent)}
+.tool-nav-btn.active{color:var(--accent2);background:#7c3aed18;border-left-color:var(--accent)}
 .tool-content{flex:1;overflow:hidden;position:relative}
 .tool-pane{display:none;flex-direction:column;gap:12px;padding:20px;overflow-y:auto;height:100%}
 .tool-pane.active{display:flex}
@@ -72,7 +74,7 @@ hr{border:none;border-top:1px solid var(--border)}
     <button class="tool-nav-btn" data-tool="embed" onclick="switchTool('embed',this)">Embed</button>
     <button class="tool-nav-btn" data-tool="image" onclick="switchTool('image',this)">Image Gen</button>
     <button class="tool-nav-btn" data-tool="transcribe" onclick="switchTool('transcribe',this)">Transcribe</button>
-    <span class="sidebar-section" style="margin-top:8px">Whisperer</span>
+    <span class="sidebar-section">Whisperer</span>
     <button class="tool-nav-btn" data-tool="compare" onclick="switchTool('compare',this)">Compare</button>
     <button class="tool-nav-btn" data-tool="sweep" onclick="switchTool('sweep',this)">Sweep</button>
     <button class="tool-nav-btn" data-tool="sensitivity" onclick="switchTool('sensitivity',this)">Sensitivity</button>
@@ -110,7 +112,7 @@ hr{border:none;border-top:1px solid var(--border)}
       </details>
       <button class="full" id="btn-complete">Run</button>
       <label>Response</label>
-      <div id="bc-out" class="output"></div>
+      <div id="bc-out" class="output"><p class="out-placeholder">Response will appear here…</p></div>
     </div>
 
     <!-- Stream -->
@@ -130,7 +132,7 @@ hr{border:none;border-top:1px solid var(--border)}
       </details>
       <button class="full" id="btn-stream">Stream</button>
       <label>Output (streamed)</label>
-      <div id="bs-out" class="output"></div>
+      <div id="bs-out" class="output"><p class="out-placeholder">Tokens will stream here…</p></div>
     </div>
 
     <!-- Embed -->
@@ -138,7 +140,7 @@ hr{border:none;border-top:1px solid var(--border)}
       <div class="field"><label>Text (one per line)</label><textarea id="be-text" rows="5" class="mono" placeholder="Hello world&#10;Cloudflare Workers&#10;Embeddings rock"></textarea></div>
       <button class="full" id="btn-embed">Generate Embeddings</button>
       <label>Vectors</label>
-      <div id="be-out" class="output"></div>
+      <div id="be-out" class="output"><p class="out-placeholder">Embedding vectors will appear here…</p></div>
     </div>
 
     <!-- Image Gen -->
@@ -154,7 +156,7 @@ hr{border:none;border-top:1px solid var(--border)}
       <div class="field"><label>Audio file (wav / mp3 / m4a)</label><input id="bt-file" type="file" accept="audio/*" style="padding:6px"/></div>
       <button class="full" id="btn-transcribe">Transcribe</button>
       <label>Transcript</label>
-      <div id="bt-out" class="output"></div>
+      <div id="bt-out" class="output"><p class="out-placeholder">Transcript will appear here…</p></div>
     </div>
 
     <!-- Compare -->

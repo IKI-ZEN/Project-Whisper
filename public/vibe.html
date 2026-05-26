@@ -49,8 +49,10 @@
       font-size: 15px;
       color: var(--accent2);
       text-decoration: none;
-      margin-right: 12px;
       letter-spacing: -0.3px;
+      border-right: 1px solid var(--border);
+      padding-right: 16px;
+      margin-right: 4px;
     }
     .brand:hover { color: #fff; }
 
@@ -101,11 +103,30 @@
       overflow: hidden;
     }
 
-    /* ── Mode toggle row ── */
-    .mode-row {
+    /* ── Mode toggle (segmented control) ── */
+    .mode-seg {
       display: flex;
-      gap: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) + 2px);
+      padding: 3px;
+      gap: 2px;
     }
+    .mode-btn {
+      flex: 1;
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .mode-btn.active { background: var(--accent); color: #fff; }
+    .mode-btn:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
 
     /* ── Form elements ── */
     .field {
@@ -204,11 +225,28 @@
       letter-spacing: 0.6px;
     }
 
-    #templates {
+    /* ── Template chips ── */
+    .tpl-chips {
       display: flex;
-      flex-direction: column;
+      flex-wrap: wrap;
       gap: 6px;
+      margin-top: 2px;
     }
+    .tpl-chip {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: inherit;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .tpl-chip:hover { border-color: var(--accent2); color: var(--accent2); }
+    .tpl-chip:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
 
     /* ── App builder opts ── */
     #app-builder-opts {
@@ -411,10 +449,10 @@
     <aside class="vibe-left" aria-label="Vibe controls">
       <div class="sidebar-inner">
 
-        <!-- Mode toggle -->
-        <div class="mode-row">
-          <button id="mode-quick-btn" class="outline active" style="flex:1;justify-content:center" aria-pressed="true">Quick Sandbox</button>
-          <button id="mode-app-btn" class="outline" style="flex:1;justify-content:center" aria-pressed="false">App Builder</button>
+        <!-- Mode toggle (segmented control) -->
+        <div class="mode-seg" role="group" aria-label="Mode">
+          <button id="mode-quick-btn" class="mode-btn active" aria-pressed="true">Quick Sandbox</button>
+          <button id="mode-app-btn" class="mode-btn" aria-pressed="false">App Builder</button>
         </div>
 
         <!-- Description -->
@@ -455,8 +493,8 @@
 
         <!-- Starter templates -->
         <div class="section-label">Starter templates</div>
-        <div id="templates">
-          <div style="font-size:12px;color:var(--muted)">Loading templates…</div>
+        <div id="templates" class="tpl-chips">
+          <span style="font-size:11px;color:var(--muted)">Loading…</span>
         </div>
 
         <hr />
@@ -480,7 +518,7 @@
 
           <div class="panel-label">Generated sandbox config</div>
 
-          <div id="vibe-out" aria-live="polite" aria-label="Sandbox config output">Describe your app and click Generate.</div>
+          <div id="vibe-out" aria-live="polite" aria-label="Sandbox config output"><p id="vibe-placeholder" style="color:var(--muted);font-size:12px;font-style:italic">Describe your app and click Generate →</p></div>
 
           <div id="vibe-status" style="display:none" role="status"></div>
 
@@ -592,7 +630,8 @@
       document.getElementById('app-builder-opts').style.display = mode === 'app' ? 'flex' : 'none'
       document.getElementById('quick-panel').style.display = mode === 'quick' ? 'flex' : 'none'
       document.getElementById('app-panel').style.display = mode === 'app' ? 'flex' : 'none'
-      document.getElementById('vibe-btn').textContent = mode === 'quick' ? 'Generate Sandbox →' : 'Build App →'
+      const vibeBtn = document.getElementById('vibe-btn')
+      if (!vibeBtn.disabled) vibeBtn.textContent = mode === 'quick' ? 'Generate Sandbox →' : 'Build App →'
     }
 
     function doVibeAction() {
@@ -608,8 +647,7 @@
         el.innerHTML = ''
         for (const t of templates) {
           const btn = document.createElement('button')
-          btn.className = 'outline full'
-          btn.style.cssText = 'text-align:left;font-size:12px;padding:7px 10px'
+          btn.className = 'tpl-chip'
           btn.textContent = t.name
           btn.title = t.description
           btn.onclick = () => {
@@ -620,7 +658,7 @@
         }
       } catch {
         document.getElementById('templates').innerHTML =
-          '<div style="font-size:12px;color:var(--muted)">Could not load templates.</div>'
+          '<span style="font-size:11px;color:var(--muted)">Could not load templates.</span>'
       }
     }
 
@@ -632,6 +670,7 @@
       const btn = document.getElementById('vibe-btn')
       const out = document.getElementById('vibe-out')
       setLoading(btn, 'Generating…')
+      document.getElementById('vibe-placeholder')?.remove()
       out.textContent = 'Asking AI to design your sandbox…'
       setStatus('vibe', null)
       try {
