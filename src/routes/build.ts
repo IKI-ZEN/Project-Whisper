@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
+import { json, ok, err, parseBody, listAllKV } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
 import { newId } from '../lib/utils'
 import { BUILD_KEY_PREFIX, BUILD_TTL } from '../lib/constants'
@@ -29,8 +29,8 @@ function doBuild(stub: DurableObjectStub, path: string, method = 'GET', body?: u
 
 // GET /api/v2/build
 export const listBuildsHandler: Handler = async (_req, env) => {
-  const list = await env.SANDBOX_REGISTRY.list({ prefix: BUILD_KEY_PREFIX })
-  return json(ok({ builds: list.keys.map(k => k.metadata), total: list.keys.length }))
+  const keys = await listAllKV(env.SANDBOX_REGISTRY, BUILD_KEY_PREFIX)
+  return json(ok({ builds: keys.map(k => k.metadata), total: keys.length }))
 }
 
 // POST /api/v2/build
@@ -80,6 +80,7 @@ export const getBuildFileHandler: Handler = async (_req, env, params) => {
   const id       = params.id ?? ''
   const filename = params.filename ?? 'index.html'
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
+  if (filename.startsWith('.')) return json(err('File not found'), 404)
   const res = await doBuild(buildStub(env, id), `/files/${encodeURIComponent(filename)}`)
   if (!res.ok) return json(err('File not found'), 404)
   // Return the raw file response (already has correct Content-Type from the DO)

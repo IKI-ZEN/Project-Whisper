@@ -44,11 +44,17 @@ name = "SEND_EMAIL"
 
 # ── KV Namespaces ─────────────────────────────────────────────────────────────
 # Run: wrangler kv:namespace create SANDBOX_REGISTRY
+# Run: wrangler kv:namespace create RATE_LIMITS
 # Then replace the placeholder ids below
 [[kv_namespaces]]
 binding = "SANDBOX_REGISTRY"
 id = "00000000000000000000000000000001"
 preview_id = "00000000000000000000000000000002"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "00000000000000000000000000000003"
+preview_id = "00000000000000000000000000000004"
 
 # ── D1 Database ───────────────────────────────────────────────────────────────
 # Run: wrangler d1 create aether-lite

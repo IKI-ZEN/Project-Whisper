@@ -91,8 +91,14 @@ export const listImagesHandler: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid app id'), 422)
 
-  const list   = await env.FILES.list({ prefix: `apps/${id}/images/` })
-  const images = list.objects.map(o => ({
+  const prefix = `apps/${id}/images/`
+  let r2 = await env.FILES.list({ prefix })
+  const objects = [...r2.objects]
+  while (r2.truncated) {
+    r2 = await env.FILES.list({ prefix, cursor: r2.cursor })
+    objects.push(...r2.objects)
+  }
+  const images = objects.map(o => ({
     imageId:     o.key.split('/').pop() ?? '',
     name:        o.customMetadata?.name        ?? '',
     size:        Number(o.customMetadata?.size ?? 0),
@@ -152,7 +158,7 @@ export const sendEmailHandler: Handler = async (req, env, params) => {
 
   try {
     await env.SEND_EMAIL.send({
-      from:    'noreply@aether-lite.app',
+      from:    env.EMAIL_FROM_ADDRESS ?? 'noreply@aether-lite.app',
       to,
       subject: subject.slice(0, 256),
       text,

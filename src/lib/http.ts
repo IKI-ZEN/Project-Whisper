@@ -85,7 +85,7 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   }
 }
 
-// Generic sliding-window rate limiter — stored in SANDBOX_REGISTRY KV.
+// Generic sliding-window rate limiter — stored in RATE_LIMITS KV (separate from user data).
 export async function checkRateLimit(
   key: string,
   max: number,
@@ -94,11 +94,11 @@ export async function checkRateLimit(
   message = 'Rate limit exceeded — try again in a minute.',
 ): Promise<Response | null> {
   const now    = Date.now()
-  const stored = await env.SANDBOX_REGISTRY.get(key, 'json') as number[] | null
+  const stored = await env.RATE_LIMITS.get(key, 'json') as number[] | null
   const window = (stored ?? []).filter(t => t > now - windowMs)
   if (window.length >= max) return json(err(message), 429)
   window.push(now)
-  void env.SANDBOX_REGISTRY.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
+  void env.RATE_LIMITS.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
   return null
 }
 
@@ -106,6 +106,17 @@ export async function checkRateLimit(
 export async function checkAiRateLimit(req: Request, env: Env): Promise<Response | null> {
   const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
   return checkRateLimit(`rl:ai:${ip}`, AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_MS, env)
+}
+
+// Exhaust all pages of a KV list() call and return every key.
+export async function listAllKV<T>(ns: KVNamespace, prefix: string): Promise<KVNamespaceListKey<T>[]> {
+  let result = await ns.list<T>({ prefix })
+  const keys = [...result.keys]
+  while (!result.list_complete) {
+    result = await ns.list<T>({ prefix, cursor: result.cursor })
+    keys.push(...result.keys)
+  }
+  return keys
 }
 
 export class Router {

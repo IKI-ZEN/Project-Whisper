@@ -530,6 +530,7 @@ const BUILD_CSP = [
 ].join('; ')
 
 async function serveBuildFile(env: Env, buildId: string, filename: string): Promise<Response> {
+  if (filename.startsWith('.')) return new Response('Not found', { status: 404 })
   const key = `apps/${buildId}/${filename}`
   const obj = await env.FILES.get(key)
   if (!obj) return new Response('Not found', { status: 404 })

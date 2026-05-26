@@ -34,8 +34,11 @@ export interface Env {
   // Durable Object namespace — one instance per app (persistent key-value state)
   APP_STATE: DurableObjectNamespace
 
-  // KV — sandbox registry + session state
+  // KV — sandbox registry + build metadata
   SANDBOX_REGISTRY: KVNamespace
+
+  // KV — rate limit state (separate from user data for independent rotation)
+  RATE_LIMITS: KVNamespace
 
   // D1 — audit logs, usage metrics
   DB: D1Database
@@ -71,4 +74,7 @@ export interface Env {
 
   // Cloudflare API token — required for Pages deployment
   CLOUDFLARE_API_TOKEN?: string
+
+  // Outbound email from address — must match a verified sender in Email Routing
+  EMAIL_FROM_ADDRESS?: string
 }
