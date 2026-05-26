@@ -2,6 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
+import { newId } from '../lib/utils'
 
 // ── DO stub helpers ───────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export const createBuildHandler: Handler = async (req, env) => {
   if (!parsed.ok) return parsed.response
   const { description, name, sandboxId, model } = parsed.data
 
-  const id   = crypto.randomUUID()
+  const id   = newId()
   const stub = buildStub(env, id)
 
   const initRes  = await doBuild(stub, '/init', 'POST', { id, description, name, sandboxId, model })
@@ -76,7 +77,7 @@ export const deleteBuildHandler: Handler = async (_req, env, params) => {
 export const getBuildThumbnailHandler: Handler = async (_req, env, params) => {
   const id  = params.id ?? ''
   const obj = await env.FILES.get(`apps/${id}/.thumbnail.svg`)
-  if (!obj) return new Response('Not found', { status: 404 })
+  if (!obj) return json(err('Thumbnail not found'), 404)
   return new Response(obj.body, {
     headers: {
       'Content-Type':  'image/svg+xml',
@@ -119,7 +120,9 @@ export const deployBuildHandler: Handler = async (_req, env, params) => {
   const form     = new FormData()
   const manifest: Record<string, string> = {}
 
+  const SAFE_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._\-]*$/
   for (const filename of buildFiles) {
+    if (!SAFE_FILENAME.test(filename) || filename.includes('..')) continue
     const obj = await env.FILES.get(`apps/${id}/${filename}`)
     if (!obj) continue
     const bytes    = await obj.arrayBuffer()

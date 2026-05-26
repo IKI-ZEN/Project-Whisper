@@ -452,7 +452,7 @@ export class AppSession {
   onFileStart(fn: (info: { filename: string; index: number; total: number }) => void): this
   onFileChunk(fn: (info: { filename: string; text: string }) => void): this
   onFileComplete(fn: (info: { filename: string; bytes: number }) => void): this
-  onComplete(fn: (result: { buildId: string; appUrl: string; files: string[] }) => void): this
+  onComplete(fn: (result: { buildId: string; appUrl: string; files: string[]; thumbnailUrl: string | undefined }) => void): this
   onError(fn: (err: VibeError) => void): this
 
   /** Start the build — creates the build record then opens WebSocket. Returns this for chaining. */

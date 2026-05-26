@@ -29,11 +29,13 @@ Request → src/index.ts (Worker entry)
                  ├→ /api/sandbox/*        src/routes/sandbox.ts
                  ├→ /api/vibes/*          src/routes/vibes.ts
                  ├→ /api/v2/build/*       src/routes/build.ts
+                 ├→ /api/app/*            src/routes/appstate.ts
                  ├→ /app/:id, /apps       src/routes/pages.ts
                  ├→ /build/:id            src/routes/pages.ts (R2-served generated apps)
                  ├→ /s/:id/*              index.ts (short public API)
                  ├→ SandboxDO             src/durable/SandboxDO.ts
-                 └→ AppBuilderDO          src/durable/AppBuilderDO.ts
+                 ├→ AppBuilderDO          src/durable/AppBuilderDO.ts
+                 └→ AppStateDO            src/durable/AppStateDO.ts
 ```
 
 **AI routes** (`/api/ai/*`): `src/routes/ai.ts` (core) + `src/routes/whisperer.ts` (analysis suite)
@@ -59,7 +61,32 @@ Request → src/index.ts (Worker entry)
 
 **Document routes** (`/api/sandbox/:id/documents`): upload (POST multipart), list (GET), delete (DELETE). See [Documents / RAG](#documents--rag) section.
 
-**Build routes** (`/api/v2/build/*`): create (POST), status (GET), file list (GET), file content (GET), delete (DELETE). WebSocket at `/api/v2/build/:id/ws` — bypasses router, dispatched directly to `AppBuilderDO`.
+**Build routes** (`/api/v2/build/*`): create (POST), status (GET), file list (GET), file content (GET), delete (DELETE), thumbnail (GET), deploy (POST). WebSocket at `/api/v2/build/:id/ws` — bypasses router, dispatched directly to `AppBuilderDO`.
+
+| Route | Handler | Purpose |
+|-------|---------|---------|
+| `POST /api/v2/build` | build.ts | Create build, init DO, return wsUrl |
+| `GET /api/v2/build/:id` | build.ts | Build status + file list |
+| `GET /api/v2/build/:id/files` | build.ts | List generated filenames |
+| `GET /api/v2/build/:id/files/:filename` | build.ts | Serve a generated file from R2 |
+| `DELETE /api/v2/build/:id` | build.ts | Delete build + R2 files |
+| `GET /api/v2/build/:id/thumbnail` | build.ts | SVG metadata thumbnail (E3) |
+| `POST /api/v2/build/:id/deploy` | build.ts | Deploy to Cloudflare Pages (E6) |
+
+**App routes** (`/api/app/*`): per-app state KV, R2 image storage, and email sending for generated apps.
+
+| Route | Handler | Purpose |
+|-------|---------|---------|
+| `GET /api/app/:id/state` | appstate.ts | List all KV entries (AppStateDO) |
+| `GET /api/app/:id/state/:key` | appstate.ts | Get a KV entry |
+| `PUT /api/app/:id/state/:key` | appstate.ts | Set a KV entry (protected) |
+| `DELETE /api/app/:id/state/:key` | appstate.ts | Delete a KV entry (protected) |
+| `DELETE /api/app/:id/state` | appstate.ts | Clear all KV entries (protected) |
+| `POST /api/app/:id/images` | appstate.ts | Upload image to R2 (5 MB max, png/jpeg/gif/webp) |
+| `GET /api/app/:id/images` | appstate.ts | List image metadata |
+| `GET /api/app/:id/images/:imageId` | appstate.ts | Serve image (cached) |
+| `DELETE /api/app/:id/images/:imageId` | appstate.ts | Delete image from R2 (protected) |
+| `POST /api/app/:id/email` | appstate.ts | Send email via SEND_EMAIL binding (5/min per app) |
 
 **Inbound guard pipeline** (runs before every AI call in SandboxDO):
 ```
@@ -78,12 +105,19 @@ message/systemPrompt
 
 1. **Blueprint phase** — single streaming AI call producing JSON `{name, techStack, cdnDependencies, files[]}`. Falls back to a minimal `index.html` vanilla app on parse failure.
 2. **File generation phase** — streaming AI call per file, chunks relayed over WS as `file_chunk` events, written to R2 at `apps/{buildId}/{filename}`.
-3. **Complete** — state set to `'complete'`, `build_complete` event sent, WS closed.
+3. **Thumbnail** — after all files are written, an SVG metadata thumbnail is generated and stored at `apps/{buildId}/.thumbnail.svg` (E3).
+4. **Complete** — state set to `'complete'`, `build_complete` event (includes `thumbnailUrl`) sent, WS closed.
 
 R2 key format: `apps/{buildId}/{filename}`  
 Served at: `GET /build/:id` (→ `index.html`) and `GET /build/:id/:filename`
 
 DO storage key: `'state'` (stores `BuildState`). Always addressed by `idFromName(buildId)`.
+
+**`__BUILD_ID__` injection** — `serveBuildFile()` in `pages.ts` replaces the literal `__BUILD_ID__` in served `.html` files with the actual build ID at request time. Generated apps use this to call the state/image/email APIs at the correct path.
+
+**Tech stack options**: `vanilla`, `alpine`, `react`, `vue`, `svelte`, `worker`. The `worker` stack signals the blueprint to include a `worker.js` companion file (Cloudflare Worker format: `export default { async fetch(req, env) {...} }`) for server-side logic.
+
+**Date/time guidance**: Generated apps use `Intl.DateTimeFormat` and `Intl.RelativeTimeFormat` — no CDN date libraries (`date-fns`, `dayjs`, `moment`) are ever imported.
 
 Build constants in `src/lib/constants.ts`:
 ```
@@ -93,6 +127,23 @@ MAX_FILE_BYTES            = 102_400  (100 KB per file)
 ```
 
 CSP for served built apps (`BUILD_CSP` in `pages.ts`): permissive — allows `unsafe-inline`, `unsafe-eval`, and CDN origins (`esm.sh`, `unpkg.com`, `cdn.jsdelivr.net`) because AI-generated apps use CDN ESM and inline scripts.
+
+### AppStateDO (`src/durable/AppStateDO.ts`)
+
+Lightweight Durable Object exposing a string key-value store for generated apps. Always addressed by `idFromName(buildId)`.
+
+Routes handled inside the DO (called via `doFetch`):
+```
+GET    /kv           → list all { key, value } pairs
+GET    /kv/:key      → get one value (404 if missing)
+PUT    /kv/:key      → store { value: string } (validates key length + chars, value ≤ 16 KB)
+DELETE /kv/:key      → delete a key
+DELETE /            → deleteAll()
+```
+
+Key constraints: `^[a-zA-Z0-9._\-/]+$`, max 512 chars. Value max 16 384 chars.
+
+Route handlers in `appstate.ts` validate `id` is a UUID before calling the DO stub.
 
 ### Documents / RAG
 
@@ -116,6 +167,10 @@ Upload pipeline:
 Supported MIME types: `text/plain`, `text/markdown`, `text/csv`, `text/html`, `application/json`, `application/pdf`, `application/x-markdown`
 
 When `ragEnabled: true` on a sandbox, relevant document chunks are injected into the system prompt at inference time.
+
+**CSV chunking (Z7)** — CSV files are parsed with a zero-dep RFC 4180 parser (`parseCsvRow()`) and chunked in groups of 15 rows in structured `Row N: col=val, ...` format rather than raw text. This preserves column context for RAG queries.
+
+**PDF extraction (Z9)** — `extractPdfText()` uses `DecompressionStream('deflate-raw')` to inflate FlateDecode streams, then extracts text between `BT`/`ET` markers from `Tj`/`TJ` operators. Falls back to naive ASCII filter if no compressed streams are found. Inflated streams exceeding 50 MB are skipped to prevent zip-bomb OOM.
 
 ### Session-based memory
 
@@ -148,7 +203,7 @@ Client → Server:  AiClient.encodeToolResult(toolUseId, toolName, content)
 
 ### Durable Object pattern
 
-Each sandbox is a `SandboxDO` instance. The DO is always addressed by logical name (the UUID sandbox ID), never by generated DO ID:
+Each DO is always addressed by logical name (UUID or build ID), never by generated DO ID:
 
 ```typescript
 // Correct — always use idFromName
@@ -157,11 +212,25 @@ env.SANDBOX.get(env.SANDBOX.idFromName(sandboxId))
 // Shorthand exported from sandbox.ts
 stub(env, sandboxId)
 
-// Preferred way to call a DO endpoint
+// Preferred way to call a DO endpoint (uses https://do/ — note protocol)
 doFetch(stub(env, id), 'run', 'POST', { message })
+
+// AppStateDO stub (appstate.ts)
+env.APP_STATE.get(env.APP_STATE.idFromName(buildId))
+
+// AppBuilderDO stub (build.ts)
+env.APP_BUILDER.get(env.APP_BUILDER.idFromName(buildId))
 ```
 
-The DO stores a single `SandboxConfig` object (including the full `memory` array) under the key `DO_STORAGE_KEY = 'config'`. Memory is capped at `MAX_MESSAGES = 100` entries. Rate limit state is stored separately under `RL_STORAGE_KEY = 'rlState'` so it survives DO hibernation.
+DO overview:
+
+| DO class | Binding | Addressed by | Stores |
+|----------|---------|--------------|--------|
+| `SandboxDO` | `SANDBOX` | sandbox UUID | `SandboxConfig` + sessions + RL state |
+| `AppBuilderDO` | `APP_BUILDER` | build UUID | `BuildState` + generated file chunks |
+| `AppStateDO` | `APP_STATE` | build UUID | string KV pairs (`kv/*` paths) |
+
+`SandboxDO` stores a single `SandboxConfig` object (including the full `memory` array) under `DO_STORAGE_KEY = 'config'`. Memory is capped at `MAX_MESSAGES = 100` entries. Rate limit state is stored separately under `RL_STORAGE_KEY = 'rlState'` so it survives DO hibernation.
 
 ### AI routing
 
@@ -192,7 +261,8 @@ await env.SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${id}`, id, {
 ### HTTP helpers (`src/lib/http.ts`)
 
 - `parseBody<T>(req, parser)` — reads JSON, runs parser, returns `{ ok: true; data }` or `{ ok: false; response }`. Use this instead of the 3-try-block pattern in all JSON-body handlers.
-- `Router` — zero-dep `URLPattern` router. Automatically handles CORS preflight and adds origin-aware CORS headers to all responses (`corsHeaders(req, env)` reads `ALLOWED_ORIGINS`).
+- `checkRateLimit(key, max, windowMs, env, message?)` — generic KV-backed sliding-window rate limiter. Used by `checkAiRateLimit` and the email rate limiter in `appstate.ts`.
+- `Router` — zero-dep `URLPattern` router. Supports `get/post/put/delete/patch` shortcut methods. Automatically handles CORS preflight (`Access-Control-Allow-Methods` includes `PUT`) and adds origin-aware CORS headers to all responses (`corsHeaders(req, env)` reads `ALLOWED_ORIGINS`).
 - `sseResponse(stream)` — wraps a `ReadableStream` in a proper `text/event-stream` response.
 
 ### Schema & validation (`src/lib/schema.ts`)
@@ -207,7 +277,7 @@ RATE_LIMIT_WINDOW_MS = 60_000    RATE_LIMIT_MAX_REQUESTS = 20
 MAX_BUILD_DESCRIPTION_LEN = 2000  MAX_BUILD_FILES = 6  MAX_FILE_BYTES = 102_400
 ```
 
-Key parsers: `parseCompleteRequest`, `parseCreateSandboxRequest`, `parseBuildRequest`, `parseVibeRequest`, `parseSensitivityRequest`, `parseClusterRequest`, `parseCotRequest`, `parseEntropyRequest`, `parseArchaeologyRequest`, `parsePipelineRequest`, `parseThinkRequest`.
+Key parsers: `parseCompleteRequest`, `parseCreateSandboxRequest`, `parseBuildRequest`, `parseVibeRequest`, `parseSensitivityRequest`, `parseClusterRequest`, `parseCotRequest`, `parseEntropyRequest`, `parseArchaeologyRequest`, `parsePipelineRequest`, `parseThinkRequest`, `parseAppStateValueRequest`, `parseEmailRequest`.
 
 ### Security subsystem
 
@@ -237,16 +307,17 @@ When `SIGNING_SECRET` is set: `exportConfig` appends a `signature` field (hex HM
 
 **Rate limiting**
 
-Two layers:
+Three layers:
 - *Per-sandbox* (`src/durable/SandboxDO.ts`): persistent sliding-window limiter under `RL_STORAGE_KEY` — 20 run/stream calls per 60 s. Returns 429 in `handleRun` and `handleStream`.
 - *Per-IP on /api/ai/\** (`src/lib/http.ts`, `checkAiRateLimit()`): KV-backed sliding window, 30 calls/60 s, keyed by `CF-Connecting-IP` stored under `rl:ai:{ip}` in `SANDBOX_REGISTRY`. Checked in `Router.handle()` before dispatch.
+- *Per-app email* (`src/routes/appstate.ts`): 5 emails/60 s per build ID, keyed `rl:email:{buildId}`. Uses shared `checkRateLimit()` from `http.ts`.
 
 **Cloudflare Access (`src/lib/access.ts`)**
 
 Zero Trust identity-aware proxy integration. When `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` are set, all state-mutation endpoints require a valid Cloudflare Access JWT:
 
-- Protected: `POST /api/sandbox`, `POST /api/sandbox/import`, `PATCH /api/sandbox/:id`, `DELETE /api/sandbox/:id`, `POST /api/sandbox/:id/documents`, `DELETE /api/sandbox/:id/documents/:docId`, `POST /api/vibes`, `POST /api/v2/build`, `DELETE /api/v2/build/:id`
-- Public (no auth): all `GET` routes, `POST /api/sandbox/:id/run`, `POST /api/sandbox/:id/stream`, all `/api/ai/*` routes, all page routes, `/s/:id/run`, `/s/:id/stream`
+- Protected: `POST /api/sandbox`, `POST /api/sandbox/import`, `PATCH /api/sandbox/:id`, `DELETE /api/sandbox/:id`, `POST /api/sandbox/:id/documents`, `DELETE /api/sandbox/:id/documents/:docId`, `POST /api/vibes`, `POST /api/v2/build`, `DELETE /api/v2/build/:id`, `PUT /api/app/:id/state/:key`, `DELETE /api/app/:id/state*`, `DELETE /api/app/:id/images/:imageId`, `POST /api/v2/build/:id/deploy`
+- Public (no auth): all `GET` routes, `POST /api/sandbox/:id/run`, `POST /api/sandbox/:id/stream`, all `/api/ai/*` routes, all page routes, `/s/:id/run`, `/s/:id/stream`, `POST /api/app/:id/images`, `POST /api/app/:id/email`
 
 Token resolution order: `Cf-Access-Jwt-Assertion` header (set automatically by Access proxy) → `Authorization: Bearer <token>` header (for programmatic clients).
 
@@ -269,8 +340,10 @@ Every response from the Router carries an `X-Request-ID: <uuid>` header generate
 Served as static assets via `[assets]` in `wrangler.toml`.
 
 - `playground.html` — four-tab SPA (Vibe Builder / Sandbox Chat / AI Workbench / Whisperer). Uses `vibe-sdk.js` as an ES module. Vibe Builder tab has Quick Sandbox and App Builder modes.
-- `vibe-sdk.js` — zero-dep browser SDK. Primary export: `AetherLiteClient` (with backwards-compat alias `VibeClient`). Classes: `AetherLiteClient`, `AiClient`, `SandboxClient`, `SandboxHandle`, `VibesClient`, `VibeBuilderResult` (alias: `VibeResult`), `AppBuilder`, `AppSession`, `AppHandle`. Registers `<aether-lite-chat>`, `<aether-chat>`, and `<vibe-chat>` Shadow DOM web components (latter two are backwards-compat aliases).
+- `vibe-sdk.js` — zero-dep browser SDK. Primary export: `AetherLiteClient` (with backwards-compat alias `VibeClient`). Classes: `AetherLiteClient`, `AiClient`, `SandboxClient`, `SandboxHandle`, `VibesClient`, `VibeBuilderResult` (alias: `VibeResult`), `AppBuilder`, `AppSession`, `AppHandle`, `AppStateHandle`. Registers `<aether-lite-chat>`, `<aether-chat>`, and `<vibe-chat>` Shadow DOM web components (latter two are backwards-compat aliases). The chat web component renders AI responses as Markdown (`_renderMd()` — zero-dep inline renderer).
 - `vibe-sdk.d.ts` — TypeScript declarations for the SDK.
+- `chart.js` (ES module) — zero-dep SVG chart generator: `chart(data, { type, width, height, label })`. Supports `'bar'`, `'line'`, `'pie'`. Data format: `Array<{label: string, value: number}>`. Returns SVG string for `innerHTML`.
+- `markdown.ts` → `src/lib/markdown.ts` — zero-dep markdown → safe HTML renderer (`renderMarkdown(text)`). Escape-first approach; safe for `innerHTML`. Handles h1–h3, bold/italic, inline + fenced code, unordered/ordered lists, blockquotes, `https?://` links.
 
 SDK rename summary:
 | Old name | New name | Note |
@@ -280,7 +353,8 @@ SDK rename summary:
 | `<vibe-chat>` | `<aether-lite-chat>` | All three elements registered; `VibeChatElement` is base class; `<aether-chat>` kept as alias |
 | (new) | `AppBuilder` | Multi-file app generation client |
 | (new) | `AppSession` | WS-driven build session with fluent event handlers |
-| (new) | `AppHandle` | Handle to a completed build (file access, delete) |
+| (new) | `AppHandle` | Handle to a completed build (file access, state, deploy, delete) |
+| (new) | `AppStateHandle` | Per-app persistent KV store (get/set/list/delete/clear) |
 
 ### D1 database
 
@@ -299,13 +373,19 @@ wrangler r2 bucket create aether-lite-files
 wrangler queues create aether-lite-jobs
 wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
 wrangler d1 execute aether-lite --file=./migrations/0001_init.sql
+wrangler d1 execute aether-lite --file=./migrations/0002_request_id.sql
 # Update wrangler.toml with the returned IDs
+
+# APP_STATE (AppStateDO) needs no extra setup — the v3 migration runs automatically on first deploy.
+
+# SEND_EMAIL (Cloudflare Email Routing) — configure at dash.cloudflare.com → Email → Email Routing
+# then add the [[send_email]] binding in wrangler.toml with your verified from-address.
 ```
 
 ## Environment variables (`.dev.vars` for local dev)
 
 ```
-CLOUDFLARE_ACCOUNT_ID=...   # required for AI Gateway models
+CLOUDFLARE_ACCOUNT_ID=...   # required for AI Gateway models + Pages deploy
 AI_GATEWAY_ID=...           # required for AI Gateway models
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
@@ -321,6 +401,15 @@ CF_ACCESS_AUD=...           # Access application Audience tag (from dash.cloudfl
 CF_ACCESS_TEAM_DOMAIN=...   # e.g. yourteam.cloudflareaccess.com
                             # When set: all mutation endpoints require a valid Access JWT.
                             # Read-only and run/stream endpoints remain public.
+
+# Cloudflare Pages deploy (E6) — optional
+CLOUDFLARE_API_TOKEN=...    # Bearer token with Pages:Edit permission
+                            # generate at dash.cloudflare.com → My Profile → API Tokens
+                            # Required for POST /api/v2/build/:id/deploy
+
+# Email (E5) — configured via wrangler.toml [[send_email]] binding, not .dev.vars
+# SEND_EMAIL binding is auto-available when [[send_email]] is set in wrangler.toml
+# Requires Cloudflare Email Routing to be enabled on your domain
 ```
 
 See `.dev.vars.example` for the full annotated list.
