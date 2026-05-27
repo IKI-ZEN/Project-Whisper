@@ -394,8 +394,8 @@ function htmlHeaders(nonce: string, allowFrame = false): Record<string, string> 
     'Referrer-Policy':         'strict-origin',
     // app pages are designed to be embedded; all others deny framing
     ...(allowFrame ? {} : { 'X-Frame-Options': 'SAMEORIGIN' }),
-    'Content-Security-Policy': `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:`,
-    'Content-Security-Policy-Report-Only': `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; report-uri /api/csp-report`,
+    'Content-Security-Policy': `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors ${allowFrame ? "'self' *" : "'self'"}`,
+    'Content-Security-Policy-Report-Only': `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors ${allowFrame ? "'self' *" : "'self'"}; report-uri /api/csp-report`,
   }
 }
 

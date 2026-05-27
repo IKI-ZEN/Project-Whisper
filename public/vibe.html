@@ -896,7 +896,7 @@
         if (r.status === 503 || (d.error && d.error.includes('token'))) {
           statusEl.style.background = '#f59e0b22'
           statusEl.style.color = '#f59e0b'
-          statusEl.textContent = 'Set CLOUDFLARE_API_TOKEN in .dev.vars to enable Pages deployment.'
+          statusEl.textContent = 'Pages deployment is not configured on this server.'
         } else if (d.ok && d.url) {
           statusEl.style.background = '#34d39922'
           statusEl.style.color = '#34d399'

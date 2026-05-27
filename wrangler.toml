@@ -94,7 +94,8 @@ binding = "ANALYTICS"
 dataset = "aether_lite_events"
 
 # ── Environment Variables ─────────────────────────────────────────────────────
+# ENVIRONMENT defaults to "production" when deployed; .dev.vars overrides it to "development" locally.
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 # AI_GATEWAY_ID is optional: set it to route flagship models through Cloudflare AI Gateway
 # AI_GATEWAY_ID = "your-gateway-id"
