@@ -21,7 +21,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
       const response = await complete(env.AI, env, p.data)
       return json(ok({ response }))
     } catch (e) {
-      return json(err('AI completion failed', String(e)), 500)
+      return json(err('AI completion failed'), 500)
     }
   }],
 
@@ -40,7 +40,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
       const embeddings = await embed(env.AI, p.data.text, p.data.model)
       return json(ok({ embeddings, count: embeddings.length }))
     } catch (e) {
-      return json(err('Embedding failed', String(e)), 500)
+      return json(err('Embedding failed'), 500)
     }
   }],
 
@@ -52,7 +52,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
       const bytes = await generateImage(env.AI, p.data.prompt, p.data.model, p.data.steps)
       return json(ok({ image: toBase64(bytes), format: 'png' }))
     } catch (e) {
-      return json(err('Image generation failed', String(e)), 500)
+      return json(err('Image generation failed'), 500)
     }
   }],
 
@@ -88,7 +88,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
       const text = await transcribe(env.AI, buffer, typeof model === 'string' ? model : undefined)
       return json(ok({ text }))
     } catch (e) {
-      return json(err('Transcription failed', String(e)), 500)
+      return json(err('Transcription failed'), 500)
     }
   }],
 

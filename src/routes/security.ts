@@ -5,6 +5,8 @@ import type { Handler } from '../lib/http'
 // Browsers send Content-Type: application/csp-report with a JSON body.
 const cspReport: Handler = async (req, env) => {
   try {
+    const cl = parseInt(req.headers.get('Content-Length') ?? '0', 10)
+    if (cl > 65536) return new Response(null, { status: 204 })
     const body = await req.text()
     const now  = Date.now()
     await env.DB.prepare(

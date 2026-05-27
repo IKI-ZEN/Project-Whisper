@@ -1,6 +1,6 @@
 import type { Env, AetherLiteJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err } from '../lib/http'
+import { json, ok, err, checkRateLimit } from '../lib/http'
 import { scan } from '../lib/guard'
 import { newId, now } from '../lib/utils'
 import { MAX_DOCUMENT_BYTES } from '../lib/constants'
@@ -145,6 +145,8 @@ const del: Handler = async (_req, env, params: Params) => {
 const reindex: Handler = async (req, env, params: Params) => {
   const sandboxId = params.id ?? ''
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
+  const rlRes = await checkRateLimit(`rl:reindex:${sandboxId}`, 5, 60_000, env, 'Reindex rate limit exceeded — try again in a minute.')
+  if (rlRes) return rlRes
 
   let docIds: string[] | undefined
   try {

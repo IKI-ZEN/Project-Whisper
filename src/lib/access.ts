@@ -136,5 +136,6 @@ export function isProtectedRequest(method: string, pathname: string): boolean {
   if (pathname.startsWith('/s/'))              return false   // short public API
   if (pathname === '/api/csp-report')          return false   // reporting sink
   if (/^\/api\/sandbox\/[^/]+\/(run|stream)$/.test(pathname)) return false  // core run API
+  if (/^\/api\/app\/[^/]+\/(images|email)$/.test(pathname))   return false  // generated-app public endpoints
   return pathname.startsWith('/api/')
 }

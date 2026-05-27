@@ -211,6 +211,9 @@ export const streamHandler: Handler = async (req, env, params: Params) => {
   const p = await parseBody(req, parseRunSandboxRequest)
   if (!p.ok) return p.response
 
+  const tokenDeny = await validateSessionToken(id, p.data.sessionId, req, env)
+  if (tokenDeny) return tokenDeny
+
   const doRes = await doFetch(stub(env, id), 'stream', 'POST', { message: p.data.message, sessionId: p.data.sessionId })
   return sseResponse(doRes.body as ReadableStream)
 }
@@ -263,20 +266,20 @@ const importConfig: Handler = async (req, env) => {
   // field-reordering attacks that produce a valid signature on different content.
   if (env.SIGNING_SECRET && typeof raw === 'object' && raw !== null) {
     const r = raw as Record<string, unknown>
-    if (typeof r.signature === 'string') {
-      const canonPayload = JSON.stringify({
-        version:      r.version,
-        name:         r.name,
-        description:  r.description,
-        systemPrompt: r.systemPrompt,
-        tools:        r.tools,
-        model:        r.model,
-        temperature:  r.temperature,
-        maxTokens:    r.maxTokens,
-      })
-      const valid = await verifySignature(canonPayload, r.signature, env.SIGNING_SECRET)
-      if (!valid) return json(err('Import rejected: invalid export signature'), 422)
-    }
+    // Require signature when SIGNING_SECRET is configured — unsigned imports are rejected
+    if (typeof r.signature !== 'string') return json(err('Import rejected: signature required'), 422)
+    const canonPayload = JSON.stringify({
+      version:      r.version,
+      name:         r.name,
+      description:  r.description,
+      systemPrompt: r.systemPrompt,
+      tools:        r.tools,
+      model:        r.model,
+      temperature:  r.temperature,
+      maxTokens:    r.maxTokens,
+    })
+    const valid = await verifySignature(canonPayload, r.signature, env.SIGNING_SECRET)
+    if (!valid) return json(err('Import rejected: invalid export signature'), 422)
   }
 
   const p = await parseBody(new Request(req.url, { method: 'POST', body: JSON.stringify(raw), headers: { 'Content-Type': 'application/json' } }), parseCreateSandboxRequest)
