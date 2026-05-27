@@ -93,6 +93,11 @@ index_name = "aether-lite-vectors"
 binding = "ANALYTICS"
 dataset = "aether_lite_events"
 
+# ── Cron Triggers ─────────────────────────────────────────────────────────────
+# Runs the scheduled probe handler: hourly, daily, and weekly probes
+[triggers]
+crons = ["0 * * * *", "0 9 * * *", "0 9 * * 1"]
+
 # ── Environment Variables ─────────────────────────────────────────────────────
 # ENVIRONMENT defaults to "production" when deployed; .dev.vars overrides it to "development" locally.
 [vars]

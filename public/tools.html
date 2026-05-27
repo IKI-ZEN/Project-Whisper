@@ -75,6 +75,19 @@ hr{border:none;border-top:1px solid var(--border)}
 .hist-summary{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .chain-link{font-size:11px;color:var(--muted);cursor:pointer;background:none;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;transition:all .15s;font-family:inherit}
 .chain-link:hover{border-color:var(--accent2);color:var(--accent2)}
+/* New Directions panels */
+.live-dot{display:inline-block;width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse 1.5s ease-in-out infinite;margin-right:6px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.assert-case{border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px}
+.assert-case.passed{border-color:#052e1a}
+.assert-case.failed{border-color:#2e0505}
+.assert-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;margin-right:4px;font-family:var(--mono)}
+.assert-tag.pass{background:#052e1a;color:var(--green)}
+.assert-tag.fail{background:#2e0505;color:var(--red)}
+.probe-chart{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-top:8px}
+#atlas-map{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:320px}
+#atlas-map svg circle{cursor:pointer;transition:r .15s,opacity .15s}
+#atlas-map svg circle:hover{opacity:1!important}
 </style>
 </head>
 <body>
@@ -104,6 +117,13 @@ hr{border:none;border-top:1px solid var(--border)}
     <button class="tool-nav-btn" data-tool="archaeology" onclick="switchTool('archaeology',this)">Archaeology</button>
     <button class="tool-nav-btn" data-tool="pipeline" onclick="switchTool('pipeline',this)">Pipeline</button>
     <button class="tool-nav-btn" data-tool="think" onclick="switchTool('think',this)">Think</button>
+    <span class="sidebar-section">New Directions</span>
+    <button class="tool-nav-btn" data-tool="monitor" onclick="switchTool('monitor',this)">Monitor</button>
+    <button class="tool-nav-btn" data-tool="vault" onclick="switchTool('vault',this)">Evidence Vault</button>
+    <button class="tool-nav-btn" data-tool="replay" onclick="switchTool('replay',this)">Replay</button>
+    <button class="tool-nav-btn" data-tool="assertions" onclick="switchTool('assertions',this)">Assertions</button>
+    <button class="tool-nav-btn" data-tool="atlas" onclick="switchTool('atlas',this)">Semantic Map</button>
+    <button class="tool-nav-btn" data-tool="probes" onclick="switchTool('probes',this)">Cron Probes</button>
   </nav>
   <datalist id="whisperer-models-list">
     <option value="@cf/meta/llama-3.1-8b-instruct">Llama 3.1 8B</option>
@@ -378,6 +398,178 @@ hr{border:none;border-top:1px solid var(--border)}
       <div class="hist-panel" id="hist-panel-think"></div>
     </div>
 
+    <!-- Threat Monitor -->
+    <div id="pane-monitor" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Threat Monitor <span id="mon-status" style="font-size:11px;color:var(--muted)">idle</span></h2>
+      <div class="row">
+        <div class="field"><label>Sandbox ID (optional filter)</label><input id="mon-sandbox" placeholder="All sandboxes"/></div>
+        <div class="field"><label>Since (minutes ago)</label><input type="number" id="mon-since" value="60" min="1" max="10080" style="width:80px"/></div>
+      </div>
+      <div class="row">
+        <button id="btn-mon-stream" onclick="runMonitorStream()"><span class="live-dot"></span>Start Live Feed</button>
+        <button id="btn-mon-stop" class="outline" onclick="stopMonitorStream()" disabled>Stop</button>
+        <button class="outline" onclick="loadMonitorPatterns()">Pattern Frequency</button>
+      </div>
+      <div id="mon-feed" class="output" style="min-height:200px;max-height:300px"><span class="out-placeholder">Start live feed to see guard events…</span></div>
+      <div id="mon-patterns"></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Audit Log</h3>
+      <div class="row">
+        <div class="field"><label>Event Type</label>
+          <select id="mon-type"><option value="">All</option><option value="guard_flag">guard_flag</option><option value="response_flag">response_flag</option><option value="csp_violation">csp_violation</option><option value="job_failed">job_failed</option></select>
+        </div>
+        <div class="field"><label>Sandbox ID</label><input id="mon-audit-sandbox" placeholder="optional"/></div>
+        <div class="field"><label>Limit</label><input type="number" id="mon-limit" value="50" min="1" max="200" style="width:72px"/></div>
+        <button onclick="loadAuditLog()" style="flex:0 0 auto">Load</button>
+      </div>
+      <div id="mon-audit" class="output" style="min-height:120px"></div>
+    </div>
+
+    <!-- Evidence Vault -->
+    <div id="pane-vault" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Evidence Vault</h2>
+      <p style="font-size:12px;color:var(--muted)">Save prompt/response pairs from any tool and export as JSONL for fine-tuning.</p>
+      <div class="row">
+        <div class="field"><label>Filter by tag</label><input id="vault-tag-filter" placeholder="tag name…"/></div>
+        <div class="field"><label>Filter by tool</label>
+          <select id="vault-tool-filter"><option value="">All tools</option><option value="compare">Compare</option><option value="sweep">Sweep</option><option value="sensitivity">Sensitivity</option><option value="entropy">Entropy</option><option value="cot">CoT</option><option value="archaeology">Archaeology</option><option value="think">Think</option></select>
+        </div>
+        <div class="field"><label>Search</label><input id="vault-q" placeholder="search prompts…"/></div>
+        <button onclick="loadVault()" style="flex:0 0 auto">Load</button>
+      </div>
+      <div class="row">
+        <button class="outline" onclick="exportVaultJSONL()">Export JSONL</button>
+        <span id="vault-count" style="font-size:11px;color:var(--muted);align-self:center"></span>
+      </div>
+      <div id="vault-list" class="output" style="min-height:200px"><span class="out-placeholder">Load vault to see saved records…</span></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Save a Record</h3>
+      <div class="field"><label>Prompt</label><textarea id="vault-save-prompt" rows="3" placeholder="Prompt text…"></textarea></div>
+      <div class="field"><label>Response</label><textarea id="vault-save-response" rows="3" placeholder="Model response…"></textarea></div>
+      <div class="row">
+        <div class="field"><label>Model</label><input id="vault-save-model" list="whisperer-models-list" placeholder="optional"/></div>
+        <div class="field"><label>Tool</label><input id="vault-save-tool" placeholder="e.g. entropy"/></div>
+        <div class="field"><label>Tags (comma-sep)</label><input id="vault-save-tags" placeholder="tag1,tag2"/></div>
+      </div>
+      <button onclick="saveToVault()">Save to Vault</button>
+      <div id="vault-save-status" style="font-size:11px;margin-top:8px"></div>
+    </div>
+
+    <!-- Replay Engine -->
+    <div id="pane-replay" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Replay Engine</h2>
+      <p style="font-size:12px;color:var(--muted)">Replay a conversation against a different model or system prompt. Measures per-turn similarity to identify model-induced vs prompt-induced behaviour.</p>
+      <div class="field"><label>Session Messages (JSON array of {role, content})</label><textarea id="rpl-messages" rows="8" class="mono" placeholder='[{"role":"user","content":"Hello"},{"role":"assistant","content":"Hi there!"},{"role":"user","content":"What is 2+2?"}]'></textarea></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Target Config</h3>
+      <div class="row">
+        <div class="field"><label>Model</label><input id="rpl-model" list="whisperer-models-list" placeholder="target model…"/></div>
+        <div class="field"><label>Temperature</label><input type="number" id="rpl-temp" value="0.7" min="0" max="2" step="0.1" style="width:70px"/></div>
+        <div class="field"><label>Max Tokens</label><input type="number" id="rpl-tokens" value="512" min="1" max="8192" style="width:80px"/></div>
+      </div>
+      <div class="field"><label>System Prompt (optional)</label><input id="rpl-sys" placeholder="Override system prompt…"/></div>
+      <button id="btn-replay" onclick="runReplay()">Replay Session</button>
+      <div id="rpl-results" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Model Assertions -->
+    <div id="pane-assertions" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Model Assertions</h2>
+      <p style="font-size:12px;color:var(--muted)">Define assertion suites to contract-test model behavior. Supports: contains, not-contains, matches, similarity-gte, judge, latency-lte, guard-clean.</p>
+      <div class="row">
+        <button onclick="loadAssertionSuites()" class="outline">Load Suites</button>
+        <button onclick="showAssertionCreator()" style="flex:0 0 auto">+ New Suite</button>
+      </div>
+      <div id="assertion-suites-list" style="margin-top:8px"></div>
+      <hr/>
+      <div id="assertion-creator" style="display:none">
+        <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">New Suite</h3>
+        <div class="field"><label>Name</label><input id="ast-name" placeholder="My assertion suite"/></div>
+        <div class="field"><label>Description</label><input id="ast-desc" placeholder="What does this suite test?"/></div>
+        <div class="field"><label>Test Cases (JSON)</label>
+          <textarea id="ast-cases" rows="12" class="mono" placeholder='[
+  {
+    "prompt": "What is the capital of France?",
+    "model": "@cf/meta/llama-3.1-8b-instruct",
+    "assertions": [
+      { "type": "contains", "value": "Paris" },
+      { "type": "latency-lte", "maxMs": 5000 },
+      { "type": "guard-clean" }
+    ]
+  }
+]'></textarea>
+        </div>
+        <div class="row">
+          <button onclick="createAssertionSuite()">Create Suite</button>
+          <button class="outline" onclick="document.getElementById('assertion-creator').style.display='none'">Cancel</button>
+        </div>
+        <div id="ast-create-status" style="font-size:11px;margin-top:8px"></div>
+      </div>
+      <div id="ast-run-results" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Semantic Map (Atlas) -->
+    <div id="pane-atlas" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Semantic Map</h2>
+      <p style="font-size:12px;color:var(--muted)">Build a prompt library and visualize it in 2D embedding space. Reveals which formulations are semantically equivalent.</p>
+      <div class="row">
+        <div class="field"><label>Prompt text</label><input id="atl-text" placeholder="Add a prompt to the library…"/></div>
+        <div class="field"><label>Label (optional)</label><input id="atl-label" placeholder="e.g. Greeting"/></div>
+        <div class="field"><label>Tags</label><input id="atl-tags" placeholder="tag1,tag2"/></div>
+        <button onclick="addAtlasPrompt()" style="flex:0 0 auto">Add</button>
+      </div>
+      <div id="atl-add-status" style="font-size:11px;margin-top:4px"></div>
+      <div class="row">
+        <div class="field"><label>k (clusters)</label><input type="number" id="atl-k" value="4" min="2" max="15" style="width:60px"/></div>
+        <button id="btn-atlas-embed" onclick="runAtlasEmbed()">Embed &amp; Map</button>
+        <button class="outline" onclick="loadAtlasLibrary()">Load Library</button>
+      </div>
+      <div id="atlas-map"><span class="out-placeholder" style="color:var(--muted);font-size:12px;opacity:.5;font-style:italic">Add prompts and click "Embed &amp; Map" to generate the scatter plot.</span></div>
+      <div id="atl-library" style="margin-top:8px"></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Find Nearest</h3>
+      <div class="row">
+        <div class="field"><label>Query prompt</label><input id="atl-query" placeholder="Enter a prompt to find similar ones…"/></div>
+        <div class="field"><label>N results</label><input type="number" id="atl-n" value="5" min="1" max="20" style="width:60px"/></div>
+        <button onclick="runAtlasNearest()" style="flex:0 0 auto">Find Nearest</button>
+      </div>
+      <div id="atl-nearest" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Cron Probes -->
+    <div id="pane-probes" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Cron Probes</h2>
+      <p style="font-size:12px;color:var(--muted)">Schedule whisperer tools to run automatically and track model behavior over time.</p>
+      <div class="row">
+        <button onclick="loadProbes()" class="outline">Load Probes</button>
+        <button onclick="showProbeCreator()" style="flex:0 0 auto">+ New Probe</button>
+      </div>
+      <div id="probe-list" style="margin-top:8px"></div>
+      <hr/>
+      <div id="probe-creator" style="display:none">
+        <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">New Probe</h3>
+        <div class="row">
+          <div class="field"><label>Name</label><input id="prb-name" placeholder="e.g. Daily entropy check"/></div>
+          <div class="field"><label>Schedule</label>
+            <select id="prb-schedule"><option value="hourly">Hourly</option><option value="daily" selected>Daily</option><option value="weekly">Weekly</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Prompt</label><textarea id="prb-prompt" rows="3" placeholder="The prompt to run on schedule…"></textarea></div>
+        <div class="row">
+          <div class="field"><label>Tool</label>
+            <select id="prb-tool"><option value="entropy">Entropy</option><option value="sensitivity">Sensitivity</option><option value="cot">CoT Probe</option><option value="sweep">Sweep</option></select>
+          </div>
+          <div class="field"><label>Model</label><input id="prb-model" list="whisperer-models-list" placeholder="default"/></div>
+        </div>
+        <div class="row">
+          <button onclick="createProbe()">Create Probe</button>
+          <button class="outline" onclick="document.getElementById('probe-creator').style.display='none'">Cancel</button>
+        </div>
+        <div id="prb-create-status" style="font-size:11px;margin-top:8px"></div>
+      </div>
+      <div id="prb-history" style="margin-top:12px"></div>
+    </div>
+
   </div>
 </div>
 <script type="module">
@@ -406,6 +598,8 @@ const TOOL_PANES = {
   compare:'pane-compare', sweep:'pane-sweep', sensitivity:'pane-sensitivity',
   cluster:'pane-cluster', cot:'pane-cot', entropy:'pane-entropy',
   archaeology:'pane-archaeology', pipeline:'pane-pipeline', think:'pane-think',
+  monitor:'pane-monitor', vault:'pane-vault', replay:'pane-replay',
+  assertions:'pane-assertions', atlas:'pane-atlas', probes:'pane-probes',
 }
 
 function switchTool(name, btn) {
@@ -1117,10 +1311,440 @@ document.getElementById('btn-archaeology').onclick = runArchaeology
 document.getElementById('btn-pipeline').onclick = runPipeline
 document.getElementById('btn-think').onclick = runThink
 
+// ── Monitor ───────────────────────────────────────────────────────────────────
+let monitorES = null
+function runMonitorStream() {
+  const sandboxId = document.getElementById('mon-sandbox').value.trim()
+  const since = Date.now() - parseInt(document.getElementById('mon-since').value, 10) * 60_000
+  const feed = document.getElementById('mon-feed')
+  const btn = document.getElementById('btn-mon-stream')
+  const stopBtn = document.getElementById('btn-mon-stop')
+  const status = document.getElementById('mon-status')
+  if (monitorES) { monitorES.close(); monitorES = null }
+  feed.innerHTML = ''
+  status.textContent = 'connecting…'; status.style.color = 'var(--accent2)'
+  btn.disabled = true; stopBtn.disabled = false
+  const params = new URLSearchParams({ since: String(since) })
+  if (sandboxId) params.set('sandbox_id', sandboxId)
+  const es = new EventSource(`/api/monitor/stream?${params}`)
+  monitorES = es
+  es.onmessage = e => {
+    try {
+      const data = JSON.parse(e.data)
+      if (data.type === 'end') {
+        status.textContent = `${feed.querySelectorAll('.mon-event').length} events`
+        status.style.color = 'var(--green)'
+        btn.disabled = false; es.close(); monitorES = null; stopBtn.disabled = true
+        return
+      }
+      const color = data.event_type === 'guard_flag' ? 'var(--red)' : data.event_type === 'response_flag' ? '#fb923c' : 'var(--muted)'
+      const meta = JSON.stringify(data.metadata).slice(0, 120)
+      feed.insertAdjacentHTML('beforeend',
+        `<div class="mon-event" style="border-left:3px solid ${color};padding:4px 8px;margin-bottom:4px;font-size:11px">
+          <span style="color:${color};font-weight:600">${escHtml(data.event_type)}</span>
+          <span style="color:var(--muted);margin-left:8px">${escHtml(data.sandbox_id ?? '')}</span>
+          <span style="color:var(--text);margin-left:8px">${escHtml(meta)}</span>
+        </div>`)
+      feed.scrollTop = feed.scrollHeight
+    } catch { /* skip malformed */ }
+  }
+  es.onerror = () => {
+    status.textContent = 'disconnected'; status.style.color = 'var(--red)'
+    btn.disabled = false; stopBtn.disabled = true; es.close(); monitorES = null
+  }
+}
+function stopMonitorStream() {
+  if (monitorES) { monitorES.close(); monitorES = null }
+  document.getElementById('btn-mon-stream').disabled = false
+  document.getElementById('btn-mon-stop').disabled = true
+  document.getElementById('mon-status').textContent = 'stopped'
+}
+async function loadMonitorPatterns() {
+  const out = document.getElementById('mon-patterns')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/monitor/patterns')
+    const { data } = await res.json()
+    if (!data.patterns.length) { out.innerHTML = '<span class="out-placeholder">No guard events in the last 7 days.</span>'; return }
+    const chartData = data.patterns.map(p => ({ label: p.pattern, value: p.count }))
+    out.innerHTML = `<div class="probe-chart">${chart(chartData, { type:'bar', width:Math.min(560, out.clientWidth||560), height:180, label:'Guard Pattern Frequency (7 days)' })}</div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function loadAuditLog() {
+  const out = document.getElementById('mon-audit')
+  const eventType = document.getElementById('mon-type').value
+  const sandboxId = document.getElementById('mon-audit-sandbox').value.trim()
+  const limit = document.getElementById('mon-limit').value
+  const params = new URLSearchParams({ limit })
+  if (eventType) params.set('event_type', eventType)
+  if (sandboxId) params.set('sandbox_id', sandboxId)
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch(`/api/monitor/audit?${params}`)
+    const { data } = await res.json()
+    if (!data.events.length) { out.innerHTML = '<span class="out-placeholder">No events found.</span>'; return }
+    out.innerHTML = data.events.map(ev =>
+      `<div style="border-bottom:1px solid var(--border);padding:6px 0;font-size:11px">
+        <span style="color:var(--accent2);font-family:var(--mono)">${escHtml(ev.event_type)}</span>
+        <span style="color:var(--muted);margin-left:8px">${escHtml(ev.sandbox_id)}</span>
+        <span style="color:var(--muted);margin-left:8px">${new Date(ev.created_at).toLocaleString()}</span>
+        <pre style="margin-top:4px;font-size:10px;white-space:pre-wrap;word-break:break-all">${escHtml(JSON.stringify(ev.metadata, null, 2))}</pre>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+
+// ── Evidence Vault ────────────────────────────────────────────────────────────
+async function loadVault() {
+  const out = document.getElementById('vault-list')
+  const tag  = document.getElementById('vault-tag-filter').value.trim()
+  const tool = document.getElementById('vault-tool-filter').value
+  const q    = document.getElementById('vault-q').value.trim()
+  const params = new URLSearchParams({ limit: '100' })
+  if (tag)  params.set('tag', tag)
+  if (tool) params.set('tool', tool)
+  if (q)    params.set('q', q)
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch(`/api/vault?${params}`)
+    const { data } = await res.json()
+    document.getElementById('vault-count').textContent = `${data.total} records`
+    if (!data.records.length) { out.innerHTML = '<span class="out-placeholder">No records found.</span>'; return }
+    out.innerHTML = data.records.map(r =>
+      `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px">
+        <div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.prompt)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap">
+          <span>${escHtml(r.model||'—')}</span><span>${escHtml(r.tool||'—')}</span>
+          <span>${new Date(r.created_at).toLocaleDateString()}</span>
+          ${(r.tags||[]).map(t=>`<span style="background:var(--surface);padding:1px 5px;border-radius:99px">${escHtml(t)}</span>`).join('')}
+        </div>
+        <button class="outline" style="font-size:10px;padding:2px 8px;margin-top:6px" onclick="deleteVaultRecord('${r.id}',this)">Delete</button>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteVaultRecord(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/vault/${id}`, { method:'DELETE' }); btn.closest('div').remove() }
+  catch { btn.disabled = false }
+}
+async function saveToVault() {
+  const status = document.getElementById('vault-save-status')
+  const prompt = document.getElementById('vault-save-prompt').value.trim()
+  if (!prompt) { status.textContent = '⚠ Prompt is required'; status.style.color = 'var(--red)'; return }
+  const tags = document.getElementById('vault-save-tags').value.split(',').map(t=>t.trim()).filter(Boolean)
+  status.textContent = 'Saving…'
+  try {
+    const res = await fetch('/api/vault', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt, response: document.getElementById('vault-save-response').value.trim(),
+        model: document.getElementById('vault-save-model').value.trim(),
+        tool:  document.getElementById('vault-save-tool').value.trim(), tags })
+    })
+    const { ok: isOk, data } = await res.json()
+    if (!isOk) throw new Error(JSON.stringify(data))
+    status.textContent = `✓ Saved (id: ${data.id})`; status.style.color = 'var(--green)'
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+function exportVaultJSONL() {
+  const tag  = document.getElementById('vault-tag-filter').value.trim()
+  const tool = document.getElementById('vault-tool-filter').value
+  const q    = document.getElementById('vault-q').value.trim()
+  const params = new URLSearchParams()
+  if (tag)  params.set('tag', tag)
+  if (tool) params.set('tool', tool)
+  if (q)    params.set('q', q)
+  const a = Object.assign(document.createElement('a'), { href:`/api/vault/export.jsonl?${params}`, download:`vault-${Date.now()}.jsonl` })
+  a.click()
+}
+
+// ── Replay Engine ─────────────────────────────────────────────────────────────
+async function runReplay() {
+  const btn = document.getElementById('btn-replay')
+  const out = document.getElementById('rpl-results')
+  const rawMessages = document.getElementById('rpl-messages').value.trim()
+  if (!rawMessages) return
+  let messages
+  try { messages = JSON.parse(rawMessages) } catch { out.innerHTML = '<span style="color:var(--red)">Invalid JSON in messages field.</span>'; return }
+  const targetConfig = {
+    model:        document.getElementById('rpl-model').value.trim() || undefined,
+    systemPrompt: document.getElementById('rpl-sys').value.trim()   || undefined,
+    temperature:  parseFloat(document.getElementById('rpl-temp').value) || 0.7,
+    maxTokens:    parseInt(document.getElementById('rpl-tokens').value, 10) || 512,
+  }
+  setLoading(btn, 'Replaying…')
+  out.innerHTML = ''
+  try {
+    const res = await fetch('/api/replay', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ messages, targetConfig })
+    })
+    const { data } = await res.json()
+    const result = data.result ?? data.results?.[0]
+    if (!result) throw new Error('No result returned')
+    lastResult['replay'] = data
+    out.innerHTML = result.turns.map((t, i) =>
+      `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Turn ${i+1} · ${t.latencyMs}ms${t.similarity != null ? ` <span style="color:${t.similarity>0.7?'var(--green)':'var(--red)'}">· sim ${(t.similarity*100).toFixed(1)}%</span>` : ''}</div>
+        <div style="font-size:12px;color:var(--accent2)">User: ${escHtml(t.userMessage)}</div>
+        ${t.originalResponse ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">Original: ${escHtml(t.originalResponse.slice(0,200))}</div>` : ''}
+        <div style="font-size:12px;margin-top:6px">Replayed: ${escHtml(t.replayedResponse.slice(0,200))}</div>
+      </div>`
+    ).join('')
+    out.appendChild(makeExportBtn('replay', 'replay'))
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+
+// ── Model Assertions ──────────────────────────────────────────────────────────
+function showAssertionCreator() { document.getElementById('assertion-creator').style.display = 'block' }
+async function loadAssertionSuites() {
+  const out = document.getElementById('assertion-suites-list')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/assertions')
+    const { data } = await res.json()
+    if (!data.suites?.length) { out.innerHTML = '<span class="out-placeholder">No suites yet.</span>'; return }
+    out.innerHTML = data.suites.map(s =>
+      `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">${escHtml(s.name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${escHtml(s.description||'')} · ${s.case_count} cases</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button style="font-size:11px;padding:4px 10px" onclick="runAssertionSuite('${s.id}',this)">Run</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px" onclick="loadSuiteHistory('${s.id}')">History</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px;color:var(--red)" onclick="deleteAssertionSuite('${s.id}',this)">Delete</button>
+        </div>
+        <div id="suite-result-${s.id}" style="margin-top:8px"></div>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function createAssertionSuite() {
+  const status = document.getElementById('ast-create-status')
+  const name = document.getElementById('ast-name').value.trim()
+  const desc = document.getElementById('ast-desc').value.trim()
+  const casesRaw = document.getElementById('ast-cases').value.trim()
+  if (!name || !casesRaw) { status.textContent = '⚠ Name and cases are required'; status.style.color = 'var(--red)'; return }
+  let cases
+  try { cases = JSON.parse(casesRaw) } catch { status.textContent = '⚠ Invalid JSON in cases'; status.style.color = 'var(--red)'; return }
+  status.textContent = 'Creating…'
+  try {
+    const res = await fetch('/api/assertions', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, description: desc, cases })
+    })
+    const { ok: isOk, data } = await res.json()
+    if (!isOk) throw new Error(JSON.stringify(data))
+    status.textContent = `✓ Created suite ${data.id}`; status.style.color = 'var(--green)'
+    document.getElementById('assertion-creator').style.display = 'none'
+    loadAssertionSuites()
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+async function runAssertionSuite(id, btn) {
+  const out = document.getElementById(`suite-result-${id}`)
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="out-placeholder">Running…</span>'
+  try {
+    const res = await fetch(`/api/assertions/${id}/run`, { method:'POST' })
+    const { data } = await res.json()
+    const pct = Math.round((data.passRate ?? 0) * 100)
+    const color = pct >= 80 ? 'var(--green)' : pct >= 50 ? '#fb923c' : 'var(--red)'
+    out.innerHTML = `<div style="font-size:12px;font-weight:600;color:${color};margin-bottom:8px">${pct}% passed (${data.passed}/${data.total_cases})</div>` +
+      (data.results||[]).map(r =>
+        `<div class="assert-case ${r.passed?'passed':'failed'}">
+          <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.prompt.slice(0,100))}</div>
+          <div style="margin-top:6px">${r.assertions.map(a => `<span class="assert-tag ${a.passed?'pass':'fail'}">${escHtml(a.type)}</span>`).join('')}</div>
+        </div>`
+      ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+async function loadSuiteHistory(id) {
+  const out = document.getElementById(`suite-result-${id}`)
+  out.innerHTML = '<span class="out-placeholder">Loading history…</span>'
+  try {
+    const res = await fetch(`/api/assertions/${id}/history`)
+    const { data } = await res.json()
+    if (!data.runs?.length) { out.innerHTML = '<span class="out-placeholder">No runs yet.</span>'; return }
+    const chartData = data.runs.slice().reverse().map(r => ({ label: new Date(r.ran_at).toLocaleDateString(), value: (r.pass_rate ?? 0) * 100 }))
+    out.innerHTML = `<div class="probe-chart">${chart(chartData, { type:'line', width:Math.min(400, out.clientWidth||400), height:140, label:'Pass Rate % Over Time' })}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">${data.runs.length} runs · latest: ${Math.round((data.runs[0]?.pass_rate||0)*100)}%</div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteAssertionSuite(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/assertions/${id}`, { method:'DELETE' }); btn.closest('div[style]').remove() }
+  catch { btn.disabled = false }
+}
+
+// ── Semantic Map ──────────────────────────────────────────────────────────────
+const CLUSTER_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2','#16a34a','#9333ea']
+async function addAtlasPrompt() {
+  const status = document.getElementById('atl-add-status')
+  const text = document.getElementById('atl-text').value.trim()
+  if (!text) return
+  const tags = document.getElementById('atl-tags').value.split(',').map(t=>t.trim()).filter(Boolean)
+  status.textContent = 'Saving…'
+  try {
+    const res = await fetch('/api/atlas/library', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, label: document.getElementById('atl-label').value.trim(), tags })
+    })
+    const { ok: isOk } = await res.json()
+    if (!isOk) throw new Error('Save failed')
+    status.textContent = '✓ Added'; status.style.color = 'var(--green)'
+    document.getElementById('atl-text').value = ''
+    document.getElementById('atl-label').value = ''
+    document.getElementById('atl-tags').value = ''
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+async function loadAtlasLibrary() {
+  const out = document.getElementById('atl-library')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/atlas/library')
+    const { data } = await res.json()
+    if (!data.prompts?.length) { out.innerHTML = '<span class="out-placeholder">No prompts in library yet.</span>'; return }
+    out.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${data.prompts.length} prompts in library</div>` +
+      data.prompts.map(p =>
+        `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid #ffffff08">
+          <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.text)}</span>
+          <span style="font-size:10px;color:var(--muted)">${escHtml(p.label||'')}</span>
+          <button class="outline" style="font-size:10px;padding:2px 6px;flex-shrink:0" onclick="deleteAtlasPrompt('${p.id}',this)">✕</button>
+        </div>`
+      ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteAtlasPrompt(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/atlas/library/${id}`, { method:'DELETE' }); btn.closest('div').remove() }
+  catch { btn.disabled = false }
+}
+async function runAtlasEmbed() {
+  const btn = document.getElementById('btn-atlas-embed')
+  const mapDiv = document.getElementById('atlas-map')
+  const k = parseInt(document.getElementById('atl-k').value, 10) || 4
+  setLoading(btn, 'Embedding…')
+  mapDiv.innerHTML = '<span class="out-placeholder" style="font-size:12px;opacity:.5;font-style:italic">Computing embeddings and PCA projection…</span>'
+  try {
+    const res = await fetch('/api/atlas/embed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ k }) })
+    const { data } = await res.json()
+    if (!data.points?.length) { mapDiv.innerHTML = '<span class="out-placeholder" style="font-size:12px;opacity:.5;font-style:italic">No prompts to map. Add some prompts first.</span>'; clearLoading(btn); return }
+    const xs = data.points.map(p => p.x), ys = data.points.map(p => p.y)
+    const xMin = Math.min(...xs), xMax = Math.max(...xs)
+    const yMin = Math.min(...ys), yMax = Math.max(...ys)
+    const W = Math.min(560, mapDiv.clientWidth || 560) - 20, H = 300, pad = 28
+    const sx = v => pad + (xMax === xMin ? (W-2*pad)/2 : (v - xMin) / (xMax - xMin) * (W - 2*pad))
+    const sy = v => H - pad - (yMax === yMin ? (H-2*pad)/2 : (v - yMin) / (yMax - yMin) * (H - 2*pad))
+    const circles = data.points.map(p => {
+      const color = CLUSTER_COLORS[p.cluster % CLUSTER_COLORS.length]
+      return `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="7" fill="${color}" opacity="0.8"><title>${escHtml(p.label||p.text.slice(0,60))}\nCluster ${p.cluster}</title></circle>`
+    }).join('')
+    mapDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${circles}</svg>`
+    lastResult['atlas'] = data
+  } catch(e) { mapDiv.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+async function runAtlasNearest() {
+  const out = document.getElementById('atl-nearest')
+  const text = document.getElementById('atl-query').value.trim()
+  if (!text) return
+  const n = parseInt(document.getElementById('atl-n').value, 10) || 5
+  out.innerHTML = '<span class="out-placeholder">Finding…</span>'
+  try {
+    const res = await fetch('/api/atlas/nearest', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, n }) })
+    const { data } = await res.json()
+    if (!data.nearest?.length) { out.innerHTML = '<span class="out-placeholder">No results.</span>'; return }
+    out.innerHTML = data.nearest.map(r =>
+      `<div style="display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid #ffffff08">
+        <div style="flex:1;font-size:11px">${escHtml(r.text)}</div>
+        <span style="font-size:10px;color:var(--accent2);font-family:var(--mono);flex-shrink:0">${(r.similarity*100).toFixed(1)}%</span>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+
+// ── Cron Probes ───────────────────────────────────────────────────────────────
+function showProbeCreator() { document.getElementById('probe-creator').style.display = 'block' }
+async function loadProbes() {
+  const out = document.getElementById('probe-list')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/probes')
+    const { data } = await res.json()
+    if (!data.probes?.length) { out.innerHTML = '<span class="out-placeholder">No probes yet.</span>'; return }
+    out.innerHTML = data.probes.map(p =>
+      `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <span style="font-size:13px;font-weight:600">${escHtml(p.name)}</span>
+          <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${escHtml(p.schedule)} · ${escHtml(p.tool)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.prompt.slice(0,80))}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px">${p.run_count||0} runs${p.last_run_at ? ' · last: '+new Date(p.last_run_at).toLocaleDateString() : ''}</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button style="font-size:11px;padding:4px 10px" onclick="runProbeNow('${p.id}',this)">▶ Run Now</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px" onclick="loadProbeHistory('${p.id}')">History</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px;color:var(--red)" onclick="deleteProbe('${p.id}',this)">Delete</button>
+        </div>
+        <div id="probe-result-${p.id}" style="margin-top:8px"></div>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function createProbe() {
+  const status = document.getElementById('prb-create-status')
+  const name = document.getElementById('prb-name').value.trim()
+  const prompt = document.getElementById('prb-prompt').value.trim()
+  if (!name || !prompt) { status.textContent = '⚠ Name and prompt required'; status.style.color = 'var(--red)'; return }
+  status.textContent = 'Creating…'
+  try {
+    const res = await fetch('/api/probes', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, prompt, tool: document.getElementById('prb-tool').value,
+        schedule: document.getElementById('prb-schedule').value,
+        model: document.getElementById('prb-model').value.trim() || undefined })
+    })
+    const { ok: isOk, data } = await res.json()
+    if (!isOk) throw new Error(JSON.stringify(data))
+    status.textContent = '✓ Probe created'; status.style.color = 'var(--green)'
+    document.getElementById('probe-creator').style.display = 'none'
+    loadProbes()
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+async function runProbeNow(id, btn) {
+  const out = document.getElementById(`probe-result-${id}`)
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="out-placeholder">Running probe…</span>'
+  try {
+    const res = await fetch(`/api/probes/${id}/run`, { method:'POST' })
+    const { data } = await res.json()
+    out.innerHTML = `<div style="font-size:11px;color:var(--green)">✓ Metric: <span style="font-family:var(--mono)">${String(data.metricValue ?? '—').slice(0, 12)}</span></div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+async function loadProbeHistory(id) {
+  const out = document.getElementById(`probe-result-${id}`)
+  out.innerHTML = '<span class="out-placeholder">Loading history…</span>'
+  try {
+    const res = await fetch(`/api/probes/${id}/history`)
+    const { data } = await res.json()
+    if (!data.runs?.length) { out.innerHTML = '<span class="out-placeholder">No runs yet.</span>'; return }
+    const chartData = data.runs.slice().reverse().map(r => ({ label: new Date(r.run_at).toLocaleDateString(), value: r.metric_value ?? 0 }))
+    out.innerHTML = `<div class="probe-chart">${chart(chartData, { type:'line', width:Math.min(400, out.clientWidth||400), height:140, label:'Metric Over Time' })}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">${data.runs.length} runs</div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteProbe(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/probes/${id}`, { method:'DELETE' }); btn.closest('div[style]').remove() }
+  catch { btn.disabled = false }
+}
+
 Object.assign(window, {
   switchTool, toggleHist, toggleExpLog, exportExpLog, restoreExpEntry, showCompareDiff,
   feedToSensitivity, feedToEntropy, feedEntropyToSweep, feedCotToCompare,
   feedThinkToSensitivity, feedArchaeologyToThink,
+  runMonitorStream, stopMonitorStream, loadMonitorPatterns, loadAuditLog,
+  loadVault, deleteVaultRecord, saveToVault, exportVaultJSONL,
+  runReplay,
+  showAssertionCreator, loadAssertionSuites, createAssertionSuite, runAssertionSuite, loadSuiteHistory, deleteAssertionSuite,
+  addAtlasPrompt, loadAtlasLibrary, deleteAtlasPrompt, runAtlasEmbed, runAtlasNearest,
+  showProbeCreator, loadProbes, createProbe, runProbeNow, loadProbeHistory, deleteProbe,
 })
 </script>
 <div id="exp-log-bar">

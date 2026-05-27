@@ -1,5 +1,5 @@
 export interface AetherLiteJob {
-  type: 'ai_completion' | 'embedding_batch' | 'file_process'
+  type: 'ai_completion' | 'embedding_batch' | 'file_process' | 'replay'
   sandboxId: string
   payload: unknown
   createdAt: number
