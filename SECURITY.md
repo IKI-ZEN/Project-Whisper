@@ -6,7 +6,7 @@ Only the latest commit on the `main` branch is supported. There are no versioned
 
 ## Reporting a Vulnerability
 
-Email **accounts@iki-zen.com.au** with the subject line:
+Open a [GitHub Security Advisory](https://github.com/iki-zen/project-aether-lite/security/advisories/new) or contact the maintainers privately with the subject line:
 
 ```
 SECURITY: [brief description]
