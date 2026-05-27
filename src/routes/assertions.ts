@@ -275,7 +275,7 @@ const listSuites: Handler = async (_req, env) => {
     const result = await env.DB.prepare(
       'SELECT id, name, description, json_array_length(cases) as case_count, created_at, updated_at FROM assertion_suites ORDER BY created_at DESC LIMIT 100',
     ).all()
-    return json(ok(result.results))
+    return json(ok(result.results ?? []))
   } catch (e) {
     return json(err('Failed to list assertion suites', String(e)), 500)
   }
@@ -423,7 +423,7 @@ const getSuiteHistory: Handler = async (_req, env, params) => {
       'SELECT id, ran_at, total_cases, passed, failed FROM assertion_runs WHERE suite_id = ? ORDER BY ran_at DESC LIMIT 20',
     ).bind(params.id).all<{ id: string; ran_at: number; total_cases: number; passed: number; failed: number }>()
 
-    const runs = result.results.map(r => ({
+    const runs = (result.results ?? []).map(r => ({
       ...r,
       pass_rate: r.total_cases > 0 ? r.passed / r.total_cases : 0,
     }))

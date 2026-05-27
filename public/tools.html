@@ -1504,7 +1504,7 @@ async function loadAssertionSuites() {
     const { data } = await res.json()
     if (!data.suites?.length) { out.innerHTML = '<span class="out-placeholder">No suites yet.</span>'; return }
     out.innerHTML = data.suites.map(s =>
-      `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+      `<div data-suite-item style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
         <div style="font-size:13px;font-weight:600">${escHtml(s.name)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:3px">${escHtml(s.description||'')} · ${s.case_count} cases</div>
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
@@ -1570,7 +1570,7 @@ async function loadSuiteHistory(id) {
 }
 async function deleteAssertionSuite(id, btn) {
   btn.disabled = true
-  try { await fetch(`/api/assertions/${id}`, { method:'DELETE' }); btn.closest('div[style]').remove() }
+  try { await fetch(`/api/assertions/${id}`, { method:'DELETE' }); btn.closest('[data-suite-item]').remove() }
   catch { btn.disabled = false }
 }
 
@@ -1670,7 +1670,7 @@ async function loadProbes() {
     const { data } = await res.json()
     if (!data.probes?.length) { out.innerHTML = '<span class="out-placeholder">No probes yet.</span>'; return }
     out.innerHTML = data.probes.map(p =>
-      `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+      `<div data-probe-item style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
           <span style="font-size:13px;font-weight:600">${escHtml(p.name)}</span>
           <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${escHtml(p.schedule)} · ${escHtml(p.tool)}</span>
@@ -1731,7 +1731,7 @@ async function loadProbeHistory(id) {
 }
 async function deleteProbe(id, btn) {
   btn.disabled = true
-  try { await fetch(`/api/probes/${id}`, { method:'DELETE' }); btn.closest('div[style]').remove() }
+  try { await fetch(`/api/probes/${id}`, { method:'DELETE' }); btn.closest('[data-probe-item]').remove() }
   catch { btn.disabled = false }
 }
 

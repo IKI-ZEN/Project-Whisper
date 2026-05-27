@@ -242,14 +242,16 @@ const embedAtlas: Handler = async (req: Request, env: Env) => {
     for (let i = 0; i < missing.length; i += EMBED_BATCH_SIZE) {
       const batch = missing.slice(i, i + EMBED_BATCH_SIZE)
       const vecs = await embed(env.AI, batch.map(p => p.text))
-      // Write back to D1 and update in-memory cache field
-      await Promise.all(batch.map(async (row, bi) => {
+      // Write back to D1 in a single batch and update in-memory cache field
+      const stmts: D1PreparedStatement[] = []
+      for (let bi = 0; bi < batch.length; bi++) {
         const vec = vecs[bi]
-        if (!vec) return
+        if (!vec) continue
         const b64 = encodeEmbedding(vec)
-        await env.DB.prepare('UPDATE prompt_library SET embedding_cache = ? WHERE id = ?').bind(b64, row.id).run()
-        row.embedding_cache = b64
-      }))
+        batch[bi].embedding_cache = b64
+        stmts.push(env.DB.prepare('UPDATE prompt_library SET embedding_cache = ? WHERE id = ?').bind(b64, batch[bi].id))
+      }
+      if (stmts.length > 0) await env.DB.batch(stmts)
     }
 
     // 3. Decode all embeddings
