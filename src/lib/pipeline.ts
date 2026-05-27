@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 IKI-ZEN
+
 import type { Env } from '../types/env'
 import { complete, embed, cosineSimilarity } from './ai'
 import { scan } from './guard'

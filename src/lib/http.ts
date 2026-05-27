@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 IKI-ZEN
+
 import { MAX_REQUEST_BODY, AI_RATE_LIMIT_WINDOW_MS, AI_RATE_LIMIT_MAX } from './constants'
 import { requireAccess, isProtectedRequest } from './access'
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 IKI-ZEN
+
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
@@ -156,9 +159,13 @@ export const sendEmailHandler: Handler = async (req, env, params) => {
   if (!parsed.ok) return parsed.response
   const { to, subject, text, html } = parsed.data
 
+  if (!env.EMAIL_FROM_ADDRESS) {
+    return json(err('EMAIL_FROM_ADDRESS is not configured'), 503)
+  }
+
   try {
     await env.SEND_EMAIL.send({
-      from:    env.EMAIL_FROM_ADDRESS ?? 'noreply@aether-lite.app',
+      from:    env.EMAIL_FROM_ADDRESS,
       to,
       subject: subject.slice(0, 256),
       text,

@@ -38,4 +38,4 @@ CLOUDFLARE_API_TOKEN=      # Bearer token for Pages Direct Upload API
 # Create the [[send_email]] binding in wrangler.toml with your verified from-address.
 # SEND_EMAIL binding is automatically available when configured in wrangler.toml.
 EMAIL_FROM_ADDRESS=        # Must match a verified sender address in your Email Routing config.
-                           # Falls back to noreply@aether-lite.app if not set (will fail unless that address is verified).
+                           # Required when using the POST /api/app/:id/email endpoint — returns 503 if unset.

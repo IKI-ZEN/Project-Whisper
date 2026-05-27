@@ -90,14 +90,22 @@ No changes are needed for R2, Queues, Vectorize, or Analytics Engine — their n
 wrangler d1 execute aether-lite --remote --file=./migrations/0001_init.sql
 wrangler d1 execute aether-lite --remote --file=./migrations/0002_request_id.sql
 wrangler d1 execute aether-lite --remote --file=./migrations/0003_identity.sql
+wrangler d1 execute aether-lite --remote --file=./migrations/0004_probes.sql
+wrangler d1 execute aether-lite --remote --file=./migrations/0005_vault.sql
+wrangler d1 execute aether-lite --remote --file=./migrations/0006_assertions.sql
+wrangler d1 execute aether-lite --remote --file=./migrations/0007_atlas.sql
 
 # Local dev database (for `npm run dev:local`)
 wrangler d1 execute aether-lite --local --file=./migrations/0001_init.sql
 wrangler d1 execute aether-lite --local --file=./migrations/0002_request_id.sql
 wrangler d1 execute aether-lite --local --file=./migrations/0003_identity.sql
+wrangler d1 execute aether-lite --local --file=./migrations/0004_probes.sql
+wrangler d1 execute aether-lite --local --file=./migrations/0005_vault.sql
+wrangler d1 execute aether-lite --local --file=./migrations/0006_assertions.sql
+wrangler d1 execute aether-lite --local --file=./migrations/0007_atlas.sql
 ```
 
-Run all three migrations in order. They are idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` with `IF NOT EXISTS` equivalents).
+Run all seven migrations in order. They are idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` with `IF NOT EXISTS` equivalents).
 
 ---
 
