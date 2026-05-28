@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 IKI-ZEN
-
 import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../types/env'
 import type { SandboxConfig, Message } from '../lib/schema'

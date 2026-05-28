@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 IKI-ZEN
-
 export type RiskLevel = 'clean' | 'suspicious' | 'blocked'
 
 export interface ScanResult {

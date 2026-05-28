@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 IKI-ZEN
-
 // ── Base64url codec ───────────────────────────────────────────────────────────
 
 function b64url(buf: ArrayBuffer | Uint8Array): string {

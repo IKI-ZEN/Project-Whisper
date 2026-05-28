@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 IKI-ZEN
-
 // Zero-dep markdown → safe HTML renderer. Escapes raw HTML before parsing.
 // Safe for innerHTML assignment.
 

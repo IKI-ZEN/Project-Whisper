@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 IKI-ZEN
-
 import type { Env, AetherLiteJob } from '../types/env'
 import { embed } from '../lib/ai'
 import { scan } from '../lib/guard'

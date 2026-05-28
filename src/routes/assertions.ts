@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 IKI-ZEN
-
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'

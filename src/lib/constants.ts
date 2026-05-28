@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 IKI-ZEN
-
 // Shared constants — single source of truth for magic values used across the codebase.
 
 export const DEFAULT_TEMPERATURE   = 0.7
