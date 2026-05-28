@@ -1,7 +1,6 @@
 {
   "name": "project-aether-lite",
   "version": "0.2.0",
-  "private": true,
   "scripts": {
     "dev": "wrangler dev",
     "dev:local": "wrangler dev --local",
