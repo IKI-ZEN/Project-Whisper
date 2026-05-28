@@ -16,9 +16,25 @@ GOOGLE_AI_KEY=
 GROQ_API_KEY=        # groq:llama-3.3-70b-versatile, groq:llama-3.1-8b-instant
 MISTRAL_API_KEY=     # mistral:mistral-large-latest, mistral:mistral-small-latest
 DEEPSEEK_API_KEY=    # deepseek:deepseek-chat, deepseek:deepseek-reasoner
-XAI_API_KEY=         # xai:grok-2-latest
+XAI_API_KEY=         # xai:grok-2-latest, xai:grok-4
 PERPLEXITY_API_KEY=  # perplexity:sonar-pro (includes real-time web search)
+CEREBRAS_API_KEY=    # cerebras:llama-3.3-70b (ultra-fast Llama inference)
+OPENROUTER_API_KEY=  # openrouter:{provider}/{model} — 200+ models via one key (e.g. openrouter:openai/gpt-4o)
 ELEVENLABS_API_KEY=  # reserved for TTS endpoint (POST /api/ai/tts)
+
+# Amazon Bedrock via AI Gateway compat endpoint + BYOK.
+# Requires AWS credentials configured as Provider Keys in the CF AI Gateway dashboard.
+# CF_AIG_TOKEN is a Cloudflare API token with AI Gateway permissions (dash.cloudflare.com → My Profile → API Tokens).
+# Model format: bedrock:{bedrock-model-id}  e.g. bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
+CF_AIG_TOKEN=
+
+# Azure OpenAI (requires an Azure OpenAI resource with deployed models).
+# Model format: azure:{resource-name}/{deployment-name}  e.g. azure:my-resource/gpt-4o-deployment
+AZURE_OPENAI_API_KEY=
+
+# Baseten — deploy and serve custom or open-source models.
+# Model format: baseten:{model-id}  e.g. baseten:openai/gpt-oss-120b
+BASETEN_API_KEY=
 
 # Optional: sign exported configs with HMAC-SHA256 so imports can verify provenance.
 # Any string works — use `openssl rand -hex 32` to generate a strong secret.

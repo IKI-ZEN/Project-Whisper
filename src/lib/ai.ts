@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Message, SandboxConfig, Tool, ContentBlock } from './schema'
 import { sseEvent } from './http'
-import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS } from './constants'
+import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS, AZURE_OPENAI_API_VERSION } from './constants'
 import { sha256 } from './utils'
 import { estimateCost, type CallType } from './pricing'
 
@@ -57,8 +57,15 @@ export const MODELS = {
   deepseekR1:   'deepseek:deepseek-reasoner',
   // xAI (Grok)
   grok:         'xai:grok-2-latest',
+  grok4:        'xai:grok-4',
   // Perplexity (online models with web search)
   sonar:        'perplexity:sonar-pro',
+  // Amazon Bedrock via AI Gateway compat + BYOK (requires CF_AIG_TOKEN, BYOK configured in CF dashboard)
+  bedrockHaiku: 'bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  // Cerebras — ultra-fast Llama inference
+  cerebras:     'cerebras:llama-3.3-70b',
+  // OpenRouter — unified model router (access 200+ models with one API key)
+  openrouter:   'openrouter:openai/gpt-4o',
 } as const
 
 // ── Gateway provider registry ─────────────────────────────────────────────────
@@ -66,22 +73,51 @@ export const MODELS = {
 type WireFormat = 'openai' | 'anthropic' | 'google'
 
 interface GatewayProviderDef {
-  format: WireFormat
-  path:   (id: string) => string   // URL path after gateway base
-  apiKey: (env: Env) => string
+  format:       WireFormat
+  path:         (id: string) => string   // URL path after gateway base
+  apiKey:       (env: Env) => string
+  authHeaders?: (key: string) => Record<string, string>  // overrides Authorization: Bearer {key}
+  modelId?:     (id: string) => string                   // transforms model ID for request body
 }
 
 // Each entry maps the model prefix (before ':') to its gateway path and auth.
 // All OpenAI-compatible providers share the same request/response format.
+// Paths are confirmed against official Cloudflare AI Gateway provider docs.
 const GATEWAY_PROVIDERS: Record<string, GatewayProviderDef> = {
   openai:     { format: 'openai',    path: _  => '/openai/chat/completions',                                              apiKey: e => e.OPENAI_API_KEY     ?? '' },
   anthropic:  { format: 'anthropic', path: _  => '/anthropic/v1/messages',                                               apiKey: e => e.ANTHROPIC_API_KEY  ?? '' },
   google:     { format: 'google',    path: id => `/google-ai-studio/v1/models/${encodeURIComponent(id)}:generateContent`, apiKey: e => e.GOOGLE_AI_KEY      ?? '' },
-  groq:       { format: 'openai',    path: _  => '/groq/openai/v1/chat/completions',                                     apiKey: e => e.GROQ_API_KEY       ?? '' },
+  groq:       { format: 'openai',    path: _  => '/groq/chat/completions',                                               apiKey: e => e.GROQ_API_KEY       ?? '' },
   mistral:    { format: 'openai',    path: _  => '/mistral/v1/chat/completions',                                         apiKey: e => e.MISTRAL_API_KEY    ?? '' },
-  deepseek:   { format: 'openai',    path: _  => '/deepseek/v1/chat/completions',                                        apiKey: e => e.DEEPSEEK_API_KEY   ?? '' },
-  xai:        { format: 'openai',    path: _  => '/x-ai/v1/chat/completions',                                           apiKey: e => e.XAI_API_KEY        ?? '' },
-  perplexity: { format: 'openai',    path: _  => '/perplexity-ai/chat/completions',                                      apiKey: e => e.PERPLEXITY_API_KEY ?? '' },
+  deepseek:   { format: 'openai',    path: _  => '/deepseek/chat/completions',                                          apiKey: e => e.DEEPSEEK_API_KEY   ?? '' },
+  xai:        { format: 'openai',    path: _  => '/grok/v1/chat/completions',                                           apiKey: e => e.XAI_API_KEY        ?? '' },
+  perplexity: { format: 'openai',    path: _  => '/perplexity-ai/chat/completions',                                     apiKey: e => e.PERPLEXITY_API_KEY ?? '' },
+  cerebras:   { format: 'openai',    path: _  => '/cerebras/chat/completions',                                          apiKey: e => e.CEREBRAS_API_KEY   ?? '' },
+  openrouter: { format: 'openai',    path: _  => '/openrouter/chat/completions',                                        apiKey: e => e.OPENROUTER_API_KEY ?? '' },
+  // Bedrock via AI Gateway compat endpoint. Auth is CF_AIG_TOKEN; body model becomes "aws-bedrock/{id}".
+  // Requires BYOK credentials configured in CF dashboard and CF_AIG_TOKEN set.
+  bedrock: {
+    format: 'openai',
+    path: _ => '/compat/chat/completions',
+    apiKey: e => e.CF_AIG_TOKEN ?? '',
+    authHeaders: key => ({ 'cf-aig-authorization': `Bearer ${key}` }),
+    modelId: id => `aws-bedrock/${id}`,
+  },
+  // Azure OpenAI — model string format: azure:{resource-name}/{deployment-name}
+  azure: {
+    format: 'openai',
+    path: id => {
+      const slash = id.indexOf('/')
+      const resource = encodeURIComponent(slash === -1 ? id : id.slice(0, slash))
+      const dep      = encodeURIComponent(slash === -1 ? id : id.slice(slash + 1))
+      return `/azure-openai/${resource}/${dep}/chat/completions?api-version=${AZURE_OPENAI_API_VERSION}`
+    },
+    apiKey: e => e.AZURE_OPENAI_API_KEY ?? '',
+    authHeaders: key => ({ 'api-key': key }),
+    modelId: id => { const s = id.indexOf('/'); return s === -1 ? id : id.slice(s + 1) },
+  },
+  // Baseten — OpenAI-compatible inference for custom and open-source models
+  baseten: { format: 'openai', path: _ => '/baseten/v1/chat/completions', apiKey: e => e.BASETEN_API_KEY ?? '' },
 }
 
 type GatewayResult = { provider: string; id: string; def: GatewayProviderDef }
@@ -93,8 +129,11 @@ function parseGateway(model: string): GatewayResult | null {
   const def = GATEWAY_PROVIDERS[p]
   if (!def) return null
   const id = model.slice(sep + 1)
-  // Strict allowlist — prevents path traversal in URL-templated gateway calls.
-  if (!/^[a-zA-Z0-9][\w.\-]*$/.test(id)) return null
+  // Block '..' to prevent path traversal in URL-encoded path segments.
+  // Allow '/' (Azure resource/deployment, Baseten model IDs, OpenRouter)
+  // and ':' (Bedrock ARN-style version suffixes like 'v1:0').
+  if (id.includes('..')) return null
+  if (!/^[a-zA-Z0-9][\w.\-:/]*$/.test(id)) return null
   return { provider: p, id, def }
 }
 
@@ -335,14 +374,16 @@ function buildOpenAIMessages(opts: CompletionOpts): Array<Record<string, unknown
 
 // ── Provider completions (gateway) ────────────────────────────────────────────
 
-// Handles all OpenAI-compatible providers: openai, groq, mistral, deepseek, xai, perplexity
+// Handles all OpenAI-compatible providers: openai, groq, mistral, deepseek, xai, perplexity,
+// cerebras, openrouter, bedrock (compat), azure, baseten
 async function completeOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
-  const { id: model, def } = gw
+  const { id: modelId, def } = gw
+  const wireModel = def.modelId ? def.modelId(modelId) : modelId
   const temp = opts.temperature ?? DEFAULT_TEMPERATURE
   // o-series reasoning models use different params (OpenAI-specific)
-  const isReasoning = gw.provider === 'openai' && /^o[1-9]/.test(model)
+  const isReasoning = gw.provider === 'openai' && /^o[1-9]/.test(modelId)
   const body: Record<string, unknown> = {
-    model,
+    model: wireModel,
     messages: buildOpenAIMessages(opts),
     ...(isReasoning
       ? { max_completion_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}) }
@@ -358,13 +399,15 @@ async function completeOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts)
     body.tools = opts.tools.map(toOpenAITool)
     if (opts.toolChoice) body.tool_choice = opts.toolChoice
   }
+  const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Bearer ${key}` }
   const metaHeaders: Record<string, string> = {}
-  if (opts.sandboxId) metaHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
-  const res = await fetch(`${gatewayBase(env)}${def.path(model)}`, {
+  if (opts.sandboxId) metaHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model: wireModel })
+  const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${def.apiKey(env)}`,
+      ...authH,
       'cf-aig-cache-ttl':  '3600',
       'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
       ...metaHeaders,
@@ -547,13 +590,16 @@ function toReadableStream(gen: () => AsyncGenerator<string>): ReadableStream {
 // ── Provider streaming (gateway) ──────────────────────────────────────────────
 
 function streamOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts): ReadableStream {
-  const { id: model, def } = gw
+  const { id: modelId, def } = gw
+  const wireModel = def.modelId ? def.modelId(modelId) : modelId
+  const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Bearer ${key}` }
   return toReadableStream(() => streamSSEFetch(
-    `${gatewayBase(env)}${def.path(model)}`,
+    `${gatewayBase(env)}${def.path(modelId)}`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${def.apiKey(env)}` },
-      body: JSON.stringify({ model, messages: buildMessages(opts), temperature: opts.temperature ?? DEFAULT_TEMPERATURE, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, stream: true }),
+      headers: { 'Content-Type': 'application/json', ...authH },
+      body: JSON.stringify({ model: wireModel, messages: buildMessages(opts), temperature: opts.temperature ?? DEFAULT_TEMPERATURE, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, stream: true }),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
     (c: unknown) => (c as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content,

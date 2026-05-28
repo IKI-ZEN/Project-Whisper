@@ -71,6 +71,11 @@ export interface Env {
   XAI_API_KEY?: string
   PERPLEXITY_API_KEY?: string
   ELEVENLABS_API_KEY?: string
+  CF_AIG_TOKEN?: string          // AI Gateway auth token — used for authenticated gateways and Bedrock BYOK
+  AZURE_OPENAI_API_KEY?: string
+  BASETEN_API_KEY?: string
+  CEREBRAS_API_KEY?: string
+  OPENROUTER_API_KEY?: string
   SIGNING_SECRET?: string
   ALLOWED_ORIGINS?: string   // comma-separated origins, or '*' (default)
 

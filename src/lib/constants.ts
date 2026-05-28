@@ -145,3 +145,6 @@ export const MAX_IMAGES_PER_MESSAGE = 5
 
 // Structured output (OpenAI json_schema mode)
 export const MAX_JSON_SCHEMA_BYTES  = 65_536     // 64 KB
+
+// Azure OpenAI stable API version
+export const AZURE_OPENAI_API_VERSION = '2024-02-01'
