@@ -43,6 +43,7 @@ These commands provision the cloud resources that bindings in `wrangler.toml` po
 
 ```bash
 wrangler kv:namespace create SANDBOX_REGISTRY
+wrangler kv:namespace create RATE_LIMITS
 wrangler d1 create aether-lite
 wrangler r2 bucket create aether-lite-files
 wrangler queues create aether-lite-jobs
@@ -102,7 +103,7 @@ const parsed = await parseBody(req, parseFooRequest);
 if (!parsed.ok) return parsed.response;
 const { data } = parsed;
 ```
-Parser functions live in `src/lib/schema.ts` and throw `Error` with a human-readable message on invalid input. `parseBody` converts that throw to a 422 response automatically.
+Parser functions live in `src/lib/schema.ts` and throw `Error` with a human-readable message on invalid input. `parseBody` converts that throw to a 422 response automatically. For routes where the JSON body is genuinely optional, use `parseBodyOptional(req, parser, fallback)` from `src/lib/http.ts` — it returns the fallback value instead of a 400 when the body is absent.
 
 **Magic numbers belong in `src/lib/constants.ts`.** Length limits, TTLs, rate limit windows, and other numeric thresholds must be named constants — not inline literals.
 

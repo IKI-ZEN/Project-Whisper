@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-05-28
+
+### Fixed
+
+- `GET /api/health` endpoint added for uptime monitoring
+- `crypto.randomUUID()` replaced with `newId()` from `src/lib/utils.ts` across all route files (`assertions.ts`, `probes.ts`, `atlas.ts`, `vault.ts`, `replay.ts`, `sandbox.ts`) — enforces the single ID-generation source rule
+- `req.json()` in `documents.ts` and `sandbox.ts` replaced with `parseBodyOptional` for optional-body routes; `parseBodyOptional` added to `src/lib/http.ts`
+- UUID validation added to all four handlers in `documents.ts` before R2/KV access
+- Inline numeric literals in `documents.ts` (`8192`, `500`, `5`, `60_000`) replaced with named constants in `src/lib/constants.ts`
+- Custom `doBuild()` helper in `build.ts` replaced with the shared `doFetch()` from `src/routes/sandbox.ts`
+- `"private": true` removed from `package.json` (misleading for a public OSS project)
+- `SETUP.md`: open-AI-proxy warning added; Vectorize `--dimensions` documents its embedding model dependency; Node.js requirement corrected to 20+
+- `README.md`: 0.2.0 Whisperer Suite features documented; all new API routes added; full 7-migration setup sequence; license section and badge; CF Access warning
+
 ## [0.2.0] — 2026-05-28
 
 ### Added

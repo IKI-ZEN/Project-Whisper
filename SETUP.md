@@ -8,7 +8,7 @@ This guide walks through everything required to run Project Aether-Lite locally 
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Node.js | 18 or later | [nodejs.org](https://nodejs.org) |
+| Node.js | 20 or later | [nodejs.org](https://nodejs.org) |
 | Wrangler CLI | included in devDeps | `npm install` |
 | Cloudflare account | free tier works | [cloudflare.com](https://cloudflare.com) |
 

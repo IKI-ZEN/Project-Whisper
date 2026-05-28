@@ -1,5 +1,7 @@
 # Project Aether-Lite
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packages are imported at runtime — all routing, streaming, and serialisation use native Web Platform APIs.
 
 ## What it does
@@ -18,10 +20,20 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 - **Integrity verification** — SHA-256 fingerprint of every sandbox config stored in the Durable Object; `tampered: true` signals out-of-band modification
 - **HMAC-signed exports** — optional `SIGNING_SECRET` enables cryptographic provenance on config export/import
 
+### AI Whisperer Suite (v0.2.0)
+
+- **Threat Monitor** — live SSE stream of guard flag events from `sandbox_events` with pattern frequency analytics (`GET /api/monitor/stream`, `/audit`, `/patterns`)
+- **Evidence Vault** — prompt/response dataset builder with tags, filters, and streaming JSONL export in OpenAI fine-tuning format (`/api/vault`)
+- **Replay Engine** — replay a conversation session against a different model or system prompt with per-turn cosine similarity scoring (`POST /api/replay`)
+- **Model Assertions** — behaviour contract testing with 7 assertion types (`contains`, `not-contains`, `matches`, `similarity-gte`, `judge`, `latency-lte`, `guard-clean`) and pass/fail history (`/api/assertions`)
+- **Semantic Map (Atlas)** — prompt library with embedding, k-means clustering, PCA-2D scatter plot, and nearest-prompt search (`/api/atlas`)
+- **Cron Whisper (Probes)** — scheduled whisperer tool runs (entropy, sensitivity, CoT, sweep) on hourly/daily/weekly cron triggers with time-series results (`/api/probes`)
+
 ## API
 
 ```
-GET  /                         health + endpoint map
+GET  /api/health               health check → {"status":"ok"}
+GET  /api                      endpoint discovery map
 
 POST /api/ai/complete          blocking text completion
 POST /api/ai/stream            SSE token stream
@@ -58,6 +70,41 @@ DELETE /api/sandbox/:id        delete sandbox + KV entry
 POST /api/sandbox/:id/documents         upload file for RAG (text, PDF, markdown, CSV, JSON; max 10 MB)
 GET  /api/sandbox/:id/documents         list uploaded documents
 DELETE /api/sandbox/:id/documents/:docId  delete document + best-effort vector cleanup
+POST /api/sandbox/:id/documents/reindex   re-embed documents (body: { docIds?: string[] }; omit to re-index all)
+
+GET  /api/monitor/stream       SSE stream of guard flag events (live tail of sandbox_events)
+GET  /api/monitor/audit        paginated, filterable guard event history
+GET  /api/monitor/patterns     pattern frequency table (GROUP BY pattern type)
+
+GET    /api/vault              list saved prompt/response pairs (filter by model, tag, tool, date)
+POST   /api/vault              save a prompt/response pair with metadata
+PATCH  /api/vault/:id/tags     update tags on a saved record
+DELETE /api/vault/:id          delete a vault record
+GET    /api/vault/export.jsonl streaming JSONL export in OpenAI fine-tuning format
+
+POST /api/replay               replay a session export against a new model/system prompt → per-turn similarity scores
+GET  /api/replay/:id           retrieve replay result from R2
+
+GET    /api/assertions         list assertion suites
+POST   /api/assertions         create assertion suite
+GET    /api/assertions/:id     get suite + test cases
+PATCH  /api/assertions/:id     update suite
+DELETE /api/assertions/:id     delete suite
+POST   /api/assertions/:id/run run suite → pass/fail results stored in D1
+GET    /api/assertions/:id/history  pass-rate trend (last 20 runs)
+
+GET    /api/atlas              list prompt library entries
+POST   /api/atlas              add prompt to library
+DELETE /api/atlas/:id          delete prompt
+POST   /api/atlas/embed        batch embed library → k-means clusters + PCA-2D scatter data
+POST   /api/atlas/nearest      find N nearest prompts to a query by cosine distance
+
+GET    /api/probes             list scheduled probes
+POST   /api/probes             create probe (tool, prompt, model, schedule: hourly|daily|weekly)
+PATCH  /api/probes/:id         update probe
+DELETE /api/probes/:id         delete probe
+POST   /api/probes/:id/run     run probe immediately → result stored in D1
+GET    /api/probes/:id/history time-series results (last 50 runs)
 
 POST /api/v2/build             create app build → { buildId, wsUrl, appUrl }
 GET  /api/v2/build/:id         build status + blueprint + file list
@@ -232,26 +279,40 @@ Generated apps reference `/chart.js` directly — no CDN, no bundler.
 
 ## Setup
 
-```bash
-npm install
+See [SETUP.md](SETUP.md) for the full step-by-step guide including wrangler.toml configuration, all migrations, and optional Cloudflare Access setup.
 
-# Create Cloudflare resources (one-time)
+Quick start:
+
+```bash
+git clone https://github.com/iki-zen/project-aether-lite.git
+cd project-aether-lite
+npm install
+cp .dev.vars.example .dev.vars
+
+# Create Cloudflare resources once (see SETUP.md for details)
 wrangler kv:namespace create SANDBOX_REGISTRY
 wrangler d1 create aether-lite
 wrangler r2 bucket create aether-lite-files
 wrangler queues create aether-lite-jobs
 wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
 
-# Update wrangler.toml with the returned IDs, then:
+# Paste returned IDs into wrangler.toml, then run all migrations:
 wrangler d1 execute aether-lite --file=./migrations/0001_init.sql
 wrangler d1 execute aether-lite --file=./migrations/0002_request_id.sql
+wrangler d1 execute aether-lite --file=./migrations/0003_identity.sql
+wrangler d1 execute aether-lite --file=./migrations/0004_probes.sql
+wrangler d1 execute aether-lite --file=./migrations/0005_vault.sql
+wrangler d1 execute aether-lite --file=./migrations/0006_assertions.sql
+wrangler d1 execute aether-lite --file=./migrations/0007_atlas.sql
 
-# Local dev (uses remote Workers AI)
+# Local dev (uses remote Workers AI — requires wrangler login)
 npm run dev
 
 # Deploy
 npm run deploy
 ```
+
+> **Warning — open AI proxy without Cloudflare Access.** Without `CF_ACCESS_AUD` set, every API endpoint including all AI inference routes is publicly accessible to anyone who can reach the Worker URL. See [SETUP.md](SETUP.md) for how to configure Cloudflare Access.
 
 Copy `.dev.vars.example` to `.dev.vars` and fill in the values you need:
 
@@ -287,3 +348,7 @@ Copy `.dev.vars.example` to `.dev.vars` and fill in the values you need:
 | Time-series telemetry | Analytics Engine |
 | Outbound email | Email Routing (`SEND_EMAIL` binding) |
 | App hosting | Cloudflare Pages (deploy target via Direct Upload API) |
+
+## License
+
+GNU General Public License v3.0 — see [LICENSE](LICENSE) for the full text.
