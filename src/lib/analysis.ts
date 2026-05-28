@@ -8,8 +8,8 @@
  */
 
 import type { Env } from '../types/env'
-import { newId } from './utils'
-import { VAULT_AUTO_RESULT_MAX_BYTES } from './constants'
+import { newId } from './utils.ts'
+import { VAULT_AUTO_RESULT_MAX_BYTES } from './constants.ts'
 
 // ── Context resolution ────────────────────────────────────────────────────────
 

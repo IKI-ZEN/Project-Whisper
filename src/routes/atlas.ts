@@ -32,19 +32,18 @@ interface PromptRow {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function encodeEmbedding(vec: number[]): string {
-  const buf = new Float32Array(vec).buffer
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+function encodeEmbedding(vec: Float32Array): string {
+  return btoa(String.fromCharCode(...new Uint8Array(vec.buffer)))
 }
 
-function decodeEmbedding(b64: string): number[] {
+function decodeEmbedding(b64: string): Float32Array {
   const binary = atob(b64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return Array.from(new Float32Array(bytes.buffer))
+  return new Float32Array(bytes.buffer)
 }
 
-function pca2d(matrix: number[][]): Array<[number, number]> {
+function pca2d(matrix: Float32Array[]): Array<[number, number]> {
   const n = matrix.length
   if (n === 0) return []
   const d = matrix[0].length
@@ -55,7 +54,7 @@ function pca2d(matrix: number[][]): Array<[number, number]> {
   const centered = matrix.map(row => row.map((v, j) => v - mean[j]))
 
   // Power iteration for a single principal component, with optional deflation
-  function powerIter(data: number[][], prevPC?: number[]): number[] {
+  function powerIter(data: Float32Array[], prevPC?: number[]): number[] {
     let v = new Array<number>(d).fill(0).map(() => Math.random() - 0.5)
     // Initial normalise
     {
@@ -256,10 +255,9 @@ const embedAtlas: Handler = async (req: Request, env: Env) => {
     }
 
     // 3. Decode all embeddings
-    const embeddings: number[][] = prompts.map(p => {
-      if (!p.embedding_cache) return []
-      return decodeEmbedding(p.embedding_cache)
-    }).filter(e => e.length > 0)
+    const embeddings: Float32Array[] = prompts
+      .map(p => p.embedding_cache ? decodeEmbedding(p.embedding_cache) : null)
+      .filter((e): e is Float32Array => e !== null)
 
     // Only cluster the prompts that have valid embeddings
     const validPrompts = prompts.filter(p => p.embedding_cache)
@@ -288,7 +286,7 @@ const embedAtlas: Handler = async (req: Request, env: Env) => {
 
     return json(ok({
       points,
-      clusters: centroids,
+      clusters: centroids.map(c => Array.from(c)),
       k: effectiveK,
       total: prompts.length,
     }))

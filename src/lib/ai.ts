@@ -4,6 +4,8 @@ import { sseEvent } from './http'
 import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS } from './constants'
 import { sha256 } from './utils'
 
+const DEC = new TextDecoder()
+
 // ── Model registry ────────────────────────────────────────────────────────────
 
 export const MODELS = {
@@ -377,13 +379,12 @@ async function* streamSSEFetch(
   const res = await fetch(url, init)
   if (!res.ok || !res.body) throw new Error(`HTTP error ${res.status}`)
   const reader = res.body.getReader()
-  const dec = new TextDecoder()
   let buf = ''
   try {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      buf += dec.decode(value, { stream: true })
+      buf += DEC.decode(value, { stream: true })
       const lines = buf.split('\n'); buf = lines.pop() ?? ''
       for (const line of lines) {
         const payload = line.trim().replace(/^data:\s*/, '')
@@ -565,7 +566,7 @@ export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): Readable
 
 // ── Embeddings ────────────────────────────────────────────────────────────────
 
-export async function embed(ai: Ai, text: string | string[], model?: string): Promise<number[][]> {
+export async function embed(ai: Ai, text: string | string[], model?: string): Promise<Float32Array[]> {
   const texts = Array.isArray(text) ? text : [text]
   const totalLen = texts.reduce((n, t) => n + t.length, 0)
   if (totalLen > MAX_EMBED_CHARS) throw new Error(`Embedding input exceeds ${MAX_EMBED_CHARS} characters`)
@@ -573,7 +574,10 @@ export async function embed(ai: Ai, text: string | string[], model?: string): Pr
   // Cache embeddings — deterministic, expensive, safe to cache for 24h
   const cacheKey = new Request(`https://whisper-cache/embed/${await sha256(JSON.stringify([model ?? MODELS.embed, texts]))}`)
   const cached = await caches.default.match(cacheKey)
-  if (cached) return cached.json() as Promise<number[][]>
+  if (cached) {
+    const rows = await cached.json() as number[][]
+    return rows.map(r => new Float32Array(r))
+  }
 
   const response = await run(ai)(model ?? MODELS.embed, { text: texts })
   const r = response as { data?: number[][] }
@@ -583,7 +587,7 @@ export async function embed(ai: Ai, text: string | string[], model?: string): Pr
     headers: { 'Cache-Control': 'max-age=86400', 'Content-Type': 'application/json' },
   }))
 
-  return result
+  return result.map(r => new Float32Array(r))
 }
 
 // ── Image generation ──────────────────────────────────────────────────────────
@@ -724,7 +728,7 @@ export function streamInSandboxWithRAG(ai: Ai, env: Env, config: SandboxConfig, 
 
 // ── Whisperer analysis helpers ────────────────────────────────────────────────
 
-export function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   let dot = 0, normA = 0, normB = 0
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i]
@@ -735,22 +739,22 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return denom === 0 ? 0 : dot / denom
 }
 
-export function computeSimilarityMatrix(embeddings: number[][]): number[][] {
+export function computeSimilarityMatrix(embeddings: Float32Array[]): number[][] {
   return embeddings.map(a => embeddings.map(b => cosineSimilarity(a, b)))
 }
 
 export function kMeansClusters(
-  embeddings: number[][],
+  embeddings: Float32Array[],
   k: number,
   maxIter = 20,
-): { labels: number[]; centroids: number[][] } {
+): { labels: number[]; centroids: Float32Array[] } {
   const n = embeddings.length
   const dim = embeddings[0]?.length ?? 0
   k = Math.min(k, n)
 
   // Seeded-deterministic pick: evenly spaced indices
   const step = Math.max(1, Math.floor(n / k))
-  const centroids = Array.from({ length: k }, (_, i) => [...(embeddings[i * step] ?? embeddings[0])])
+  const centroids = Array.from({ length: k }, (_, i) => new Float32Array(embeddings[i * step] ?? embeddings[0]))
 
   let labels = new Array<number>(n).fill(0)
 

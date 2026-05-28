@@ -4,6 +4,8 @@ import type { Env } from '../types/env'
 // Cloudflare Access public keys rotate infrequently. Cache them per Worker
 // isolate for 1 hour to avoid an outbound fetch on every protected request.
 
+const DEC = new TextDecoder()
+
 let keyCache: Map<string, CryptoKey> | null = null
 let keyCacheExpiry = 0
 
@@ -55,10 +57,9 @@ async function validateJWT(
     const parts = token.split('.')
     if (parts.length !== 3) return null
 
-    const dec     = new TextDecoder()
-    const header  = JSON.parse(dec.decode(b64urlToBytes(parts[0]))) as { kid: string; alg?: string }
+    const header  = JSON.parse(DEC.decode(b64urlToBytes(parts[0]))) as { kid: string; alg?: string }
     type Payload  = { aud: string | string[]; exp: number; email?: string; sub?: string }
-    const payload = JSON.parse(dec.decode(b64urlToBytes(parts[1]))) as Payload
+    const payload = JSON.parse(DEC.decode(b64urlToBytes(parts[1]))) as Payload
 
     // Validate expiry
     if (payload.exp < Math.floor(Date.now() / 1000)) return null
