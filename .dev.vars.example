@@ -8,10 +8,17 @@ ENVIRONMENT=development
 CLOUDFLARE_ACCOUNT_ID=
 AI_GATEWAY_ID=
 
-# API keys for flagship models (only needed if AI_GATEWAY_ID is set)
+# API keys for gateway providers (only needed if AI_GATEWAY_ID is set)
+# At minimum, set the providers you intend to use — all are optional.
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 GOOGLE_AI_KEY=
+GROQ_API_KEY=        # groq:llama-3.3-70b-versatile, groq:llama-3.1-8b-instant
+MISTRAL_API_KEY=     # mistral:mistral-large-latest, mistral:mistral-small-latest
+DEEPSEEK_API_KEY=    # deepseek:deepseek-chat, deepseek:deepseek-reasoner
+XAI_API_KEY=         # xai:grok-2-latest
+PERPLEXITY_API_KEY=  # perplexity:sonar-pro (includes real-time web search)
+ELEVENLABS_API_KEY=  # reserved for TTS endpoint (POST /api/ai/tts)
 
 # Optional: sign exported configs with HMAC-SHA256 so imports can verify provenance.
 # Any string works — use `openssl rand -hex 32` to generate a strong secret.

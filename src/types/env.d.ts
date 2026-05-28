@@ -65,6 +65,12 @@ export interface Env {
   OPENAI_API_KEY?: string
   ANTHROPIC_API_KEY?: string
   GOOGLE_AI_KEY?: string
+  GROQ_API_KEY?: string
+  MISTRAL_API_KEY?: string
+  DEEPSEEK_API_KEY?: string
+  XAI_API_KEY?: string
+  PERPLEXITY_API_KEY?: string
+  ELEVENLABS_API_KEY?: string
   SIGNING_SECRET?: string
   ALLOWED_ORIGINS?: string   // comma-separated origins, or '*' (default)
 

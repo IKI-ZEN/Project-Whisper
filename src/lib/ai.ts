@@ -31,34 +31,71 @@ function logUsage(
 // ── Model registry ────────────────────────────────────────────────────────────
 
 export const MODELS = {
-  // Workers AI
-  text:        '@cf/meta/llama-3.1-8b-instruct',
-  textLarge:   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-  embed:       '@cf/baai/bge-base-en-v1.5',
-  image:       '@cf/black-forest-labs/flux-1-schnell',
-  transcribe:  '@cf/openai/whisper',
-  // Flagship via AI Gateway
-  gpt4o:       'openai:gpt-4o',
-  gpt4oMini:   'openai:gpt-4o-mini',
-  claude:      'anthropic:claude-sonnet-4-6',
-  claudeOpus:  'anthropic:claude-opus-4-7',
-  gemini:      'google:gemini-2.0-flash',
+  // Workers AI (no API key needed)
+  text:         '@cf/meta/llama-3.1-8b-instruct',
+  textLarge:    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  embed:        '@cf/baai/bge-base-en-v1.5',
+  image:        '@cf/black-forest-labs/flux-1-schnell',
+  transcribe:   '@cf/openai/whisper',
+  // OpenAI via AI Gateway
+  gpt4o:        'openai:gpt-4o',
+  gpt4oMini:    'openai:gpt-4o-mini',
+  // Anthropic via AI Gateway
+  claude:       'anthropic:claude-sonnet-4-6',
+  claudeOpus:   'anthropic:claude-opus-4-7',
+  // Google via AI Gateway
+  gemini:       'google:gemini-2.0-flash',
+  geminiPro:    'google:gemini-1.5-pro',
+  // Groq — ultra-fast inference
+  groqLlama:    'groq:llama-3.3-70b-versatile',
+  groqFast:     'groq:llama-3.1-8b-instant',
+  // Mistral AI
+  mistral:      'mistral:mistral-large-latest',
+  mistralSmall: 'mistral:mistral-small-latest',
+  // DeepSeek
+  deepseek:     'deepseek:deepseek-chat',
+  deepseekR1:   'deepseek:deepseek-reasoner',
+  // xAI (Grok)
+  grok:         'xai:grok-2-latest',
+  // Perplexity (online models with web search)
+  sonar:        'perplexity:sonar-pro',
 } as const
 
-// ── Gateway routing ───────────────────────────────────────────────────────────
+// ── Gateway provider registry ─────────────────────────────────────────────────
 
-function parseGateway(model: string):
-  | { provider: 'openai' | 'anthropic' | 'google'; id: string }
-  | null {
+type WireFormat = 'openai' | 'anthropic' | 'google'
+
+interface GatewayProviderDef {
+  format: WireFormat
+  path:   (id: string) => string   // URL path after gateway base
+  apiKey: (env: Env) => string
+}
+
+// Each entry maps the model prefix (before ':') to its gateway path and auth.
+// All OpenAI-compatible providers share the same request/response format.
+const GATEWAY_PROVIDERS: Record<string, GatewayProviderDef> = {
+  openai:     { format: 'openai',    path: _  => '/openai/chat/completions',                                              apiKey: e => e.OPENAI_API_KEY     ?? '' },
+  anthropic:  { format: 'anthropic', path: _  => '/anthropic/v1/messages',                                               apiKey: e => e.ANTHROPIC_API_KEY  ?? '' },
+  google:     { format: 'google',    path: id => `/google-ai-studio/v1/models/${encodeURIComponent(id)}:generateContent`, apiKey: e => e.GOOGLE_AI_KEY      ?? '' },
+  groq:       { format: 'openai',    path: _  => '/groq/openai/v1/chat/completions',                                     apiKey: e => e.GROQ_API_KEY       ?? '' },
+  mistral:    { format: 'openai',    path: _  => '/mistral/v1/chat/completions',                                         apiKey: e => e.MISTRAL_API_KEY    ?? '' },
+  deepseek:   { format: 'openai',    path: _  => '/deepseek/v1/chat/completions',                                        apiKey: e => e.DEEPSEEK_API_KEY   ?? '' },
+  xai:        { format: 'openai',    path: _  => '/x-ai/v1/chat/completions',                                           apiKey: e => e.XAI_API_KEY        ?? '' },
+  perplexity: { format: 'openai',    path: _  => '/perplexity-ai/chat/completions',                                      apiKey: e => e.PERPLEXITY_API_KEY ?? '' },
+}
+
+type GatewayResult = { provider: string; id: string; def: GatewayProviderDef }
+
+function parseGateway(model: string): GatewayResult | null {
   const sep = model.indexOf(':')
   if (sep === -1) return null
   const p = model.slice(0, sep)
-  if (!(p === 'openai' || p === 'anthropic' || p === 'google')) return null
+  const def = GATEWAY_PROVIDERS[p]
+  if (!def) return null
   const id = model.slice(sep + 1)
-  // Strict allowlist — only alphanumeric, hyphens, dots, and underscores.
-  // Prevents path traversal in URL-templated gateway calls (e.g. google endpoint).
+  // Strict allowlist — prevents path traversal in URL-templated gateway calls.
   if (!/^[a-zA-Z0-9][\w.\-]*$/.test(id)) return null
-  return { provider: p as 'openai' | 'anthropic' | 'google', id }
+  return { provider: p, id, def }
 }
 
 function gatewayBase(env: Env): string {
@@ -298,10 +335,12 @@ function buildOpenAIMessages(opts: CompletionOpts): Array<Record<string, unknown
 
 // ── Provider completions (gateway) ────────────────────────────────────────────
 
-async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Promise<string> {
+// Handles all OpenAI-compatible providers: openai, groq, mistral, deepseek, xai, perplexity
+async function completeOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
+  const { id: model, def } = gw
   const temp = opts.temperature ?? DEFAULT_TEMPERATURE
-  // o-series reasoning models use different params
-  const isReasoning = /^o[1-9]/.test(model)
+  // o-series reasoning models use different params (OpenAI-specific)
+  const isReasoning = gw.provider === 'openai' && /^o[1-9]/.test(model)
   const body: Record<string, unknown> = {
     model,
     messages: buildOpenAIMessages(opts),
@@ -321,11 +360,11 @@ async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Pr
   }
   const metaHeaders: Record<string, string> = {}
   if (opts.sandboxId) metaHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
-  const res = await fetch(`${gatewayBase(env)}/openai/chat/completions`, {
+  const res = await fetch(`${gatewayBase(env)}${def.path(model)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${env.OPENAI_API_KEY ?? ''}`,
+      'Authorization': `Bearer ${def.apiKey(env)}`,
       'cf-aig-cache-ttl':  '3600',
       'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
       ...metaHeaders,
@@ -333,7 +372,7 @@ async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Pr
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
-  if (!res.ok) throw new Error(`OpenAI gateway error ${res.status}: ${await res.text()}`)
+  if (!res.ok) throw new Error(`${gw.provider} gateway error ${res.status}: ${await res.text()}`)
   type OAIResp = { choices: Array<{ finish_reason: string; message: { content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }> }
   const data = await res.json() as OAIResp
   const choice = data.choices[0]
@@ -507,12 +546,13 @@ function toReadableStream(gen: () => AsyncGenerator<string>): ReadableStream {
 
 // ── Provider streaming (gateway) ──────────────────────────────────────────────
 
-function streamOpenAI(env: Env, model: string, opts: CompletionOpts): ReadableStream {
+function streamOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts): ReadableStream {
+  const { id: model, def } = gw
   return toReadableStream(() => streamSSEFetch(
-    `${gatewayBase(env)}/openai/chat/completions`,
+    `${gatewayBase(env)}${def.path(model)}`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY ?? ''}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${def.apiKey(env)}` },
       body: JSON.stringify({ model, messages: buildMessages(opts), temperature: opts.temperature ?? DEFAULT_TEMPERATURE, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, stream: true }),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
@@ -559,9 +599,9 @@ export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<
   const gw = parseGateway(opts.model ?? '')
   let result: string
   if (gw) {
-    if (gw.provider === 'openai')    result = await completeOpenAI(env, gw.id, opts)
-    else if (gw.provider === 'anthropic') result = await completeAnthropic(env, gw.id, opts)
-    else result = await completeGoogle(env, gw.id, opts)
+    if (gw.def.format === 'anthropic') result = await completeAnthropic(env, gw.id, opts)
+    else if (gw.def.format === 'google') result = await completeGoogle(env, gw.id, opts)
+    else result = await completeOpenAI(env, gw, opts)
   } else {
     const response = await run(ai)(opts.model ?? MODELS.text, {
       messages: buildMessages(opts),
@@ -605,7 +645,7 @@ export async function think(ai: Ai, env: Env, opts: CompletionOpts & { budgetTok
   const t0 = Date.now()
   const gw = parseGateway(opts.model ?? '')
   let raw: string
-  if (gw?.provider === 'anthropic') {
+  if (gw?.def.format === 'anthropic') {
     raw = await completeAnthropic(env, gw.id, { ...opts, thinking: opts.budgetTokens ?? 8000, temperature: 1 })
   } else {
     // Fallback: prompt the model to think step-by-step and wrap its thinking in XML
@@ -640,7 +680,7 @@ function wrapStreamWithLogging(
         controller.close()
         if (!opts.sandboxId) {
           const model     = opts.model ?? MODELS.text
-          const inputText = opts.prompt ?? (opts.messages ?? []).map(m => m.content).join('')
+          const inputText = opts.prompt ?? (opts.messages ?? []).map(m => contentToText(m.content)).join('')
           logUsage(env, undefined, model, provider, 'stream',
             Math.ceil(inputText.length / 4), Math.ceil(accumulated.length / 4), Date.now() - t0)
         }
@@ -667,9 +707,9 @@ export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): Readable
   const gw = parseGateway(opts.model ?? '')
   let inner: ReadableStream
   if (gw) {
-    if (gw.provider === 'openai')    inner = streamOpenAI(env, gw.id, opts)
-    else if (gw.provider === 'anthropic') inner = streamAnthropic(env, gw.id, opts)
-    else inner = streamGoogle(env, gw.id, opts)
+    if (gw.def.format === 'anthropic') inner = streamAnthropic(env, gw.id, opts)
+    else if (gw.def.format === 'google') inner = streamGoogle(env, gw.id, opts)
+    else inner = streamOpenAI(env, gw, opts)
   } else {
     const encoder = new TextEncoder()
     inner = new ReadableStream({

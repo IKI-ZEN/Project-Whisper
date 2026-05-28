@@ -22,6 +22,21 @@ const PRICES: Record<string, Price> = {
   'claude-opus-4-7':                           { inputPer1k: 0.015,   outputPer1k: 0.075    },
   // Google
   'gemini-2.0-flash':                          { inputPer1k: 0.0001,  outputPer1k: 0.0004   },
+  'gemini-1.5-pro':                            { inputPer1k: 0.00125, outputPer1k: 0.005    },
+  // Groq (fast inference — Llama models)
+  'llama-3.3-70b-versatile':                   { inputPer1k: 0.00059, outputPer1k: 0.00079  },
+  'llama-3.1-8b-instant':                      { inputPer1k: 0.00005, outputPer1k: 0.00008  },
+  // Mistral AI
+  'mistral-large-latest':                      { inputPer1k: 0.003,   outputPer1k: 0.009    },
+  'mistral-small-latest':                      { inputPer1k: 0.0002,  outputPer1k: 0.0006   },
+  // DeepSeek
+  'deepseek-chat':                             { inputPer1k: 0.00014, outputPer1k: 0.00028  },
+  'deepseek-reasoner':                         { inputPer1k: 0.00055, outputPer1k: 0.00219  },
+  // xAI (Grok)
+  'grok-2-latest':                             { inputPer1k: 0.002,   outputPer1k: 0.010    },
+  // Perplexity (includes search costs)
+  'sonar-pro':                                 { inputPer1k: 0.003,   outputPer1k: 0.015    },
+  'sonar':                                     { inputPer1k: 0.001,   outputPer1k: 0.001    },
 }
 
 const FALLBACK: Price = { inputPer1k: 0.0001, outputPer1k: 0.0001 }

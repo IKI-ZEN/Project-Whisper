@@ -20,6 +20,11 @@ const ACCOUNT_ID  = process.env.CLOUDFLARE_ACCOUNT_ID ?? ''
 const GATEWAY_ID  = process.env.AI_GATEWAY_ID         ?? ''
 const ANTHROPIC   = process.env.ANTHROPIC_API_KEY     ?? ''
 const OPENAI      = process.env.OPENAI_API_KEY        ?? ''
+const GROQ        = process.env.GROQ_API_KEY          ?? ''
+const MISTRAL     = process.env.MISTRAL_API_KEY       ?? ''
+const DEEPSEEK    = process.env.DEEPSEEK_API_KEY      ?? ''
+const XAI         = process.env.XAI_API_KEY           ?? ''
+const PERPLEXITY  = process.env.PERPLEXITY_API_KEY    ?? ''
 
 if (!ACCOUNT_ID || !GATEWAY_ID || !ANTHROPIC) {
   console.error('Missing env vars. Set CLOUDFLARE_ACCOUNT_ID, AI_GATEWAY_ID, ANTHROPIC_API_KEY.')
@@ -384,6 +389,103 @@ async function testGatewayAuthToken() {
     info('cf-aig-token header present but gateway auth not enforced (token ignored)')
   } else {
     info('Unexpected status with cf-aig-token', String(r1.status))
+  }
+}
+
+async function testNewProviders() {
+  section('12. New OpenAI-compatible providers')
+
+  const providers: Array<{ name: string; key: string; path: string; model: string }> = [
+    { name: 'groq',       key: GROQ,       path: '/groq/openai/v1/chat/completions',   model: 'llama-3.1-8b-instant' },
+    { name: 'mistral',    key: MISTRAL,    path: '/mistral/v1/chat/completions',        model: 'mistral-small-latest' },
+    { name: 'deepseek',   key: DEEPSEEK,   path: '/deepseek/v1/chat/completions',       model: 'deepseek-chat' },
+    { name: 'xai',        key: XAI,        path: '/x-ai/v1/chat/completions',          model: 'grok-2-latest' },
+    { name: 'perplexity', key: PERPLEXITY, path: '/perplexity-ai/chat/completions',    model: 'sonar' },
+  ]
+
+  for (const p of providers) {
+    if (!p.key) { info(`${p.name}: no API key set — skipping`); continue }
+
+    const t0 = Date.now()
+    try {
+      const res = await fetch(`${GW_BASE}${p.path}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${p.key}` },
+        body:    JSON.stringify({
+          model:    p.model,
+          messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }],
+          max_tokens: 8,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      })
+      const latency = Date.now() - t0
+      const data = await res.json() as Record<string, unknown>
+      if (res.status === 200) {
+        const content = ((data.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? '').trim()
+        pass(`${p.name} (${p.model}) — ${latency}ms — "${content}"`)
+        // Check response headers
+        dumpHeaders(res.headers, ['cf-aig-'])
+      } else {
+        fail(`${p.name} returned ${res.status}`, JSON.stringify(data).slice(0, 200))
+      }
+    } catch (e) {
+      fail(`${p.name} threw`, String(e))
+    }
+  }
+}
+
+async function testProviderLatencyComparison() {
+  section('13. Latency comparison — same prompt across available providers')
+
+  const tests: Array<{ label: string; key: string; url: string; body: Record<string, unknown> }> = [
+    {
+      label: 'Anthropic claude-haiku',
+      key:   ANTHROPIC,
+      url:   `${GW_BASE}/anthropic/v1/messages`,
+      body:  { model: 'claude-haiku-4-5-20251001', messages: [{ role: 'user', content: 'Say "ok".' }], max_tokens: 8 },
+    },
+    ...(GROQ ? [{
+      label: 'Groq llama-3.1-8b-instant',
+      key:   GROQ,
+      url:   `${GW_BASE}/groq/openai/v1/chat/completions`,
+      body:  { model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: 'Say "ok".' }], max_tokens: 8 },
+    }] : []),
+    ...(OPENAI ? [{
+      label: 'OpenAI gpt-4o-mini',
+      key:   OPENAI,
+      url:   `${GW_BASE}/openai/chat/completions`,
+      body:  { model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'Say "ok".' }], max_tokens: 8 },
+    }] : []),
+    ...(DEEPSEEK ? [{
+      label: 'DeepSeek deepseek-chat',
+      key:   DEEPSEEK,
+      url:   `${GW_BASE}/deepseek/v1/chat/completions`,
+      body:  { model: 'deepseek-chat', messages: [{ role: 'user', content: 'Say "ok".' }], max_tokens: 8 },
+    }] : []),
+  ]
+
+  for (const t of tests) {
+    const t0 = Date.now()
+    try {
+      const authHeader = t.url.includes('/anthropic/') ? 'x-api-key' : 'Authorization'
+      const authValue  = t.url.includes('/anthropic/') ? t.key : `Bearer ${t.key}`
+      const extraHeaders = t.url.includes('/anthropic/') ? { 'anthropic-version': '2023-06-01' } : {}
+      const res = await fetch(t.url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', [authHeader]: authValue, ...extraHeaders },
+        body:    JSON.stringify(t.body),
+        signal:  AbortSignal.timeout(30_000),
+      })
+      const ms = Date.now() - t0
+      if (res.status === 200) {
+        pass(`${t.label}`, `${ms}ms`)
+      } else {
+        fail(`${t.label} — ${res.status}`, `${ms}ms`)
+      }
+      await res.body?.cancel()
+    } catch (e) {
+      fail(`${t.label} threw`, String(e))
+    }
   }
 }
 
