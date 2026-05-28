@@ -3,11 +3,15 @@
 
 import type { Env, AetherLiteJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, checkRateLimit } from '../lib/http'
+import { json, ok, err, checkRateLimit, parseBodyOptional } from '../lib/http'
 import { scan } from '../lib/guard'
 import { newId, now } from '../lib/utils'
-import { MAX_DOCUMENT_BYTES } from '../lib/constants'
+import { MAX_DOCUMENT_BYTES, GUARD_SCAN_SLICE_BYTES, MAX_VECTOR_CHUNKS, REINDEX_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '../lib/constants'
+import { parseReindexBody } from '../lib/schema'
 import { sandboxExists } from './sandbox'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isUUID(s: string): boolean { return UUID_RE.test(s) }
 
 // ── Document metadata stored in R2 customMetadata ────────────────────────────
 
@@ -37,6 +41,7 @@ function r2Key(sandboxId: string, docId: string): string {
 
 const upload: Handler = async (req, env, params: Params) => {
   const sandboxId = params.id ?? ''
+  if (!isUUID(sandboxId)) return json(err('Invalid sandbox id'), 400)
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
 
   let formData: FormData
@@ -64,7 +69,7 @@ const upload: Handler = async (req, env, params: Params) => {
   if (!mimeType.includes('pdf')) {
     try {
       const text = await file.text()
-      const guard = scan(text.slice(0, 8192))
+      const guard = scan(text.slice(0, GUARD_SCAN_SLICE_BYTES))
       if (guard.riskLevel === 'blocked') {
         return json(err('Document rejected: adversarial content detected', guard.patterns.join(', ')), 422)
       }
@@ -104,6 +109,7 @@ const upload: Handler = async (req, env, params: Params) => {
 
 const list: Handler = async (_req, env, params: Params) => {
   const sandboxId = params.id ?? ''
+  if (!isUUID(sandboxId)) return json(err('Invalid sandbox id'), 400)
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
 
   const listed = await env.FILES.list({ prefix: `sandboxes/${sandboxId}/documents/` })
@@ -124,6 +130,7 @@ const list: Handler = async (_req, env, params: Params) => {
 const del: Handler = async (_req, env, params: Params) => {
   const sandboxId = params.id ?? ''
   const docId = params.docId ?? ''
+  if (!isUUID(sandboxId)) return json(err('Invalid sandbox id'), 400)
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
 
   const key = r2Key(sandboxId, docId)
@@ -134,8 +141,7 @@ const del: Handler = async (_req, env, params: Params) => {
 
   // Best-effort vector cleanup — delete all chunks for this document
   // Chunk IDs follow the pattern {sandboxId}_{docId}_{chunkIndex}
-  // We attempt to delete up to 500 chunks (more than enough for any realistic document)
-  const chunkIds = Array.from({ length: 500 }, (_, i) => `${sandboxId}_${docId}_${i}`)
+  const chunkIds = Array.from({ length: MAX_VECTOR_CHUNKS }, (_, i) => `${sandboxId}_${docId}_${i}`)
   try {
     await env.VECTORS.deleteByIds(chunkIds)
   } catch { /* non-fatal — vectors may not exist yet if still processing */ }
@@ -147,15 +153,14 @@ const del: Handler = async (_req, env, params: Params) => {
 
 const reindex: Handler = async (req, env, params: Params) => {
   const sandboxId = params.id ?? ''
+  if (!isUUID(sandboxId)) return json(err('Invalid sandbox id'), 400)
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
-  const rlRes = await checkRateLimit(`rl:reindex:${sandboxId}`, 5, 60_000, env, 'Reindex rate limit exceeded — try again in a minute.')
+  const rlRes = await checkRateLimit(`rl:reindex:${sandboxId}`, REINDEX_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, env, 'Reindex rate limit exceeded — try again in a minute.')
   if (rlRes) return rlRes
 
-  let docIds: string[] | undefined
-  try {
-    const body = await req.json() as { docIds?: string[] }
-    if (Array.isArray(body.docIds)) docIds = body.docIds
-  } catch { /* no body = re-index all */ }
+  const p = await parseBodyOptional(req, parseReindexBody, { docIds: undefined })
+  if (!p.ok) return p.response
+  const { docIds } = p.data
 
   const job: AetherLiteJob = {
     type: 'embedding_batch',

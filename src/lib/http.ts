@@ -60,6 +60,17 @@ export async function parseBody<T>(
   try { return { ok: true, data: parse(raw) } } catch (e) { return { ok: false, response: json(err(String(e)), 422) } }
 }
 
+// Like parseBody but treats a missing/non-JSON body as fallback instead of 400.
+export async function parseBodyOptional<T>(
+  req: Request,
+  parse: (body: unknown) => T,
+  fallback: T,
+): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
+  let raw: unknown
+  try { raw = await readJson(req) } catch { return { ok: true, data: fallback } }
+  try { return { ok: true, data: parse(raw) } } catch (e) { return { ok: false, response: json(err(String(e)), 422) } }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 import type { Env } from '../types/env'

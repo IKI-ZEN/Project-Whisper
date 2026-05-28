@@ -3,8 +3,8 @@
 
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, readJson, sseResponse, parseBody, listAllKV } from '../lib/http'
-import { parseCreateSandboxRequest, parseRunSandboxRequest, type SandboxConfig } from '../lib/schema'
+import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV } from '../lib/http'
+import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
@@ -321,15 +321,9 @@ const issueSession: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
-  let sessionId: string
-  try {
-    const body = await req.json() as { sessionId?: string }
-    sessionId = (typeof body.sessionId === 'string' && body.sessionId.length > 0)
-      ? body.sessionId
-      : newId()
-  } catch {
-    sessionId = newId()
-  }
+  const p = await parseBodyOptional(req, parseSessionBody, { sessionId: undefined })
+  if (!p.ok) return p.response
+  const sessionId = p.data.sessionId ?? newId()
 
   const token = env.SIGNING_SECRET ? await signPayload(`${id}:${sessionId}`, env.SIGNING_SECRET) : null
   return json(ok({ sessionId, token }))

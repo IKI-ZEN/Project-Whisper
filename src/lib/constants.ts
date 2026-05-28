@@ -85,3 +85,8 @@ export const IMAGE_RATE_LIMIT_MAX        = 20  // 20 uploads/min per app
 // Build list (KV index mirrors sandbox pattern)
 export const BUILD_KEY_PREFIX            = 'build:'
 export const BUILD_TTL                   = 604800  // 7 days
+
+// Document route limits
+export const GUARD_SCAN_SLICE_BYTES      = 8192    // max bytes fed to guard scan on upload
+export const MAX_VECTOR_CHUNKS           = 500     // chunk IDs deleted on document delete
+export const REINDEX_RATE_LIMIT_MAX      = 5       // reindex calls/min per sandbox

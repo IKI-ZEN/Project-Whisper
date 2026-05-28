@@ -7,7 +7,7 @@ import { json, ok, err, parseBody, listAllKV } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
 import { newId } from '../lib/utils'
 import { BUILD_KEY_PREFIX, BUILD_TTL } from '../lib/constants'
-import { identityHeader } from './sandbox'
+import { doFetch, identityHeader } from './sandbox'
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
@@ -15,20 +15,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function isUUID(s: string): boolean { return UUID_RE.test(s) }
 
-// ── DO stub helpers ───────────────────────────────────────────────────────────
+// ── DO stub helper ────────────────────────────────────────────────────────────
 
 function buildStub(env: Env, id: string): DurableObjectStub {
   return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(id))
-}
-
-function doBuild(stub: DurableObjectStub, path: string, method = 'GET', body?: unknown, extraHeaders?: Record<string, string>): Promise<Response> {
-  const headers: Record<string, string> = { ...extraHeaders }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  return stub.fetch(new Request(`https://do${path}`, {
-    method,
-    headers: Object.keys(headers).length ? headers : undefined,
-    body:    body !== undefined ? JSON.stringify(body) : undefined,
-  }))
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -48,7 +38,7 @@ export const createBuildHandler: Handler = async (req, env) => {
   const id   = newId()
   const stub = buildStub(env, id)
 
-  const initRes  = await doBuild(stub, '/init', 'POST', { id, description, name, sandboxId, model }, identityHeader(req))
+  const initRes  = await doFetch(stub, 'init', 'POST', { id, description, name, sandboxId, model }, identityHeader(req))
   const initData = await initRes.json() as { ok: boolean; error?: string }
   if (!initData.ok) return json(err(initData.error ?? 'Failed to initialise build'), 500)
 
@@ -65,7 +55,7 @@ export const createBuildHandler: Handler = async (req, env) => {
 export const getBuildHandler: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
-  const res  = await doBuild(buildStub(env, id), '/status')
+  const res  = await doFetch(buildStub(env, id), 'status', 'GET')
   const data = await res.json() as { ok: boolean; data?: unknown; error?: string }
   if (!data.ok) return json(err(data.error ?? 'Build not found'), 404)
   return json(ok(data.data))
@@ -75,7 +65,7 @@ export const getBuildHandler: Handler = async (_req, env, params) => {
 export const listBuildFilesHandler: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
-  const res  = await doBuild(buildStub(env, id), '/files')
+  const res  = await doFetch(buildStub(env, id), 'files', 'GET')
   const data = await res.json() as { ok: boolean; data?: unknown; error?: string }
   if (!data.ok) return json(err(data.error ?? 'Build not found'), 404)
   return json(ok(data.data))
@@ -87,7 +77,7 @@ export const getBuildFileHandler: Handler = async (_req, env, params) => {
   const filename = params.filename ?? 'index.html'
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
   if (filename.startsWith('.')) return json(err('File not found'), 404)
-  const res = await doBuild(buildStub(env, id), `/files/${encodeURIComponent(filename)}`)
+  const res = await doFetch(buildStub(env, id), `files/${encodeURIComponent(filename)}`, 'GET')
   if (!res.ok) return json(err('File not found'), 404)
   // Return the raw file response (already has correct Content-Type from the DO)
   return res
@@ -97,7 +87,7 @@ export const getBuildFileHandler: Handler = async (_req, env, params) => {
 export const deleteBuildHandler: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
-  const res  = await doBuild(buildStub(env, id), '/', 'DELETE')
+  const res  = await doFetch(buildStub(env, id), '', 'DELETE')
   const data = await res.json() as { ok: boolean; error?: string }
   if (!data.ok) return json(err(data.error ?? 'Delete failed'), 500)
   await env.SANDBOX_REGISTRY.delete(`${BUILD_KEY_PREFIX}${id}`)
@@ -128,7 +118,7 @@ export const deployBuildHandler: Handler = async (_req, env, params) => {
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
 
   // 1. Verify build is complete
-  const statusRes  = await doBuild(buildStub(env, id), '/status')
+  const statusRes  = await doFetch(buildStub(env, id), 'status', 'GET')
   const statusData = await statusRes.json() as { ok: boolean; data?: { status: string; files: string[]; name: string }; error?: string }
   if (!statusData.ok || !statusData.data) return json(err('Build not found'), 404)
   if (statusData.data.status !== 'complete') return json(err(`Build not complete (status: ${statusData.data.status})`), 409)

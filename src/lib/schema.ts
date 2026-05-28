@@ -559,3 +559,27 @@ export function parseBuildRequest(body: unknown): BuildRequest {
   if (model     && model.length     > 128)          throw new Error('model must be <= 128 characters')
   return { description: description.trim(), name, sandboxId, model }
 }
+
+// ── Optional-body parsers (used with parseBodyOptional) ───────────────────────
+
+export interface ReindexBody { docIds: string[] | undefined }
+
+export function parseReindexBody(body: unknown): ReindexBody {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  if (body.docIds === undefined) return { docIds: undefined }
+  if (!Array.isArray(body.docIds)) throw new Error('docIds must be an array')
+  return { docIds: body.docIds.map((d, i) => {
+    if (typeof d !== 'string') throw new Error(`docIds[${i}] must be a string`)
+    return d
+  }) }
+}
+
+export interface SessionBody { sessionId: string | undefined }
+
+export function parseSessionBody(body: unknown): SessionBody {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  if (body.sessionId === undefined) return { sessionId: undefined }
+  if (typeof body.sessionId !== 'string') throw new Error('sessionId must be a string')
+  if (body.sessionId.length > 64) throw new Error('sessionId must be <= 64 characters')
+  return { sessionId: body.sessionId || undefined }
+}
