@@ -96,6 +96,10 @@ export const MAX_DRIFT_TURNS             = 20
 export const MAX_STRESS_LEVELS           = 8
 export const STRESS_CHARS_PER_TOKEN      = 4
 
+// Rubric Evaluator
+export const MAX_RUBRIC_CRITERIA         = 8
+export const MAX_RUBRIC_SAMPLES          = 5
+
 // Document route limits
 export const GUARD_SCAN_SLICE_BYTES      = 8192    // max bytes fed to guard scan on upload
 export const MAX_VECTOR_CHUNKS           = 500     // chunk IDs deleted on document delete

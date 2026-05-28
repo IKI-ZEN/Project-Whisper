@@ -6,7 +6,7 @@ import {
   MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN, MAX_BUILD_DESCRIPTION_LEN,
   MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
-  MAX_DRIFT_TURNS, MAX_STRESS_LEVELS,
+  MAX_DRIFT_TURNS, MAX_STRESS_LEVELS, MAX_RUBRIC_CRITERIA, MAX_RUBRIC_SAMPLES,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -676,6 +676,46 @@ export function parseContextStressRequest(body: unknown): ContextStressRequest {
     model:         body.model        !== undefined ? str(body.model,        'model')        : undefined,
     maxTokens:     body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
     paddingLevels,
+  }
+}
+
+// ── Rubric Evaluator ──────────────────────────────────────────────────────────
+
+export interface RubricCriterion {
+  name: string
+  description: string
+  weight: number
+}
+
+export interface EvaluateRequest {
+  prompt: string
+  systemPrompt?: string
+  model?: string
+  judgeModel?: string
+  samples: number
+  criteria: RubricCriterion[]
+}
+
+export function parseEvaluateRequest(body: unknown): EvaluateRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  if (!Array.isArray(body.criteria)) throw new Error('criteria must be an array')
+  if (body.criteria.length < 1 || body.criteria.length > MAX_RUBRIC_CRITERIA)
+    throw new Error(`criteria must have 1–${MAX_RUBRIC_CRITERIA} items`)
+  const criteria: RubricCriterion[] = body.criteria.map((c: unknown, i: number) => {
+    if (!isObj(c)) throw new Error(`criteria[${i}] must be an object`)
+    const name   = str(c.name, `criteria[${i}].name`)
+    const desc   = str(c.description, `criteria[${i}].description`)
+    const weight = typeof c.weight === 'number' && isFinite(c.weight) && c.weight >= 0 && c.weight <= 1
+      ? c.weight : 1 / (body.criteria as unknown[]).length
+    return { name, description: desc, weight }
+  })
+  return {
+    prompt:       str(body.prompt, 'prompt'),
+    systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    model:        body.model        !== undefined ? str(body.model,        'model')        : undefined,
+    judgeModel:   body.judgeModel   !== undefined ? str(body.judgeModel,   'judgeModel')   : undefined,
+    samples:      body.samples      !== undefined ? num(body.samples, 'samples', 1, 1, MAX_RUBRIC_SAMPLES) : 1,
+    criteria,
   }
 }
 

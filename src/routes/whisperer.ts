@@ -5,7 +5,7 @@ import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
   parseGuardProbeRequest, parseConsistencyRequest, parseAblationRequest, parseDriftRequest,
-  parseContextStressRequest,
+  parseContextStressRequest, parseEvaluateRequest,
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
@@ -124,6 +124,65 @@ const thinkHandler: Handler = async (req: Request, env: Env) => {
     return json(ok(result))
   } catch (e) {
     return json(err('Extended thinking failed', String(e)), 500)
+  }
+}
+
+const evaluate: Handler = async (req: Request, env: Env) => {
+  const p = await parseBody(req, parseEvaluateRequest)
+  if (!p.ok) return p.response
+  const { prompt, systemPrompt, model, judgeModel, samples, criteria } = p.data
+  try {
+    // Run N completions in parallel
+    const responses = await Promise.all(
+      Array.from({ length: samples }, () =>
+        complete(env.AI, env, { model, prompt, systemPrompt }),
+      ),
+    )
+    // For each sample × criterion: judge call (serialised to avoid rate-limiting)
+    type JudgeScore = { score: number; reasoning: string }
+    const sampleResults: Array<Array<JudgeScore>> = []
+    for (const response of responses) {
+      const scores: JudgeScore[] = []
+      for (const criterion of criteria) {
+        try {
+          const judgePrompt = `You are evaluating an AI response against a quality criterion.\n\nCriterion: ${criterion.name} — ${criterion.description}\n\nResponse to evaluate:\n${response}\n\nRate the response on a scale of 1 to 5 where:\n1 = Does not meet the criterion at all\n3 = Partially meets the criterion\n5 = Fully meets the criterion\n\nRespond with a JSON object: {"score": <integer 1-5>, "reasoning": "<1-2 sentence explanation>"}`
+          const raw = await complete(env.AI, env, {
+            model: judgeModel ?? model,
+            prompt: judgePrompt,
+            responseFormat: 'json',
+          })
+          let parsed: { score?: unknown; reasoning?: unknown }
+          try { parsed = JSON.parse(raw) } catch { parsed = {} }
+          const score = typeof parsed.score === 'number' && parsed.score >= 1 && parsed.score <= 5
+            ? Math.round(parsed.score) : 3
+          const reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning : raw.slice(0, 200)
+          scores.push({ score, reasoning })
+        } catch {
+          scores.push({ score: 3, reasoning: 'Judge call failed' })
+        }
+      }
+      sampleResults.push(scores)
+    }
+    // Aggregate per criterion
+    const criteriaResults = criteria.map((criterion, ci) => {
+      const scores = sampleResults.map(s => s[ci].score)
+      const mean = scores.reduce((a, b) => a + b, 0) / scores.length
+      const variance = scores.reduce((a, b) => a + (b - mean) ** 2, 0) / scores.length
+      const stddev = Math.sqrt(variance)
+      return { ...criterion, mean, stddev, scores }
+    })
+    // Weighted total (sum of mean * weight / sum of weights)
+    const totalWeight = criteria.reduce((a, c) => a + c.weight, 0)
+    const weightedTotal = totalWeight > 0
+      ? criteriaResults.reduce((a, c) => a + c.mean * c.weight, 0) / totalWeight : 0
+    return json(ok({
+      responses,
+      sampleResults: sampleResults.map((ss, i) => ({ response: responses[i], scores: ss })),
+      criteria: criteriaResults,
+      weightedTotal,
+    }))
+  } catch (e) {
+    return json(err('Rubric evaluation failed', String(e)), 500)
   }
 }
 
@@ -276,6 +335,7 @@ export const whispererRoutes: Array<[string, string, Handler]> = [
   ['POST', '/api/ai/entropy',      entropy],
   ['POST', '/api/ai/archaeology',  archaeology],
   ['POST', '/api/ai/pipeline',     pipeline],
+  ['POST', '/api/ai/evaluate',      evaluate],
   ['POST', '/api/ai/context-stress', contextStress],
   ['POST', '/api/ai/drift',        drift],
   ['POST', '/api/ai/ablation',     ablation],

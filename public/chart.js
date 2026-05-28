@@ -8,7 +8,7 @@
  * @module chart
  */
 
-const PALETTE = ['#7c3aed','#a78bfa','#34d399','#f59e0b','#f87171','#60a5fa','#fb923c','#a3e635']
+const PALETTE = ['#6366f1','#818cf8','#10b981','#f59e0b','#f87171','#0ea5e9','#fb923c','#a3e635']
 
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
@@ -149,6 +149,57 @@ function pieChart(data, { width, height, label }) {
 
   if (label) parts.push(`<text x="${cx}" y="12" text-anchor="middle" font-size="11" fill="#d8d8e8">${esc(label)}</text>`)
 
+  return svgWrap(width, height, parts.join(''))
+}
+
+/**
+ * Radar chart for rubric evaluation results.
+ * @param {Array<{label: string, value: number, maxValue?: number}>} data  — value 0–maxValue (default 5)
+ * @param {{ width?: number, height?: number, label?: string }} [opts]
+ * @returns {string} SVG markup
+ */
+export function radarChart(data, { width = 320, height = 320, label = '' } = {}) {
+  if (!data || data.length < 3)
+    return svgWrap(width, height, `<text x="20" y="24" font-size="13" fill="#4d6480">Need ≥ 3 criteria</text>`)
+  const n    = data.length
+  const cx   = width  / 2
+  const cy   = height / 2
+  const r    = Math.min(cx, cy) * 0.65
+  const max  = Math.max(...data.map(d => Number(d.maxValue) || 5), 1)
+  const step = (2 * Math.PI) / n
+  const angle = i => -Math.PI / 2 + i * step
+  const px = (i, frac) => (cx + Math.cos(angle(i)) * r * frac).toFixed(2)
+  const py = (i, frac) => (cy + Math.sin(angle(i)) * r * frac).toFixed(2)
+  const parts = []
+  // Gridlines (5 levels)
+  for (let lvl = 1; lvl <= 5; lvl++) {
+    const f = lvl / 5
+    const pts = Array.from({ length: n }, (_, i) => `${px(i, f)},${py(i, f)}`).join(' ')
+    parts.push(`<polygon points="${pts}" fill="none" stroke="#1c2a40" stroke-width="1"/>`)
+  }
+  // Axis spokes
+  for (let i = 0; i < n; i++) {
+    parts.push(`<line x1="${cx}" y1="${cy}" x2="${px(i, 1)}" y2="${py(i, 1)}" stroke="#1c2a40" stroke-width="1"/>`)
+  }
+  // Data polygon
+  const values = data.map(d => Math.min(Math.max(Number(d.value) || 0, 0), max) / max)
+  const dataPts = values.map((v, i) => `${px(i, v)},${py(i, v)}`).join(' ')
+  parts.push(`<polygon points="${dataPts}" fill="#6366f1" fill-opacity="0.25" stroke="#6366f1" stroke-width="2" stroke-linejoin="round"/>`)
+  values.forEach((v, i) => {
+    parts.push(`<circle cx="${px(i, v)}" cy="${py(i, v)}" r="4" fill="#818cf8" stroke="#080c14" stroke-width="2"/>`)
+  })
+  // Labels
+  data.forEach((d, i) => {
+    const lx = cx + Math.cos(angle(i)) * r * 1.22
+    const ly = cy + Math.sin(angle(i)) * r * 1.22
+    const anchor = Math.abs(lx - cx) < 10 ? 'middle' : lx < cx ? 'end' : 'start'
+    parts.push(`<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="${anchor}" dominant-baseline="central" font-size="11" fill="#cdd9e5">${esc(String(d.label))}</text>`)
+    const sv = Number(d.value).toFixed(1)
+    const vx = cx + Math.cos(angle(i)) * r * (values[i] + 0.14)
+    const vy = cy + Math.sin(angle(i)) * r * (values[i] + 0.14)
+    parts.push(`<text x="${vx.toFixed(2)}" y="${vy.toFixed(2)}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#818cf8" font-weight="600">${sv}</text>`)
+  })
+  if (label) parts.push(`<text x="${cx}" y="14" text-anchor="middle" font-size="11" fill="#cdd9e5">${esc(label)}</text>`)
   return svgWrap(width, height, parts.join(''))
 }
 
