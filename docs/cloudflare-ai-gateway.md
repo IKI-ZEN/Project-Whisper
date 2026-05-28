@@ -1,6 +1,6 @@
 # Cloudflare AI Gateway — Reference
 
-> **Last updated:** 2026-05-28
+> **Last updated:** 2026-05-28 (Phase 10 — gateway architecture unification)
 
 ---
 
@@ -18,8 +18,8 @@
    - 5.5 [Dynamic Routing](#55-dynamic-routing)
 6. [Per-Request Headers Reference](#6-per-request-headers-reference)
 7. [Provider Reference](#7-provider-reference)
-   - 7A. [Implemented Providers](#7a-implemented-providers-13-total)
-   - 7B. [Not-Yet-Wired Providers](#7b-not-yet-wired-providers)
+   - 7A. [Core Providers (13)](#7a-implemented-providers-23-total)
+   - 7B. [Extended Providers (10)](#7b-extended-providers-10-additional)
 8. [Workers AI Models](#8-workers-ai-models)
    - 8A. [Hosted Models](#8a-hosted-models-env-ai-binding--cf-prefix)
    - 8B. [Proxied Models](#8b-proxied-models-via-gateway--not-workers-ai-binding)
@@ -415,6 +415,7 @@ Each entry lists: gateway path segment, authentication header(s), wire format, m
 ---
 
 ### 7A. Implemented Providers (23 total)
+<!-- 13 core providers in this section + 10 extended providers in 7B = 23 total -->
 
 ---
 
@@ -460,8 +461,8 @@ Each entry lists: gateway path segment, authentication header(s), wire format, m
 | Env var | `ANTHROPIC_API_KEY` |
 
 **Notes:**
-- **Prompt caching:** Add `anthropic-beta: prompt-caching-2024-07-31` to the request headers and set `cache_control: { type: 'ephemeral' }` on the system message block. This project enables prompt caching automatically when `systemPrompt` is 600 characters or longer.
-- Prompt caching reduces input token costs for repeated system prompts (the cached prefix is charged at a lower rate on subsequent requests within the cache TTL).
+- **Prompt caching:** Add `anthropic-beta: prompt-caching-2024-07-31` to the request headers and set `cache_control: { type: 'ephemeral' }` on the system message block. This project enables prompt caching automatically whenever `systemPrompt` is non-empty — the `cache_control` block is always added to the system content array.
+- Prompt caching reduces input token costs for repeated system prompts (the cached prefix is charged at a lower rate on subsequent requests within the cache TTL). Anthropic only activates caching for prefixes ≥ 1,024 tokens (~800 words); shorter prompts simply incur no caching overhead.
 
 **Available models:**
 
@@ -487,9 +488,9 @@ Each entry lists: gateway path segment, authentication header(s), wire format, m
 | Env var | `GOOGLE_AI_KEY` |
 
 **Notes:**
-- Streaming endpoint: `/google-ai-studio/v1/models/{model}:streamGenerateContent?alt=sse&key={key}`
+- Streaming endpoint: `/google-ai-studio/v1/models/{model}:streamGenerateContent?alt=sse` — the API key is sent in the `x-goog-api-key` header (not the `?key=` query parameter).
 - Grounding (real-time web search): add `tools: [{ googleSearch: {} }]` to the request body.
-- The `key` query parameter is only required when the auth header is not present; prefer the header.
+- The `key` query parameter is accepted by Google but the header form is preferred and is what this project sends.
 
 **Available models:**
 
@@ -757,6 +758,7 @@ These providers are fully implemented. Text-completion providers (Cohere, Huggin
 **Notes:**
 - Auth uses `Token {key}` — **not** `Bearer`. This is a Cohere-specific convention.
 - Cohere's request body uses `chat_history` (array of `{role, message}` objects), a `message` field for the current user turn, and a `preamble` field for the system prompt.
+- **Tools (function calling):** `opts.tools` are forwarded as Cohere's native `parameter_definitions` format. Response `tool_calls[].parameters` are decoded via the project's `encodeToolCalls()` encoder and returned as the standard `__tool_calls__` envelope.
 - Web search: add `connectors: [{ id: "web-search" }]` to the request body (not currently exposed via the API).
 - Streaming: real SSE streaming via Cohere's `stream: true` — extracts `text-generation` events.
 
@@ -777,6 +779,7 @@ These providers are fully implemented. Text-completion providers (Cohere, Huggin
 **Notes:**
 - The model identifier is part of the **URL path** (`/huggingface/${id}` where `id` = everything after `huggingface:`).
 - Request body uses `inputs` (prompt string) and `parameters.max_new_tokens`/`temperature`.
+- **System prompt:** `opts.systemPrompt` is prepended to the `inputs` string as `System: {prompt}\n`. Conversation messages follow as `{role}: {content}` lines (the system role line is not repeated).
 - No streaming support — blocking completion only; `completeStream` emits the full result as one chunk.
 - Response is `[{"generated_text": "..."}]` or `{"generated_text": "..."}`.
 
@@ -794,7 +797,8 @@ These providers are fully implemented. Text-completion providers (Cohere, Huggin
 
 **Notes:**
 - Request body uses `version` (model version hash) and `input.prompt`.
-- Implementation: create prediction → poll `urls.get` every 1.5s until `status: "succeeded"` or timeout.
+- **Temperature:** `opts.temperature` is forwarded to the prediction `input` object when provided.
+- Implementation: create prediction (with gateway headers) → poll `urls.get` every 1.5s until `status: "succeeded"` or timeout. The poll requests go directly to Replicate and do **not** include `cf-aig-*` headers.
 - No streaming support — blocking poll only; `completeStream` emits the full result as one chunk.
 - Output is `string[]` joined or a single string; joined with `''`.
 
@@ -1245,7 +1249,8 @@ This section documents how Project Whisper wires AI Gateway internally.
 
 | File | Purpose |
 |------|---------|
-| `src/lib/ai.ts` | `GatewayProviderDef` registry; `completeOpenAI`, `streamOpenAI`, `completeAnthropic`, `completeGoogle` helper functions |
+| `src/lib/ai.ts` | `GatewayProviderDef` + `ProviderCapabilities` registry (18 providers); `buildGatewayHeaders()` shared utility; `completeOpenAI/Anthropic/Google/Cohere/HuggingFace/Replicate` + their stream counterparts |
+| `src/lib/pricing.ts` | Per-model input/output cost estimates (USD per 1k tokens); `estimateCost()` strips provider prefix before lookup |
 | `src/types/env.d.ts` | TypeScript declarations for all environment variables (provider API keys, CF tokens) |
 | `.dev.vars.example` | Documentation of all required and optional env vars with descriptions |
 
@@ -1287,12 +1292,12 @@ provider:"cartesia"            → POST /api/ai/tts    → binary audio (MP3)
 
 **Anthropic prompt caching (automatic)**
 
-When a `systemPrompt` is 600 characters or longer, the AI layer automatically:
+Whenever a non-empty `systemPrompt` is passed to an Anthropic request, the AI layer automatically:
 
 1. Adds `anthropic-beta: prompt-caching-2024-07-31` to the request headers.
-2. Sets `cache_control: { type: 'ephemeral' }` on the system message block.
+2. Wraps the system prompt as a content block with `cache_control: { type: 'ephemeral' }`.
 
-This reduces input token costs for repeated calls with the same long system prompt.
+Anthropic only activates the cache for prefixes ≥ 1,024 tokens (~800 words); shorter prompts incur no caching overhead but are safe to send with the block present.
 
 **JSON Schema mode**
 
@@ -1301,6 +1306,26 @@ Pass a `jsonSchema` field in the request options to enable structured output. Th
 **ContentBlock vision input**
 
 Vision requests use a `ContentBlock` type for multi-modal inputs (text + image). The AI layer converts this to the provider's native format (`content` array with `type: "image_url"` for OpenAI, `type: "image"` with base64 source for Anthropic, etc.).
+
+**ProviderCapabilities**
+
+Every entry in `GATEWAY_PROVIDERS` declares a `capabilities` object:
+
+```typescript
+interface ProviderCapabilities {
+  tools?:        boolean  // native function calling
+  vision?:       boolean  // ContentBlock[] image inputs
+  streaming?:    boolean  // real SSE streaming (vs. fallback single-chunk)
+  systemPrompt?: boolean  // dedicated system field (not prepended to prompt)
+  jsonMode?:     boolean  // json_object or json_schema response format
+}
+```
+
+HuggingFace (`streaming: false`) and Replicate (`streaming: false`) fall back to blocking completion wrapped in a single-chunk stream.
+
+**Unified gateway header builder**
+
+`buildGatewayHeaders(key, authH, opts, modelLabel)` is the single source of truth for all `cf-aig-*` headers. Every provider handler — blocking and streaming — calls this function. No handler constructs its own `cf-aig-cache-ttl` or `cf-aig-metadata` headers inline.
 
 **Analytics Engine data points**
 
@@ -1315,7 +1340,7 @@ All gateway fetch calls use `AbortSignal.timeout(120_000)` (120 seconds). Long-r
 
 **Caching behaviour**
 
-All requests send:
+All provider requests (blocking and streaming, all 18 providers) send:
 
 ```http
 cf-aig-cache-ttl: 3600
@@ -1325,6 +1350,12 @@ When `temperature` is non-zero (i.e. the response is non-deterministic), caching
 
 ```http
 cf-aig-skip-cache: true
+```
+
+When `sandboxId` is present in opts, observability metadata is attached:
+
+```http
+cf-aig-metadata: {"sandboxId": "...", "model": "..."}
 ```
 
 ### Path corrections applied
