@@ -7,6 +7,7 @@ import {
   generatePromptVariants, computeSimilarityMatrix,
 } from '../lib/ai'
 import { MODELS } from '../lib/ai'
+import { resolveAnalysisContext, extractMetrics } from '../lib/analysis'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ interface ProbeRow {
   model:       string
   schedule:    ProbeSchedule
   threshold:   string  // JSON
+  sandbox_id:  string | null
   created_at:  number
   last_run_at: number | null
 }
@@ -43,6 +45,7 @@ interface ProbeRunRow {
   tool:         string
   result:       string  // JSON
   metric_value: number | null
+  metrics_json: string | null
   run_at:       number
 }
 
@@ -57,6 +60,7 @@ function parseCreateProbe(body: unknown): {
   model: string
   schedule: ProbeSchedule
   threshold: Record<string, unknown>
+  sandboxId: string | null
 } {
   if (typeof body !== 'object' || body === null) throw new Error('Body must be an object')
   const b = body as Record<string, unknown>
@@ -91,6 +95,10 @@ function parseCreateProbe(body: unknown): {
     ? (b.threshold as Record<string, unknown>)
     : {}
 
+  const sandboxId = typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0
+    ? b.sandboxId.trim()
+    : null
+
   return {
     name,
     description,
@@ -100,6 +108,7 @@ function parseCreateProbe(body: unknown): {
     model,
     schedule: schedule as ProbeSchedule,
     threshold,
+    sandboxId,
   }
 }
 
@@ -112,6 +121,7 @@ function parsePatchProbe(body: unknown): Partial<{
   model: string
   schedule: ProbeSchedule
   threshold: Record<string, unknown>
+  sandboxId: string | null
 }> {
   if (typeof body !== 'object' || body === null) throw new Error('Body must be an object')
   const b = body as Record<string, unknown>
@@ -159,53 +169,23 @@ function parsePatchProbe(body: unknown): Partial<{
       ? (b.threshold as Record<string, unknown>)
       : {}
   }
+  if (b.sandboxId !== undefined) {
+    out.sandboxId = typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0
+      ? b.sandboxId.trim()
+      : null
+  }
   return out
 }
 
 // ── Metric extraction ─────────────────────────────────────────────────────────
 
+// Backwards-compatible single-scalar extraction (kept for existing probe_runs rows).
 function extractMetricValue(tool: ProbeTool, result: unknown): number | null {
-  if (typeof result !== 'object' || result === null) return null
-  const r = result as Record<string, unknown>
-
-  if (tool === 'entropy') {
-    // estimateEntropy returns { entropy, samples, avgCosineSimilarity, latencyMs }
-    return typeof r.entropy === 'number' ? r.entropy : null
-  }
-
-  if (tool === 'sweep') {
-    // sweep returns { results: [{ temperature, responses, latencyMs }], model }
-    const results = Array.isArray(r.results) ? r.results : []
-    if (results.length === 0) return null
-    const first = results[0] as Record<string, unknown>
-    return typeof first.latencyMs === 'number' ? first.latencyMs : null
-  }
-
-  if (tool === 'sensitivity') {
-    // sensitivity returns { variants, similarityMatrix, latencyMs }
-    const matrix = r.similarityMatrix
-    if (!Array.isArray(matrix) || matrix.length === 0) return null
-    let sum = 0
-    let count = 0
-    for (let i = 0; i < matrix.length; i++) {
-      if (!Array.isArray(matrix[i])) continue
-      for (let j = 0; j < (matrix[i] as number[]).length; j++) {
-        if (i !== j) {
-          sum += (matrix[i] as number[])[j]
-          count++
-        }
-      }
-    }
-    return count > 0 ? sum / count : null
-  }
-
-  if (tool === 'cot') {
-    // runCoTProbe returns an array of CoTResult: [{ style, response, latencyMs }]
-    if (!Array.isArray(result) || result.length === 0) return null
-    const first = (result as Record<string, unknown>[])[0]
-    return typeof first.latencyMs === 'number' ? first.latencyMs : null
-  }
-
+  const metrics = extractMetrics(tool, result)
+  if (tool === 'entropy')     return metrics.entropy     ?? null
+  if (tool === 'sensitivity') return metrics.avgSimilarity ?? null
+  if (tool === 'sweep')       return metrics.latencyMs   ?? null
+  if (tool === 'cot')         return metrics.avgLatencyMs ?? null
   return null
 }
 
@@ -294,6 +274,7 @@ function shapeProbe(row: ProbeRow & { run_count?: number }): Record<string, unkn
     model:       row.model,
     schedule:    row.schedule,
     threshold:   (() => { try { return JSON.parse(row.threshold) as Record<string, unknown> } catch { return {} } })(),
+    sandbox_id:  row.sandbox_id ?? null,
     created_at:  row.created_at,
     last_run_at: row.last_run_at ?? null,
     ...(row.run_count !== undefined ? { run_count: row.run_count } : {}),
@@ -305,24 +286,27 @@ function shapeProbe(row: ProbeRow & { run_count?: number }): Record<string, unkn
 const createProbe: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseCreateProbe)
   if (!p.ok) return p.response
-  const { name, description, prompt, tool, params, model, schedule, threshold } = p.data
+  const { name, description, prompt, tool, params, model, schedule, threshold, sandboxId } = p.data
   const id = newId()
   const created_at = Date.now()
   try {
     await env.DB.prepare(
-      'INSERT INTO probes (id, name, description, prompt, tool, params, model, schedule, threshold, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, name, description, prompt, tool, JSON.stringify(params), model, schedule, JSON.stringify(threshold), created_at).run()
-    return json(ok({ id, name, description, prompt, tool, params, model, schedule, threshold, created_at, last_run_at: null }))
+      'INSERT INTO probes (id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, name, description, prompt, tool, JSON.stringify(params), model, schedule, JSON.stringify(threshold), sandboxId ?? null, created_at).run()
+    return json(ok({ id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id: sandboxId ?? null, created_at, last_run_at: null }))
   } catch (e) {
     return json(err('Failed to create probe', String(e)), 500)
   }
 }
 
-const listProbes: Handler = async (_req: Request, env: Env) => {
+const listProbes: Handler = async (req: Request, env: Env) => {
+  const url       = new URL(req.url)
+  const sandboxId = url.searchParams.get('sandboxId') ?? null
   try {
-    const result = await env.DB.prepare(
-      'SELECT p.*, (SELECT COUNT(*) FROM probe_runs WHERE probe_id = p.id) as run_count FROM probes p ORDER BY created_at DESC LIMIT 100',
-    ).all<ProbeRow & { run_count: number }>()
+    const base = 'SELECT p.*, (SELECT COUNT(*) FROM probe_runs WHERE probe_id = p.id) as run_count FROM probes p'
+    const result = sandboxId
+      ? await env.DB.prepare(`${base} WHERE p.sandbox_id = ? ORDER BY created_at DESC LIMIT 100`).bind(sandboxId).all<ProbeRow & { run_count: number }>()
+      : await env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT 100`).all<ProbeRow & { run_count: number }>()
     const probes = (result.results ?? []).map(r => shapeProbe(r))
     return json(ok({ probes, total: probes.length }))
   } catch (e) {
@@ -376,6 +360,7 @@ const patchProbe: Handler = async (req: Request, env: Env, params) => {
     if (patch.model !== undefined)       { setClauses.push('model = ?');       bindings.push(patch.model) }
     if (patch.schedule !== undefined)    { setClauses.push('schedule = ?');    bindings.push(patch.schedule) }
     if (patch.threshold !== undefined)   { setClauses.push('threshold = ?');   bindings.push(JSON.stringify(patch.threshold)) }
+    if (patch.sandboxId !== undefined)   { setClauses.push('sandbox_id = ?');  bindings.push(patch.sandboxId) }
 
     bindings.push(id)
     await env.DB.prepare(`UPDATE probes SET ${setClauses.join(', ')} WHERE id = ?`).bind(...bindings).run()
@@ -410,25 +395,28 @@ const runProbe: Handler = async (_req: Request, env: Env, params) => {
       try { return JSON.parse(probe.params) as Record<string, unknown> } catch { return {} }
     })()
 
-    const result = await runProbeTool(
-      probe.tool,
-      probe.prompt,
-      probe.model || undefined,
-      probeParams,
-      env,
-    )
+    // Resolve sandbox context if this probe is scoped to a specific app
+    let effectiveModel = probe.model || undefined
+    if (probe.sandbox_id) {
+      const ctx = await resolveAnalysisContext(probe.sandbox_id, env)
+      if (!probe.model && ctx.model) effectiveModel = ctx.model
+      if (!probeParams.systemPrompt && ctx.systemPrompt) probeParams.systemPrompt = ctx.systemPrompt
+    }
+
+    const result = await runProbeTool(probe.tool, probe.prompt, effectiveModel, probeParams, env)
 
     const metricValue = extractMetricValue(probe.tool, result)
+    const metricsJson = extractMetrics(probe.tool, result)
     const runId = newId()
     const now = Date.now()
 
     await env.DB.prepare(
-      'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, run_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, now).run()
+      'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, metrics_json, run_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), now).run()
 
     await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(now, probe.id).run()
 
-    return json(ok({ runId, metricValue, result }))
+    return json(ok({ runId, metricValue, metrics: metricsJson, result }))
   } catch (e) {
     return json(err('Probe run failed', String(e)), 500)
   }
@@ -449,20 +437,24 @@ const getProbeHistory: Handler = async (req: Request, env: Env, params) => {
     if (!probe) return json(err('Probe not found'), 404)
 
     const runsResult = await env.DB.prepare(
-      'SELECT id, run_at, metric_value, tool FROM probe_runs WHERE probe_id = ? ORDER BY run_at DESC LIMIT ?',
-    ).bind(id, limit).all<Pick<ProbeRunRow, 'id' | 'run_at' | 'metric_value' | 'tool'>>()
+      'SELECT id, run_at, metric_value, metrics_json, tool FROM probe_runs WHERE probe_id = ? ORDER BY run_at DESC LIMIT ?',
+    ).bind(id, limit).all<Pick<ProbeRunRow, 'id' | 'run_at' | 'metric_value' | 'metrics_json' | 'tool'>>()
 
     const threshold = (() => {
       try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} }
     })()
 
+    const runs = (runsResult.results ?? []).map(r => ({
+      ...r,
+      metrics: r.metrics_json ? (() => { try { return JSON.parse(r.metrics_json) as Record<string, number> } catch { return {} } })() : {},
+    }))
     return json(ok({
       probe_id: id,
       name:     probe.name,
       tool:     probe.tool,
       threshold,
-      runs:     runsResult.results ?? [],
-      total:    (runsResult.results ?? []).length,
+      runs,
+      total:    runs.length,
     }))
   } catch (e) {
     return json(err('Failed to get probe history', String(e)), 500)
@@ -477,13 +469,23 @@ export async function runProbeById(id: string, env: Env): Promise<void> {
   const probeParams = (() => {
     try { return JSON.parse(probe.params) as Record<string, unknown> } catch { return {} }
   })()
-  const result = await runProbeTool(probe.tool, probe.prompt, probe.model || undefined, probeParams, env)
+
+  // Resolve sandbox context if this probe is scoped to a specific app
+  let effectiveModel = probe.model || undefined
+  if (probe.sandbox_id) {
+    const ctx = await resolveAnalysisContext(probe.sandbox_id, env)
+    if (!probe.model && ctx.model) effectiveModel = ctx.model
+    if (!probeParams.systemPrompt && ctx.systemPrompt) probeParams.systemPrompt = ctx.systemPrompt
+  }
+
+  const result = await runProbeTool(probe.tool, probe.prompt, effectiveModel, probeParams, env)
   const metricValue = extractMetricValue(probe.tool, result)
+  const metricsJson = extractMetrics(probe.tool, result)
   const runId = newId()
   const now = Date.now()
   await env.DB.prepare(
-    'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, run_at) VALUES (?, ?, ?, ?, ?, ?)',
-  ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, now).run()
+    'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, metrics_json, run_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), now).run()
   await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(now, probe.id).run()
 }
 

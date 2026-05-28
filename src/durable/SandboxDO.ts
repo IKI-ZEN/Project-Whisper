@@ -4,7 +4,7 @@ import type { SandboxConfig, Message } from '../lib/schema'
 import { runInSandboxWithRAG, streamInSandboxWithRAG, isToolCallReply, decodeToolCalls, encodeToolResult } from '../lib/ai'
 import { json, sseResponse } from '../lib/http'
 import { now } from '../lib/utils'
-import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS } from '../lib/constants'
+import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS, GUARD_FLAG_INPUT_PREVIEW_CHARS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
 import { scan, type ScanResult } from '../lib/guard'
 import { sealPrompt, openPrompt, signPayload } from '../lib/vault'
@@ -356,7 +356,7 @@ export class SandboxDO extends DurableObject<Env> {
       if (guard.riskLevel !== 'clean') {
         void this.env.DB.prepare(
           'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns }), identity, now()).run()
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }), identity, now()).run()
       }
     }
 
@@ -410,7 +410,7 @@ export class SandboxDO extends DurableObject<Env> {
       if (guard.riskLevel !== 'clean') {
         void this.env.DB.prepare(
           'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns }), identity, now()).run()
+        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }), identity, now()).run()
       }
     }
 

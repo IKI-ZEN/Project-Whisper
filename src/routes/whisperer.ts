@@ -1,6 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
+import { json, ok, err, parseBody, readJson } from '../lib/http'
+import { saveToVault } from '../lib/analysis'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
@@ -16,7 +17,7 @@ import { executePipeline } from '../lib/pipeline'
 import { scanVerbose, PATTERN_DESCRIPTIONS } from '../lib/guard'
 
 const sensitivity: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseSensitivityRequest)
+  const p = await parseWithEnvelope(req, parseSensitivityRequest)
   if (!p.ok) return p.response
   const { prompt, variants, model, systemPrompt, temperature, maxTokens } = p.data
   try {
@@ -27,11 +28,13 @@ const sensitivity: Handler = async (req: Request, env: Env) => {
     )
     const embeddings = await embed(env.AI, responses)
     const similarityMatrix = computeSimilarityMatrix(embeddings)
-    return json(ok({
+    const result = {
       variants: variantPrompts.map((vp, i) => ({ prompt: vp, response: responses[i] })),
       similarityMatrix,
       latencyMs: Date.now() - t0,
-    }))
+    }
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: result, model: model ?? '', systemPrompt, tool: 'sensitivity', sandboxId: p.env.sandboxId })
+    return json(ok(result))
   } catch (e) {
     return json(err('Sensitivity analysis failed', String(e)), 500)
   }
@@ -66,11 +69,12 @@ const cluster: Handler = async (req: Request, env: Env) => {
 }
 
 const cot: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseCotRequest)
+  const p = await parseWithEnvelope(req, parseCotRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, temperature, maxTokens, samples } = p.data
   try {
     const results = await runCoTProbe(env.AI, env, { prompt, model, systemPrompt, temperature, maxTokens }, samples)
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: { results }, model: model ?? '', systemPrompt, tool: 'cot', sandboxId: p.env.sandboxId })
     return json(ok({ results }))
   } catch (e) {
     return json(err('CoT probe failed', String(e)), 500)
@@ -78,11 +82,12 @@ const cot: Handler = async (req: Request, env: Env) => {
 }
 
 const entropy: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseEntropyRequest)
+  const p = await parseWithEnvelope(req, parseEntropyRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, temperature, maxTokens, samples } = p.data
   try {
     const result = await estimateEntropy(env.AI, env, { prompt, model, systemPrompt, temperature, maxTokens }, samples)
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: result, model: model ?? '', systemPrompt, tool: 'entropy', sandboxId: p.env.sandboxId })
     return json(ok(result))
   } catch (e) {
     return json(err('Entropy estimation failed', String(e)), 500)
@@ -116,11 +121,12 @@ const pipeline: Handler = async (req: Request, env: Env) => {
 }
 
 const thinkHandler: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseThinkRequest)
+  const p = await parseWithEnvelope(req, parseThinkRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, maxTokens, budgetTokens } = p.data
   try {
     const result = await think(env.AI, env, { prompt, model, systemPrompt, maxTokens, budgetTokens })
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: result, model: model ?? '', systemPrompt, tool: 'think', sandboxId: p.env.sandboxId })
     return json(ok(result))
   } catch (e) {
     return json(err('Extended thinking failed', String(e)), 500)
@@ -128,7 +134,7 @@ const thinkHandler: Handler = async (req: Request, env: Env) => {
 }
 
 const evaluate: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseEvaluateRequest)
+  const p = await parseWithEnvelope(req, parseEvaluateRequest)
   if (!p.ok) return p.response
   const { prompt, systemPrompt, model, judgeModel, samples, criteria } = p.data
   try {
@@ -175,21 +181,50 @@ const evaluate: Handler = async (req: Request, env: Env) => {
     const totalWeight = criteria.reduce((a, c) => a + c.weight, 0)
     const weightedTotal = totalWeight > 0
       ? criteriaResults.reduce((a, c) => a + c.mean * c.weight, 0) / totalWeight : 0
-    return json(ok({
+    const result = {
       responses,
       sampleResults: sampleResults.map((ss, i) => ({ response: responses[i], scores: ss })),
       criteria: criteriaResults,
       weightedTotal,
-    }))
+    }
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: result, model: model ?? '', systemPrompt, tool: 'evaluate', sandboxId: p.env.sandboxId })
+    return json(ok(result))
   } catch (e) {
     return json(err('Rubric evaluation failed', String(e)), 500)
   }
 }
 
+// ── Auto-vault helpers ────────────────────────────────────────────────────────
+
+interface Envelope { autoVault: boolean; sandboxId: string | null }
+
+function extractEnvelope(body: unknown): Envelope {
+  if (typeof body !== 'object' || body === null) return { autoVault: false, sandboxId: null }
+  const b = body as Record<string, unknown>
+  return {
+    autoVault: b.autoVault === true,
+    sandboxId: typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0 ? b.sandboxId.trim() : null,
+  }
+}
+
+async function parseWithEnvelope<T>(
+  req: Request,
+  parse: (body: unknown) => T,
+): Promise<{ ok: true; data: T; env: Envelope } | { ok: false; response: Response }> {
+  let raw: unknown
+  try { raw = await readJson(req) } catch (e) { return { ok: false, response: json({ ok: false, error: String(e) }, 400) } }
+  try {
+    const data = parse(raw)
+    return { ok: true, data, env: extractEnvelope(raw) }
+  } catch (e) { return { ok: false, response: json({ ok: false, error: String(e) }, 422) } }
+}
+
+// ── Context stress ────────────────────────────────────────────────────────────
+
 const STRESS_PADDING_PHRASE = 'The following is background context provided for reference purposes only. '
 
 const contextStress: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseContextStressRequest)
+  const p = await parseWithEnvelope(req, parseContextStressRequest)
   if (!p.ok) return p.response
   const { prompt, systemPrompt, model, paddingLevels, maxTokens } = p.data
   const levels = paddingLevels ?? [0, 100, 500, 1000, 2000, 4000]
@@ -214,6 +249,7 @@ const contextStress: Handler = async (req: Request, env: Env) => {
       ...r,
       similarity: cosineSimilarity(baseEmbed, embeddings[i]),
     }))
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: { levels: levels2 }, model: model ?? '', systemPrompt, tool: 'context-stress', sandboxId: p.env.sandboxId })
     return json(ok({ levels: levels2 }))
   } catch (e) {
     return json(err('Context stress test failed', String(e)), 500)
@@ -221,7 +257,7 @@ const contextStress: Handler = async (req: Request, env: Env) => {
 }
 
 const drift: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseDriftRequest)
+  const p = await parseWithEnvelope(req, parseDriftRequest)
   if (!p.ok) return p.response
   const { messages, model, systemPrompt, temperature, maxTokens } = p.data
   try {
@@ -245,14 +281,19 @@ const drift: Handler = async (req: Request, env: Env) => {
       fromAnchor: i === 0 ? 0 : 1 - cosineSimilarity(embeddings[0], embeddings[i]),
       fromPrior:  i === 0 ? 0 : 1 - cosineSimilarity(embeddings[i - 1], embeddings[i]),
     }))
-    return json(ok({ turns, latencyMs: Date.now() - t0 }))
+    const driftResult = { turns, latencyMs: Date.now() - t0 }
+    if (p.env.autoVault) {
+      const promptSummary = messages.map(m => m.content).join('\n')
+      void saveToVault(env, { prompt: promptSummary, response: driftResult, model: model ?? '', systemPrompt, tool: 'drift', sandboxId: p.env.sandboxId })
+    }
+    return json(ok(driftResult))
   } catch (e) {
     return json(err('Drift analysis failed', String(e)), 500)
   }
 }
 
 const ablation: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseAblationRequest)
+  const p = await parseWithEnvelope(req, parseAblationRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, temperature, maxTokens } = p.data
   try {
@@ -278,14 +319,16 @@ const ablation: Handler = async (req: Request, env: Env) => {
       impact: 1 - cosineSimilarity(baseEmbed, embeddings[i + 1]),
     }))
     results.sort((a, b) => b.impact - a.impact)
-    return json(ok({ baseResponse, clauses: results }))
+    const ablResult = { baseResponse, clauses: results }
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: ablResult, model: model ?? '', systemPrompt, tool: 'ablation', sandboxId: p.env.sandboxId })
+    return json(ok(ablResult))
   } catch (e) {
     return json(err('Ablation analysis failed', String(e)), 500)
   }
 }
 
 const consistency: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseConsistencyRequest)
+  const p = await parseWithEnvelope(req, parseConsistencyRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, maxTokens, samples } = p.data
   try {
@@ -305,23 +348,26 @@ const consistency: Handler = async (req: Request, env: Env) => {
       for (let j = i + 1; j < n; j++)
         if (matrix[i][j] >= 0.99) nearPairs++
     const nearMatchRate = totalPairs > 0 ? nearPairs / totalPairs : 1
-    return json(ok({ ...result, exactMatchRate, nearMatchRate }))
+    const consResult = { ...result, exactMatchRate, nearMatchRate }
+    if (p.env.autoVault) void saveToVault(env, { prompt, response: consResult, model: model ?? '', systemPrompt, tool: 'consistency', sandboxId: p.env.sandboxId })
+    return json(ok(consResult))
   } catch (e) {
     return json(err('Consistency probe failed', String(e)), 500)
   }
 }
 
-const guardLab: Handler = async (req: Request, _env: Env) => {
-  const p = await parseBody(req, parseGuardProbeRequest)
+const guardLab: Handler = async (req: Request, env: Env) => {
+  const p = await parseWithEnvelope(req, parseGuardProbeRequest)
   if (!p.ok) return p.response
   try {
     const result = scanVerbose(p.data.text)
-    // Attach plain-English descriptions to each matched pattern
     const annotated = result.patterns.map(name => ({
       name,
       description: PATTERN_DESCRIPTIONS[name.replace(/^base64x?\d*:/, '')] ?? 'Pattern detected',
     }))
-    return json(ok({ ...result, annotated }))
+    const guardResult = { ...result, annotated }
+    if (p.env.autoVault) void saveToVault(env, { prompt: p.data.text, response: guardResult, model: '', tool: 'guard-lab', sandboxId: p.env.sandboxId })
+    return json(ok(guardResult))
   } catch (e) {
     return json(err('Guard scan failed', String(e)), 500)
   }

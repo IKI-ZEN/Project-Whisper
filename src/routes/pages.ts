@@ -1113,6 +1113,10 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
 .tbl tr:hover td{background:#ffffff04}
 .badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono)}
 .empty-note{color:var(--muted);font-size:12px;font-style:italic;padding:8px 0}
+.health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.health-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.health-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.health-dot.green{background:var(--green)}.health-dot.yellow{background:#f59e0b}.health-dot.grey{background:var(--border)}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
 .sk{background:var(--border);border-radius:4px;animation:pulse 1.4s ease-in-out infinite}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
@@ -1131,6 +1135,13 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
 <main>
   <h2>Whisperer Command Centre</h2>
   <p class="sub">Research activity and application health at a glance.</p>
+  <div class="section" style="margin-bottom:24px">
+    <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+      Per-App Health
+      <span style="font-size:10px;color:var(--muted);font-weight:400">Apps with attached probes or assertion suites</span>
+    </div>
+    <div id="health-wrap"><div class="empty-note">Loading…</div></div>
+  </div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Apps</div><div class="stat-value sk" id="stat-sandboxes" style="height:32px;width:48px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Total Runs</div><div class="stat-value sk" id="stat-runs" style="height:32px;width:64px">&nbsp;</div></div>
@@ -1203,6 +1214,41 @@ async function load(){
     const modelEntries=Object.entries(modelMap).map(function(e){return{label:e[0].split('/').pop()||e[0],value:e[1]}}).sort(function(a,b){return b.value-a.value}).slice(0,8)
     if(modelEntries.length&&window.chart){chartEl.innerHTML=window.chart(modelEntries,{type:'bar',width:480,height:160,label:'Runs by model'})}
     else{chartEl.innerHTML='<div class="empty-note">'+(totalRuns?'Chart unavailable':'No runs yet')+'</div>'}
+    // Per-app health grid
+    const healthWrap=document.getElementById('health-wrap')
+    const topApps=apps.slice(0,8)
+    const healthData=await Promise.allSettled(topApps.map(async function(app){
+      const [pr,ar]=await Promise.allSettled([
+        fetch('/api/probes?sandboxId='+encodeURIComponent(app.id)).then(function(r){return r.json()}),
+        fetch('/api/assertions?sandboxId='+encodeURIComponent(app.id)).then(function(r){return r.json()}),
+      ])
+      const probes=(pr.status==='fulfilled'&&pr.value.ok)?pr.value.data:[]
+      const suites=(ar.status==='fulfilled'&&ar.value.ok)?ar.value.data:[]
+      if(!probes.length&&!suites.length)return null
+      // Determine probe health: did the last probe run within 24h?
+      const lastRun=probes.reduce(function(best,p){return(!best||(p.last_run_at||0)>(best.last_run_at||0))?p:best},null)
+      const probeAge=lastRun&&lastRun.last_run_at?Date.now()-lastRun.last_run_at:null
+      const probeStatus=probeAge===null?'grey':probeAge<86400000?'green':'yellow'
+      return {app,probes,suites,probeStatus,lastRunAt:lastRun?.last_run_at||null}
+    }))
+    const healthItems=healthData.map(function(r){return r.status==='fulfilled'?r.value:null}).filter(Boolean)
+    if(!healthItems.length){
+      healthWrap.innerHTML='<div class="empty-note">No health checks yet — attach a probe or assertion suite to an app via <a href="/tools.html" style="color:var(--accent2)">Tools →</a></div>'
+    }else{
+      healthWrap.innerHTML='<div class="health-grid">'+healthItems.map(function(h){
+        const dateStr=h.lastRunAt?new Date(h.lastRunAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'never'
+        return '<div class="health-card"><div style="display:flex;align-items:flex-start;gap:8px">'
+          +'<div class="health-dot '+h.probeStatus+'"></div>'
+          +'<div style="flex:1;overflow:hidden"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(h.app.name||h.app.id)+'</div>'
+          +'<div style="font-size:10px;color:var(--muted);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">'
+          +(h.probes.length?'<span>'+h.probes.length+' probe'+(h.probes.length!==1?'s':'')+'</span>':'')
+          +(h.suites.length?'<span>'+h.suites.length+' suite'+(h.suites.length!==1?'s':'')+'</span>':'')
+          +'<span>last: '+esc(dateStr)+'</span></div>'
+          +'<a href="/tools.html?sandbox='+esc(h.app.id)+'" style="font-size:10px;color:var(--teal);text-decoration:none;display:inline-block;margin-top:6px">Open →</a>'
+          +'</div></div></div>'
+      }).join('')+'</div>'
+    }
+
     const wrap=document.getElementById('sandboxes-wrap')
     if(!apps.length){wrap.innerHTML='<div class="empty-note">No apps yet. <a href="/vibe.html" style="color:var(--accent2)">Build one →</a></div>'}
     else{
@@ -1219,6 +1265,7 @@ async function load(){
   }catch(e){
     ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
     document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
+    document.getElementById('health-wrap').innerHTML='<div class="empty-note">Unable to load.</div>'
   }
 
   try{

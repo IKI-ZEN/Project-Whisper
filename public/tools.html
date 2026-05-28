@@ -262,6 +262,7 @@ hr{border:none;border-top:1px solid var(--border)}
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples <input type="number" id="ws-samples" value="1" min="1" max="3" style="width:50px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="ws-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
         <button id="btn-sweep">Sweep</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="ws-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div id="ws-results"></div>
       <div class="hist-bar"><button class="hist-btn" id="hist-btn-sweep" onclick="toggleHist('sweep')">↩ History</button></div>
@@ -280,6 +281,7 @@ hr{border:none;border-top:1px solid var(--border)}
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wsn-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="wsn-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
         <button id="btn-sensitivity">Analyse</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="wsn-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div id="wsn-results"></div>
       <div class="hist-bar"><button class="hist-btn" id="hist-btn-sensitivity" onclick="toggleHist('sensitivity')">↩ History</button></div>
@@ -312,6 +314,7 @@ hr{border:none;border-top:1px solid var(--border)}
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples (self-consistency) <input type="number" id="wct-samples" value="2" min="1" max="5" style="width:50px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="wct-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
         <button id="btn-cot">Probe</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="wct-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div id="wct-results"></div>
       <div class="hist-bar"><button class="hist-btn" id="hist-btn-cot" onclick="toggleHist('cot')">↩ History</button></div>
@@ -334,6 +337,7 @@ hr{border:none;border-top:1px solid var(--border)}
           Determinism Mode
         </label>
         <button id="btn-entropy">Measure</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="wen-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div id="wen-results"></div>
       <div class="hist-bar"><button class="hist-btn" id="hist-btn-entropy" onclick="toggleHist('entropy')">↩ History</button></div>
@@ -443,7 +447,10 @@ hr{border:none;border-top:1px solid var(--border)}
         <div id="ev-criteria-list" style="display:flex;flex-direction:column;gap:6px"></div>
         <button class="outline" id="ev-add-criterion" style="margin-top:6px;font-size:11px;padding:5px 10px;min-height:0">+ Add criterion</button>
       </div>
-      <button id="btn-evaluate">Evaluate</button>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button id="btn-evaluate">Evaluate</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="ev-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
+      </div>
       <div id="ev-results"></div>
     </div>
 
@@ -457,6 +464,7 @@ hr{border:none;border-top:1px solid var(--border)}
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="cst-model" list="whisperer-models-list" placeholder="default" style="width:220px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="cst-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
         <button id="btn-context-stress">Run Stress Test</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="cst-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div class="field">
         <label>Padding levels (tokens, comma-separated)</label>
@@ -476,6 +484,7 @@ hr{border:none;border-top:1px solid var(--border)}
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="dft-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="dft-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
         <button id="btn-drift">Analyse Drift</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="dft-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div id="dft-results"></div>
     </div>
@@ -491,6 +500,7 @@ hr{border:none;border-top:1px solid var(--border)}
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="abl-temp" value="0.3" min="0" max="2" step="0.1" style="width:60px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="abl-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
         <button id="btn-ablation">Analyse</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="abl-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div id="abl-results"></div>
     </div>
@@ -503,6 +513,7 @@ hr{border:none;border-top:1px solid var(--border)}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button id="btn-guard-lab">Scan</button>
         <button class="outline" id="btn-gl-load-sandbox" style="display:none;font-size:11px;padding:5px 10px;min-height:0">Load active sandbox system prompt</button>
+        <label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);cursor:pointer" title="Auto-save results to Vault after each run"><input type="checkbox" id="gl-autosave" style="width:auto;accent-color:var(--accent2)"/> Auto-vault</label>
       </div>
       <div id="gl-results"></div>
     </div>
@@ -608,6 +619,14 @@ hr{border:none;border-top:1px solid var(--border)}
   }
 ]'></textarea>
         </div>
+        <div class="row" style="align-items:center">
+          <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="ast-attach-sb" style="width:auto;accent-color:var(--accent2)"
+              onchange="document.getElementById('ast-sandbox-badge').style.display=this.checked&&activeSandboxCfg?'inline':'none'"/>
+            Attach to active sandbox
+          </label>
+          <span id="ast-sandbox-badge" style="display:none;font-size:10px;background:var(--surface);border:1px solid var(--accent2);color:var(--accent2);padding:2px 7px;border-radius:99px"></span>
+        </div>
         <div class="row">
           <button onclick="createAssertionSuite()">Create Suite</button>
           <button class="outline" onclick="document.getElementById('assertion-creator').style.display='none'">Cancel</button>
@@ -669,6 +688,14 @@ hr{border:none;border-top:1px solid var(--border)}
             <select id="prb-tool"><option value="entropy">Entropy</option><option value="sensitivity">Sensitivity</option><option value="cot">CoT Probe</option><option value="sweep">Sweep</option></select>
           </div>
           <div class="field"><label>Model</label><input id="prb-model" list="whisperer-models-list" placeholder="default"/></div>
+        </div>
+        <div class="row" style="align-items:center">
+          <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="prb-attach-sb" style="width:auto;accent-color:var(--accent2)"
+              onchange="document.getElementById('prb-sandbox-badge').style.display=this.checked&&activeSandboxCfg?'inline':'none';document.getElementById('prb-model').closest('.field').style.display=this.checked?'none':''"/>
+            Attach to active sandbox
+          </label>
+          <span id="prb-sandbox-badge" style="display:none;font-size:10px;background:var(--surface);border:1px solid var(--accent2);color:var(--accent2);padding:2px 7px;border-radius:99px"></span>
         </div>
         <div class="row">
           <button onclick="createProbe()">Create Probe</button>
@@ -923,7 +950,9 @@ async function runSweep() {
   setLoading(btn, 'Sweeping…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sweeping…'
   try {
-    const { results } = await client.ai.sweep(prompt, temperatures, { model, systemPrompt, samples, maxTokens })
+    const autoVault = document.getElementById('ws-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
+    const { results } = await client.ai.sweep(prompt, temperatures, { model, systemPrompt, samples, maxTokens, autoVault: autoVault || undefined, sandboxId })
     lastResult['sweep'] = results
     const avgLenData = results.map(r => ({ label: String(r.temperature), value: r.responses.reduce((s, t) => s + t.length, 0) / Math.max(r.responses.length, 1) }))
     const latencyData = results.map(r => ({ label: String(r.temperature), value: r.latencyMs }))
@@ -965,7 +994,9 @@ async function runSensitivity() {
   setLoading(btn, 'Analysing…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Analysing…'
   try {
-    const data = await client.ai.sensitivity(prompt, { variants, model, systemPrompt: sys, temperature: temp, maxTokens })
+    const autoVault = document.getElementById('wsn-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
+    const data = await client.ai.sensitivity(prompt, { variants, model, systemPrompt: sys, temperature: temp, maxTokens, autoVault: autoVault || undefined, sandboxId })
     lastResult['sensitivity'] = data
     const simHTML = renderHeatmap(data.similarityMatrix, data.variants.map((v, i) => `V${i+1}`))
     out.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
@@ -1027,7 +1058,9 @@ async function runCoT() {
   setLoading(btn, 'Probing…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Probing…'
   try {
-    const { results } = await client.ai.cot(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens })
+    const autoVault = document.getElementById('wct-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
+    const { results } = await client.ai.cot(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens, autoVault: autoVault || undefined, sandboxId })
     lastResult['cot'] = results
     const styleLabel = { plain: 'Plain', 'step-by-step': 'Step-by-Step', 'xml-structured': 'XML-Structured', 'self-consistency': 'Self-Consistency' }
     out.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px">' +
@@ -1075,15 +1108,17 @@ async function runEntropy() {
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sampling…'
   try {
     let data
+    const autoVault = document.getElementById('wen-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
     if (determinism) {
       const res = await fetch('/api/ai/consistency', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, model, systemPrompt: sys || undefined, samples: Math.max(samples, 3), maxTokens }),
+        body: JSON.stringify({ prompt, model, systemPrompt: sys || undefined, samples: Math.max(samples, 3), maxTokens, autoVault: autoVault || undefined, sandboxId }),
       })
       const j = await res.json(); if (!j.ok) throw new Error(j.error || 'Consistency probe failed')
       data = j.data
     } else {
-      data = await client.ai.entropy(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens })
+      data = await client.ai.entropy(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens, autoVault: autoVault || undefined, sandboxId })
     }
     const stabPct = Math.round(data.avgCosineSimilarity * 100)
     const stabColor = stabPct >= 90 ? 'var(--green)' : stabPct >= 70 ? '#f59e0b' : 'var(--red)'
@@ -1492,9 +1527,11 @@ async function runEvaluate() {
   setLoading(btn, 'Evaluating…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running evaluation…'
   try {
+    const autoVault = document.getElementById('ev-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
     const res = await fetch('/api/ai/evaluate', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt, systemPrompt: sys, model, judgeModel: judge, samples, criteria }),
+      body: JSON.stringify({ prompt, systemPrompt: sys, model, judgeModel: judge, samples, criteria, autoVault: autoVault || undefined, sandboxId }),
     })
     const j = await res.json()
     if (!j.ok) throw new Error(j.error || 'Evaluation failed')
@@ -1567,9 +1604,11 @@ async function runContextStress() {
   setLoading(btn, 'Running…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running stress levels…'
   try {
+    const autoVault = document.getElementById('cst-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
     const res = await fetch('/api/ai/context-stress', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt, systemPrompt: sys, model, paddingLevels, maxTokens: maxTok }),
+      body: JSON.stringify({ prompt, systemPrompt: sys, model, paddingLevels, maxTokens: maxTok, autoVault: autoVault || undefined, sandboxId }),
     })
     const j = await res.json()
     if (!j.ok) throw new Error(j.error || 'Context stress failed')
@@ -1636,9 +1675,11 @@ async function runDrift() {
   setLoading(btn, 'Running…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running conversation…'
   try {
+    const autoVault = document.getElementById('dft-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
     const res = await fetch('/api/ai/drift', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: msgs, model, systemPrompt: sys, temperature: temp, maxTokens: maxTok }),
+      body: JSON.stringify({ messages: msgs, model, systemPrompt: sys, temperature: temp, maxTokens: maxTok, autoVault: autoVault || undefined, sandboxId }),
     })
     const j = await res.json()
     if (!j.ok) throw new Error(j.error || 'Drift analysis failed')
@@ -1726,9 +1767,11 @@ async function runAblation() {
   setLoading(btn, 'Analysing…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running ablation…'
   try {
+    const autoVault = document.getElementById('abl-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
     const res = await fetch('/api/ai/ablation', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt, model, systemPrompt: probe, temperature: temp, maxTokens: maxTok }),
+      body: JSON.stringify({ prompt, model, systemPrompt: probe, temperature: temp, maxTokens: maxTok, autoVault: autoVault || undefined, sandboxId }),
     })
     const j = await res.json()
     if (!j.ok) throw new Error(j.error || 'Ablation failed')
@@ -1798,7 +1841,7 @@ async function loadSandbox(id) {
     if (!d.ok) throw new Error(d.error || 'Not found')
     const cfg = d.data
     activeSandboxCfg = cfg
-    sessionStorage.setItem(SB_SS_KEY, id)
+    localStorage.setItem(SB_SS_KEY, id)
     document.getElementById('sb-id-input').value = id
     document.getElementById('sb-active-name').textContent = cfg.name || id
     document.getElementById('sb-active-info').style.display = ''
@@ -1806,6 +1849,11 @@ async function loadSandbox(id) {
     const glBtn = document.getElementById('btn-gl-load-sandbox')
     if (glBtn) glBtn.style.display = cfg.systemPrompt ? '' : 'none'
     applySandboxToFields(cfg)
+    const sbLabel = cfg.name || id.slice(0, 8)
+    const prbBadge = document.getElementById('prb-sandbox-badge')
+    if (prbBadge) prbBadge.textContent = sbLabel
+    const astBadge = document.getElementById('ast-sandbox-badge')
+    if (astBadge) astBadge.textContent = sbLabel
   } catch (e) {
     status.textContent = String(e); status.style.color = 'var(--red)'
   }
@@ -1813,7 +1861,7 @@ async function loadSandbox(id) {
 
 function clearSandbox() {
   activeSandboxCfg = null
-  sessionStorage.removeItem(SB_SS_KEY)
+  localStorage.removeItem(SB_SS_KEY)
   document.getElementById('sb-id-input').value = ''
   document.getElementById('sb-active-info').style.display = 'none'
   document.getElementById('sb-status').textContent = ''
@@ -1824,7 +1872,7 @@ function clearSandbox() {
 ;(function initSandboxPicker() {
   const params = new URLSearchParams(location.search)
   const fromUrl = params.get('sandbox')
-  const fromSS  = sessionStorage.getItem(SB_SS_KEY)
+  const fromSS  = localStorage.getItem(SB_SS_KEY)
   const startId = fromUrl || fromSS
   if (startId) { document.getElementById('sb-id-input').value = startId; loadSandbox(startId) }
   document.getElementById('sb-load-btn').onclick = () => {
@@ -1859,6 +1907,11 @@ const GUARD_PATTERN_DESCRIPTIONS = {
   anthropic_key:       'Possible Anthropic API key detected',
 }
 
+function scanInGuardLab(text) {
+  switchTool('guard-lab')
+  document.getElementById('gl-text').value = text
+}
+
 async function runGuardLab() {
   const text = document.getElementById('gl-text').value
   const out  = document.getElementById('gl-results')
@@ -1867,10 +1920,12 @@ async function runGuardLab() {
   setLoading(btn, 'Scanning…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Scanning…'
   try {
+    const autoVault = document.getElementById('gl-autosave').checked
+    const sandboxId = activeSandboxCfg?.id || undefined
     const res = await fetch('/api/ai/guard-probe', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, autoVault: autoVault || undefined, sandboxId }),
     })
     const json = await res.json()
     if (!json.ok) throw new Error(json.error || 'Scan failed')
@@ -1961,11 +2016,14 @@ function runMonitorStream() {
       }
       const color = data.event_type === 'guard_flag' ? 'var(--red)' : data.event_type === 'response_flag' ? '#fb923c' : 'var(--muted)'
       const meta = JSON.stringify(data.metadata).slice(0, 120)
+      const flaggedInput = (data.event_type === 'guard_flag' || data.event_type === 'response_flag') && data.metadata?.flaggedInput
+      const scanBtn = flaggedInput ? `<button onclick="scanInGuardLab(${JSON.stringify(data.metadata.flaggedInput)})" style="font-size:10px;padding:1px 7px;margin-left:8px;min-height:0">Scan →</button>` : ''
       feed.insertAdjacentHTML('beforeend',
         `<div class="mon-event" style="border-left:3px solid ${color};padding:4px 8px;margin-bottom:4px;font-size:11px">
           <span style="color:${color};font-weight:600">${escHtml(data.event_type)}</span>
           <span style="color:var(--muted);margin-left:8px">${escHtml(data.sandbox_id ?? '')}</span>
           <span style="color:var(--text);margin-left:8px">${escHtml(meta)}</span>
+          ${scanBtn}
         </div>`)
       feed.scrollTop = feed.scrollHeight
     } catch { /* skip malformed */ }
@@ -2005,14 +2063,19 @@ async function loadAuditLog() {
     const res = await fetch(`/api/monitor/audit?${params}`)
     const { data } = await res.json()
     if (!data.events.length) { out.innerHTML = '<span class="out-placeholder">No events found.</span>'; return }
-    out.innerHTML = data.events.map(ev =>
-      `<div style="border-bottom:1px solid var(--border);padding:6px 0;font-size:11px">
-        <span style="color:var(--accent2);font-family:var(--mono)">${escHtml(ev.event_type)}</span>
+    out.innerHTML = data.events.map(ev => {
+      const isFlagged = ev.event_type === 'guard_flag' || ev.event_type === 'response_flag'
+      const evColor = ev.event_type === 'guard_flag' ? 'var(--red)' : ev.event_type === 'response_flag' ? '#fb923c' : 'var(--accent2)'
+      const fi = ev.metadata?.flaggedInput
+      const scanBtn = isFlagged && fi ? `<button onclick="scanInGuardLab(${JSON.stringify(fi)})" style="font-size:10px;padding:1px 7px;margin-left:8px;min-height:0">Scan →</button>` : ''
+      return `<div style="border-bottom:1px solid var(--border);padding:6px 0;font-size:11px">
+        <span style="color:${evColor};font-family:var(--mono)">${escHtml(ev.event_type)}</span>
         <span style="color:var(--muted);margin-left:8px">${escHtml(ev.sandbox_id)}</span>
         <span style="color:var(--muted);margin-left:8px">${new Date(ev.created_at).toLocaleString()}</span>
+        ${scanBtn}
         <pre style="margin-top:4px;font-size:10px;white-space:pre-wrap;word-break:break-all">${escHtml(JSON.stringify(ev.metadata, null, 2))}</pre>
       </div>`
-    ).join('')
+    }).join('')
   } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
 }
 
@@ -2147,10 +2210,11 @@ async function createAssertionSuite() {
   if (!name || !casesRaw) { status.textContent = '⚠ Name and cases are required'; status.style.color = 'var(--red)'; return }
   let cases
   try { cases = JSON.parse(casesRaw) } catch { status.textContent = '⚠ Invalid JSON in cases'; status.style.color = 'var(--red)'; return }
+  const sandboxId = document.getElementById('ast-attach-sb').checked && activeSandboxCfg?.id ? activeSandboxCfg.id : undefined
   status.textContent = 'Creating…'
   try {
     const res = await fetch('/api/assertions', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, description: desc, cases })
+      body: JSON.stringify({ name, description: desc, cases, sandboxId })
     })
     const { ok: isOk, data } = await res.json()
     if (!isOk) throw new Error(JSON.stringify(data))
@@ -2314,12 +2378,15 @@ async function createProbe() {
   const name = document.getElementById('prb-name').value.trim()
   const prompt = document.getElementById('prb-prompt').value.trim()
   if (!name || !prompt) { status.textContent = '⚠ Name and prompt required'; status.style.color = 'var(--red)'; return }
+  const attachSb = document.getElementById('prb-attach-sb').checked
+  const sandboxId = attachSb && activeSandboxCfg?.id ? activeSandboxCfg.id : undefined
   status.textContent = 'Creating…'
   try {
     const res = await fetch('/api/probes', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ name, prompt, tool: document.getElementById('prb-tool').value,
         schedule: document.getElementById('prb-schedule').value,
-        model: document.getElementById('prb-model').value.trim() || undefined })
+        model: attachSb ? undefined : (document.getElementById('prb-model').value.trim() || undefined),
+        sandboxId })
     })
     const { ok: isOk, data } = await res.json()
     if (!isOk) throw new Error(JSON.stringify(data))
@@ -2361,7 +2428,7 @@ Object.assign(window, {
   switchTool, toggleHist, toggleExpLog, exportExpLog, restoreExpEntry, showCompareDiff,
   feedToSensitivity, feedToEntropy, feedEntropyToSweep, feedCotToCompare,
   feedThinkToSensitivity, feedArchaeologyToThink,
-  runMonitorStream, stopMonitorStream, loadMonitorPatterns, loadAuditLog,
+  runMonitorStream, stopMonitorStream, loadMonitorPatterns, loadAuditLog, scanInGuardLab,
   loadVault, deleteVaultRecord, saveToVault, exportVaultJSONL,
   runReplay,
   showAssertionCreator, loadAssertionSuites, createAssertionSuite, runAssertionSuite, loadSuiteHistory, deleteAssertionSuite,

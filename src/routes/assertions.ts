@@ -1,8 +1,10 @@
+import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { scan } from '../lib/guard'
 import { newId } from '../lib/utils'
+import { resolveAnalysisContext } from '../lib/analysis'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,7 @@ interface SuiteRow {
   name: string
   description: string
   cases: string
+  sandbox_id: string | null
   created_at: number
   updated_at: number
 }
@@ -112,7 +115,7 @@ function parseTestCase(c: unknown): TestCase {
   }
 }
 
-function parseSuiteBody(body: unknown): { name: string; description: string; cases: TestCase[] } {
+function parseSuiteBody(body: unknown): { name: string; description: string; cases: TestCase[]; sandboxId: string | null } {
   if (typeof body !== 'object' || body === null) throw new Error('Request body must be an object')
   const b = body as Record<string, unknown>
   if (typeof b.name !== 'string' || !b.name) throw new Error('name is required')
@@ -121,10 +124,13 @@ function parseSuiteBody(body: unknown): { name: string; description: string; cas
   if (description.length > 512) throw new Error('description must be at most 512 characters')
   if (!Array.isArray(b.cases)) throw new Error('cases must be an array')
   if (b.cases.length > 50) throw new Error('cases may have at most 50 items')
+  const sandboxId = typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0
+    ? b.sandboxId.trim() : null
   return {
     name: b.name,
     description,
     cases: b.cases.map(parseTestCase),
+    sandboxId,
   }
 }
 
@@ -256,26 +262,29 @@ const createSuite: Handler = async (req, env) => {
   if (!p.ok) return p.response
 
   try {
-    const { name, description, cases } = p.data
+    const { name, description, cases, sandboxId } = p.data
     const id = newId()
     const now = Date.now()
 
     await env.DB.prepare(
-      'INSERT INTO assertion_suites (id, name, description, cases, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ).bind(id, name, description, JSON.stringify(cases), now, now).run()
+      'INSERT INTO assertion_suites (id, name, description, cases, sandbox_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, name, description, JSON.stringify(cases), sandboxId ?? null, now, now).run()
 
-    const suite: Suite = { id, name, description, cases, created_at: now, updated_at: now }
+    const suite: Suite & { sandbox_id: string | null } = { id, name, description, cases, sandbox_id: sandboxId ?? null, created_at: now, updated_at: now }
     return json(ok(suite))
   } catch (e) {
     return json(err('Failed to create assertion suite', String(e)), 500)
   }
 }
 
-const listSuites: Handler = async (_req, env) => {
+const listSuites: Handler = async (req, env) => {
+  const url       = new URL(req.url)
+  const sandboxId = url.searchParams.get('sandboxId') ?? null
   try {
-    const result = await env.DB.prepare(
-      'SELECT id, name, description, json_array_length(cases) as case_count, created_at, updated_at FROM assertion_suites ORDER BY created_at DESC LIMIT 100',
-    ).all()
+    const base = 'SELECT id, name, description, sandbox_id, json_array_length(cases) as case_count, created_at, updated_at FROM assertion_suites'
+    const result = sandboxId
+      ? await env.DB.prepare(`${base} WHERE sandbox_id = ? ORDER BY created_at DESC LIMIT 100`).bind(sandboxId).all()
+      : await env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT 100`).all()
     return json(ok(result.results ?? []))
   } catch (e) {
     return json(err('Failed to list assertion suites', String(e)), 500)
@@ -354,13 +363,23 @@ const deleteSuite: Handler = async (_req, env, params) => {
   }
 }
 
-const runSuite: Handler = async (_req, env, params) => {
+const runSuite: Handler = async (_req, env: Env, params) => {
   try {
     const row = await env.DB.prepare(
-      'SELECT id, name, description, cases, created_at, updated_at FROM assertion_suites WHERE id = ?',
+      'SELECT id, name, description, cases, sandbox_id, created_at, updated_at FROM assertion_suites WHERE id = ?',
     ).bind(params.id).first<SuiteRow>()
 
     if (!row) return json(err('Suite not found'), 404)
+
+    // Resolve sandbox defaults: test cases that don't specify their own model/systemPrompt
+    // will use the sandbox's config, making this suite a contract test for a specific app.
+    let sandboxModel: string | undefined
+    let sandboxSystemPrompt: string | undefined
+    if (row.sandbox_id) {
+      const ctx = await resolveAnalysisContext(row.sandbox_id, env)
+      if (ctx.model)        sandboxModel        = ctx.model
+      if (ctx.systemPrompt) sandboxSystemPrompt = ctx.systemPrompt
+    }
 
     const cases = JSON.parse(row.cases) as TestCase[]
     const runResults: CaseRunResult[] = []
@@ -370,11 +389,11 @@ const runSuite: Handler = async (_req, env, params) => {
       const turnStart = Date.now()
 
       const response = await complete(env.AI, env, {
-        model: tc.model,
-        prompt: tc.prompt,
-        systemPrompt: tc.systemPrompt,
-        temperature: tc.temperature,
-        maxTokens: tc.maxTokens,
+        model:        tc.model        ?? sandboxModel,
+        prompt:       tc.prompt,
+        systemPrompt: tc.systemPrompt ?? sandboxSystemPrompt,
+        temperature:  tc.temperature,
+        maxTokens:    tc.maxTokens,
       })
 
       const latencyMs = Date.now() - turnStart

@@ -83,6 +83,12 @@ export const IMAGE_RATE_LIMIT_MAX        = 20  // 20 uploads/min per app
 export const BUILD_KEY_PREFIX            = 'build:'
 export const BUILD_TTL                   = 604800  // 7 days
 
+// Auto-vault from whisperer tools
+export const VAULT_AUTO_RESULT_MAX_BYTES = 10_240   // 10 KB — max JSON result stored in auto-vault
+
+// Guard event metadata
+export const GUARD_FLAG_INPUT_PREVIEW_CHARS = 200   // chars of flagged input stored in event metadata
+
 // Guard Laboratory
 export const MAX_GUARD_PROBE_CHARS       = 50_000  // max chars for guard-probe endpoint
 
