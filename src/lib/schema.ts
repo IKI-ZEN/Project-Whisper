@@ -7,14 +7,27 @@ import {
   MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
   MAX_DRIFT_TURNS, MAX_STRESS_LEVELS, MAX_RUBRIC_CRITERIA, MAX_RUBRIC_SAMPLES,
-  MAX_WEBHOOK_URL_LEN,
+  MAX_WEBHOOK_URL_LEN, MAX_IMAGE_BASE64_BYTES, MAX_IMAGES_PER_MESSAGE, MAX_JSON_SCHEMA_BYTES,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
+export interface TextBlock {
+  type: 'text'
+  text: string
+}
+
+export interface ImageBlock {
+  type: 'image'
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+  data: string  // base64, no data: URI prefix
+}
+
+export type ContentBlock = TextBlock | ImageBlock
+
 export interface Message {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ContentBlock[]
   timestamp: number
 }
 
@@ -61,6 +74,7 @@ export interface CompleteRequest {
   tools?: Tool[]
   toolChoice?: 'auto' | 'required' | 'none'
   responseFormat?: 'json' | 'text'
+  jsonSchema?: Record<string, unknown>  // OpenAI json_schema strict mode (overrides responseFormat)
   groundingEnabled?: boolean
   reasoningEffort?: 'low' | 'medium' | 'high'
   thinking?: number
@@ -125,6 +139,51 @@ function isObj(v: unknown): v is Obj {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
+const ALLOWED_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+
+function parseContentBlock(v: unknown, idx: number): ContentBlock {
+  if (!isObj(v)) throw new Error(`content[${idx}] must be an object`)
+  const { type } = v
+  if (type === 'text') {
+    if (typeof v.text !== 'string') throw new Error(`content[${idx}].text must be a string`)
+    return { type: 'text', text: v.text }
+  }
+  if (type === 'image') {
+    if (!ALLOWED_IMAGE_MEDIA_TYPES.has(v.mediaType as string))
+      throw new Error(`content[${idx}].mediaType must be image/jpeg, image/png, image/gif, or image/webp`)
+    if (typeof v.data !== 'string' || v.data.length === 0)
+      throw new Error(`content[${idx}].data must be a non-empty base64 string`)
+    if (v.data.length > MAX_IMAGE_BASE64_BYTES)
+      throw new Error(`content[${idx}].data exceeds maximum allowed size`)
+    return { type: 'image', mediaType: v.mediaType as ImageBlock['mediaType'], data: v.data as string }
+  }
+  throw new Error(`content[${idx}].type must be "text" or "image"`)
+}
+
+function parseMessageContent(v: unknown): string | ContentBlock[] {
+  if (typeof v === 'string') return v
+  if (Array.isArray(v)) {
+    if (v.length > MAX_IMAGES_PER_MESSAGE + 20)
+      throw new Error(`content array exceeds maximum length`)
+    const imageCount = v.filter(b => isObj(b) && (b as Obj).type === 'image').length
+    if (imageCount > MAX_IMAGES_PER_MESSAGE)
+      throw new Error(`messages may contain at most ${MAX_IMAGES_PER_MESSAGE} images`)
+    return v.map((b, i) => parseContentBlock(b, i))
+  }
+  throw new Error('message content must be a string or array of content blocks')
+}
+
+function parseMessage(v: unknown, idx: number): Message {
+  if (!isObj(v)) throw new Error(`messages[${idx}] must be an object`)
+  const role = v.role
+  if (role !== 'system' && role !== 'user' && role !== 'assistant')
+    throw new Error(`messages[${idx}].role must be "system", "user", or "assistant"`)
+  if (v.content === undefined) throw new Error(`messages[${idx}].content is required`)
+  const content = parseMessageContent(v.content)
+  const timestamp = typeof v.timestamp === 'number' ? v.timestamp : 0
+  return { role: role as Message['role'], content, timestamp }
+}
+
 function str(v: unknown, field: string): string
 function str(v: unknown, field: string, fallback: string): string
 function str(v: unknown, field: string, fallback?: string): string {
@@ -150,9 +209,16 @@ export function parseCompleteRequest(body: unknown): CompleteRequest {
   const tc = body.toolChoice
   const re = body.reasoningEffort
   const rf = body.responseFormat
+  let jsonSchema: Record<string, unknown> | undefined
+  if (body.jsonSchema !== undefined) {
+    if (!isObj(body.jsonSchema)) throw new Error('jsonSchema must be an object')
+    if (JSON.stringify(body.jsonSchema).length > MAX_JSON_SCHEMA_BYTES)
+      throw new Error(`jsonSchema must be <= ${MAX_JSON_SCHEMA_BYTES} bytes`)
+    jsonSchema = body.jsonSchema as Record<string, unknown>
+  }
   return {
     prompt:          body.prompt       !== undefined ? str(body.prompt,       'prompt')       : undefined,
-    messages:        Array.isArray(body.messages)   ? (body.messages as Message[])            : undefined,
+    messages:        Array.isArray(body.messages)   ? body.messages.map((m, i) => parseMessage(m, i)) : undefined,
     systemPrompt:    body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
     model:           body.model        !== undefined ? str(body.model,        'model')        : undefined,
     temperature:     body.temperature  !== undefined ? num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2)    : undefined,
@@ -160,6 +226,7 @@ export function parseCompleteRequest(body: unknown): CompleteRequest {
     tools:           Array.isArray(body.tools)       ? (body.tools as unknown[]).slice(0, 20).map((t, i) => parseTool(t, i)) : undefined,
     toolChoice:      tc === 'required' || tc === 'none' ? tc : tc !== undefined ? 'auto' : undefined,
     responseFormat:  rf === 'json' ? 'json' : rf === 'text' ? 'text' : undefined,
+    jsonSchema,
     groundingEnabled: body.groundingEnabled === true,
     reasoningEffort: re === 'low' || re === 'medium' || re === 'high' ? re : undefined,
     thinking:        body.thinking !== undefined ? num(body.thinking, 'thinking', 8000, 1024, 80000) : undefined,

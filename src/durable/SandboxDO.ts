@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../types/env'
 import type { SandboxConfig, Message } from '../lib/schema'
-import { runInSandboxWithRAG, streamInSandboxWithRAG, isToolCallReply, decodeToolCalls, encodeToolResult } from '../lib/ai'
+import { runInSandboxWithRAG, streamInSandboxWithRAG, isToolCallReply, decodeToolCalls, encodeToolResult, contentToText } from '../lib/ai'
 import { json, sseResponse } from '../lib/http'
 import { now } from '../lib/utils'
 import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS, GUARD_FLAG_INPUT_PREVIEW_CHARS } from '../lib/constants'
@@ -132,7 +132,7 @@ export class SandboxDO extends DurableObject<Env> {
       loops++
       const configWithMem = { ...config, memory: currentMemory.slice(0, -1) }
       const lastMsg = currentMemory[currentMemory.length - 1]
-      const reply = await runInSandboxWithRAG(this.env.AI, this.env, configWithMem, lastMsg.content)
+      const reply = await runInSandboxWithRAG(this.env.AI, this.env, configWithMem, contentToText(lastMsg.content))
       const assistantMsg: Message = { role: 'assistant', content: reply, timestamp: now() }
 
       if (!isToolCallReply(reply)) {
@@ -164,7 +164,7 @@ export class SandboxDO extends DurableObject<Env> {
 
     // Max loops hit — return last state
     const last = currentMemory[currentMemory.length - 1]
-    return { reply: last.content, memory: currentMemory }
+    return { reply: contentToText(last.content), memory: currentMemory }
   }
 
   // ── Fetch router ──────────────────────────────────────────────────────────
@@ -261,7 +261,7 @@ export class SandboxDO extends DurableObject<Env> {
           const finalReply = await runInSandboxWithRAG(
             this.env.AI, this.env,
             { ...config, memory: resultMemory.slice(0, -1) },
-            resultMemory[resultMemory.length - 1].content,
+            contentToText(resultMemory[resultMemory.length - 1].content),
           )
           const finalMemory = [...resultMemory, { role: 'assistant' as const, content: finalReply, timestamp: now() }]
           await this.saveSessionMemory(sessionId, finalMemory.slice(-MAX_MESSAGES), config)

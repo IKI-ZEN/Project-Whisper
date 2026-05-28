@@ -138,3 +138,10 @@ export const PIPELINE_WRITE_RATE_LIMIT_MAX    = 30
 export const PIPELINE_WRITE_RATE_LIMIT_WINDOW = 60_000
 export const VAULT_WRITE_RATE_LIMIT_MAX       = 30
 export const VAULT_WRITE_RATE_LIMIT_WINDOW    = 60_000
+
+// Vision / multimodal input
+export const MAX_IMAGE_BASE64_BYTES = 5_592_405  // ~4 MB binary after decoding base64
+export const MAX_IMAGES_PER_MESSAGE = 5
+
+// Structured output (OpenAI json_schema mode)
+export const MAX_JSON_SCHEMA_BYTES  = 65_536     // 64 KB

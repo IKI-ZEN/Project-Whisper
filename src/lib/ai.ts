@@ -1,5 +1,5 @@
 import type { Env } from '../types/env'
-import type { Message, SandboxConfig, Tool } from './schema'
+import type { Message, SandboxConfig, Tool, ContentBlock } from './schema'
 import { sseEvent } from './http'
 import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS } from './constants'
 import { sha256 } from './utils'
@@ -176,38 +176,78 @@ export interface CompletionOpts {
   tools?: Tool[]                              // tool definitions — wired to all providers
   toolChoice?: 'auto' | 'required' | 'none'  // OpenAI/Anthropic tool_choice
   responseFormat?: 'json' | 'text'           // 'json' → JSON mode (OpenAI / Workers AI)
+  jsonSchema?: Record<string, unknown>        // OpenAI: json_schema strict mode (overrides responseFormat)
   thinking?: number                          // Anthropic: budget_tokens; >0 enables extended thinking
   reasoningEffort?: 'low' | 'medium' | 'high' // OpenAI o-series reasoning effort
   sandboxId?: string                         // passed as cf-aig-metadata for observability
   groundingEnabled?: boolean                 // Google: enable google_search_retrieval
 }
 
-// Build plain text messages for streaming and Workers AI (no tool history support needed)
+// Extract plain text from a message content value (strips images for text-only paths)
+export function contentToText(content: string | ContentBlock[]): string {
+  if (typeof content === 'string') return content
+  return content.filter((b): b is { type: 'text'; text: string } => b.type === 'text').map(b => b.text).join('\n')
+}
+
+// Map ContentBlock[] to Anthropic content block array format
+function toAnthropicContent(blocks: ContentBlock[]): Record<string, unknown>[] {
+  return blocks.map(b =>
+    b.type === 'image'
+      ? { type: 'image', source: { type: 'base64', media_type: b.mediaType, data: b.data } }
+      : { type: 'text', text: b.text },
+  )
+}
+
+// Map ContentBlock[] to OpenAI content block array format
+function toOpenAIContent(blocks: ContentBlock[]): Record<string, unknown>[] {
+  return blocks.map(b =>
+    b.type === 'image'
+      ? { type: 'image_url', image_url: { url: `data:${b.mediaType};base64,${b.data}` } }
+      : { type: 'text', text: b.text },
+  )
+}
+
+// Map ContentBlock[] to Gemini parts format
+function toGeminiParts(blocks: ContentBlock[]): Record<string, unknown>[] {
+  return blocks.map(b =>
+    b.type === 'image'
+      ? { inlineData: { mimeType: b.mediaType, data: b.data } }
+      : { text: b.text },
+  )
+}
+
+// Build plain text messages for streaming and Workers AI (no tool history or multimodal support)
 function buildMessages(opts: CompletionOpts): { role: string; content: string }[] {
   const out: { role: string; content: string }[] = []
   if (opts.systemPrompt) out.push({ role: 'system', content: opts.systemPrompt })
   if (opts.messages?.length) {
-    for (const m of opts.messages) out.push({ role: m.role, content: m.content })
+    for (const m of opts.messages) out.push({ role: m.role, content: contentToText(m.content) })
   } else if (opts.prompt) {
     out.push({ role: 'user', content: opts.prompt })
   }
   return out
 }
 
-// Build Anthropic-format messages, converting tool call/result encoding in history
+// Build Anthropic-format messages, converting tool call/result encoding and ContentBlock[] in history
 function buildAnthropicMessages(opts: CompletionOpts): Array<Record<string, unknown>> {
-  const raw = buildMessages(opts)
   const out: Array<Record<string, unknown>> = []
-  for (const m of raw) {
-    if (m.role === 'system') continue  // handled separately as top-level system field
+  const msgList = opts.messages?.length
+    ? opts.messages.filter(m => m.role !== 'system')
+    : opts.prompt ? [{ role: 'user' as const, content: opts.prompt, timestamp: 0 }] : []
+
+  for (const m of msgList) {
+    if (Array.isArray(m.content)) {
+      // ContentBlock[] — map to Anthropic vision/text content blocks
+      out.push({ role: m.role, content: toAnthropicContent(m.content) })
+      continue
+    }
+    // String content — check for tool call encoding
     const tr = decodeToolResult(m.content)
     if (tr && m.role === 'user') {
-      // Convert tool result back to Anthropic tool_result content block
       out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: tr.toolUseId, content: tr.content }] })
       continue
     }
     if (isToolCallReply(m.content) && m.role === 'assistant') {
-      // Convert stored tool call back to Anthropic tool_use content blocks
       const calls = decodeToolCalls(m.content)
       out.push({ role: 'assistant', content: calls.map(c => ({ type: 'tool_use', id: c.id, name: c.name, input: c.input })) })
       continue
@@ -217,14 +257,22 @@ function buildAnthropicMessages(opts: CompletionOpts): Array<Record<string, unkn
   return out
 }
 
-// Build OpenAI-format messages, converting tool call/result encoding in history
+// Build OpenAI-format messages, converting tool call/result encoding and ContentBlock[] in history
 function buildOpenAIMessages(opts: CompletionOpts): Array<Record<string, unknown>> {
-  const raw = buildMessages(opts)
   const out: Array<Record<string, unknown>> = []
-  for (const m of raw) {
+  const msgList = opts.messages?.length
+    ? opts.messages
+    : opts.prompt ? [{ role: 'user' as const, content: opts.prompt, timestamp: 0 }] : []
+
+  for (const m of msgList) {
+    if (Array.isArray(m.content)) {
+      // ContentBlock[] — map to OpenAI vision/text content blocks
+      out.push({ role: m.role, content: toOpenAIContent(m.content) })
+      continue
+    }
+    // String content — check for tool call encoding
     const tr = decodeToolResult(m.content)
     if (tr && m.role === 'user') {
-      // OpenAI tool result goes as role: 'tool'
       out.push({ role: 'tool', tool_call_id: tr.toolUseId, content: tr.content })
       continue
     }
@@ -242,6 +290,9 @@ function buildOpenAIMessages(opts: CompletionOpts): Array<Record<string, unknown
     }
     out.push({ role: m.role, content: m.content })
   }
+
+  // Prepend system message if present (OpenAI supports system role in messages array)
+  if (opts.systemPrompt) out.unshift({ role: 'system', content: opts.systemPrompt })
   return out
 }
 
@@ -258,7 +309,11 @@ async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Pr
       ? { max_completion_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}) }
       : { temperature: temp, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS }
     ),
-    ...(opts.responseFormat === 'json' && !isReasoning ? { response_format: { type: 'json_object' } } : {}),
+    ...(opts.jsonSchema && !isReasoning
+      ? { response_format: { type: 'json_schema', json_schema: { name: 'response', schema: opts.jsonSchema, strict: true } } }
+      : opts.responseFormat === 'json' && !isReasoning
+        ? { response_format: { type: 'json_object' } }
+        : {}),
   }
   if (opts.tools?.length) {
     body.tools = opts.tools.map(toOpenAITool)
@@ -348,11 +403,13 @@ async function completeAnthropic(env: Env, model: string, opts: CompletionOpts):
 }
 
 async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Promise<string> {
-  const allMessages = buildMessages(opts)
-  const system = allMessages.find(m => m.role === 'system')
-  const contents = allMessages
-    .filter(m => m.role !== 'system')
-    .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+  const msgList = opts.messages?.length
+    ? opts.messages.filter(m => m.role !== 'system')
+    : opts.prompt ? [{ role: 'user' as const, content: opts.prompt, timestamp: 0 }] : []
+  const contents = msgList.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: Array.isArray(m.content) ? toGeminiParts(m.content) : [{ text: m.content }],
+  }))
   const temp = opts.temperature ?? DEFAULT_TEMPERATURE
   const body: Record<string, unknown> = {
     contents,
@@ -361,7 +418,7 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
       maxOutputTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
       ...(opts.responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}),
     },
-    ...(system ? { systemInstruction: { parts: [{ text: system.content }] } } : {}),
+    ...(opts.systemPrompt ? { systemInstruction: { parts: [{ text: opts.systemPrompt }] } } : {}),
     ...(opts.groundingEnabled ? { tools: [{ googleSearch: {} }] } : opts.tools?.length
       ? { tools: [{ functionDeclarations: opts.tools.map(toGoogleFunctionDeclaration) }] }
       : {}),
@@ -514,20 +571,24 @@ export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<
     })
     result = (response as { response?: string }).response ?? String(response)
   }
-  const latencyMs = Date.now() - t0
+  const latencyMs   = Date.now() - t0
+  const model        = opts.model ?? MODELS.text
+  const provider     = gw?.provider ?? 'workers-ai'
+  const inputText    = opts.prompt ?? (opts.messages ?? []).map(m => contentToText(m.content)).join('')
+  const inputTokens  = Math.ceil(inputText.length / 4)
+  const outputTokens = Math.ceil(result.length / 4)
+  const cost         = estimateCost(model, inputTokens, outputTokens)
+
   if (env.ANALYTICS) {
+    // blobs: [model, provider, sandboxId] — doubles: [latencyMs, inputTokens, outputTokens, costUsd]
     env.ANALYTICS.writeDataPoint({
-      blobs:   [opts.model ?? MODELS.text, opts.sandboxId ?? '', gw?.provider ?? 'workers-ai'],
-      doubles: [0, 0, latencyMs],
-      indexes: [opts.sandboxId ?? 'anon'],
+      blobs:   [model, provider, opts.sandboxId ?? ''],
+      doubles: [latencyMs, inputTokens, outputTokens, cost],
+      indexes: [opts.sandboxId ?? provider],
     })
   }
   if (!opts.sandboxId) {
-    const model    = opts.model ?? MODELS.text
-    const provider = gw?.provider ?? 'workers-ai'
-    const inputText = opts.prompt ?? (opts.messages ?? []).map(m => m.content).join('')
-    logUsage(env, undefined, model, provider, 'complete',
-      Math.ceil(inputText.length / 4), Math.ceil(result.length / 4), latencyMs)
+    logUsage(env, undefined, model, provider, 'complete', inputTokens, outputTokens, latencyMs)
   }
   return result
 }
