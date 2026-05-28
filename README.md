@@ -1,7 +1,5 @@
 # Project Aether-Lite
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-
 A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packages are imported at runtime — all routing, streaming, and serialisation use native Web Platform APIs.
 
 ## What it does
@@ -349,6 +347,3 @@ Copy `.dev.vars.example` to `.dev.vars` and fill in the values you need:
 | Outbound email | Email Routing (`SEND_EMAIL` binding) |
 | App hosting | Cloudflare Pages (deploy target via Direct Upload API) |
 
-## License
-
-GNU General Public License v3.0 — see [LICENSE](LICENSE) for the full text.

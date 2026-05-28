@@ -16,9 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - UUID validation added to all four handlers in `documents.ts` before R2/KV access
 - Inline numeric literals in `documents.ts` (`8192`, `500`, `5`, `60_000`) replaced with named constants in `src/lib/constants.ts`
 - Custom `doBuild()` helper in `build.ts` replaced with the shared `doFetch()` from `src/routes/sandbox.ts`
-- `"private": true` removed from `package.json` (misleading for a public OSS project)
 - `SETUP.md`: open-AI-proxy warning added; Vectorize `--dimensions` documents its embedding model dependency; Node.js requirement corrected to 20+
-- `README.md`: 0.2.0 Whisperer Suite features documented; all new API routes added; full 7-migration setup sequence; license section and badge; CF Access warning
+- `README.md`: 0.2.0 Whisperer Suite features documented; all new API routes added; full 7-migration setup sequence; CF Access warning
 
 ## [0.2.0] — 2026-05-28
 
@@ -31,7 +30,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Semantic Map (Atlas) — prompt library with embedding, k-means clustering, PCA-2D scatter plot, and nearest-prompt search (`/api/atlas`)
 - Cron Whisper (Probes) — scheduled whisperer tool runs (entropy, sensitivity, CoT, sweep) on hourly/daily/weekly cron triggers with time-series results (`/api/probes`)
 - D1 migrations 0004–0007 for probes, vault, assertion suites/runs, and prompt library tables
-- GPL v3 `LICENSE` file and SPDX headers on all source files
 
 ### Fixed
 
