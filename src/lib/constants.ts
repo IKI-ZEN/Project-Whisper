@@ -110,3 +110,10 @@ export const MAX_RUBRIC_SAMPLES          = 5
 export const GUARD_SCAN_SLICE_BYTES      = 8192    // max bytes fed to guard scan on upload
 export const MAX_VECTOR_CHUNKS           = 500     // chunk IDs deleted on document delete
 export const REINDEX_RATE_LIMIT_MAX      = 5       // reindex calls/min per sandbox
+
+// Manual probe/suite run rate limits (per IP)
+export const PROBE_RUN_RATE_LIMIT_MAX    = 10      // 10 manual probe runs/min
+export const SUITE_RUN_RATE_LIMIT_MAX    = 5       // 5 suite runs/min
+
+// Assertion regex input cap — prevents ReDoS on long responses
+export const MAX_ASSERTION_REGEX_INPUT   = 50_000

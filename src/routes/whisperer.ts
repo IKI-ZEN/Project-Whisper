@@ -2,6 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, readJson } from '../lib/http'
 import { saveToVault } from '../lib/analysis'
+import { isUUID } from '../lib/utils'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
@@ -203,7 +204,7 @@ function extractEnvelope(body: unknown): Envelope {
   const b = body as Record<string, unknown>
   return {
     autoVault: b.autoVault === true,
-    sandboxId: typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0 ? b.sandboxId.trim() : null,
+    sandboxId: typeof b.sandboxId === 'string' && isUUID(b.sandboxId) ? b.sandboxId : null,
   }
 }
 

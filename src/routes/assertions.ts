@@ -1,10 +1,11 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { scan } from '../lib/guard'
-import { newId } from '../lib/utils'
+import { newId, isUUID } from '../lib/utils'
 import { resolveAnalysisContext } from '../lib/analysis'
+import { RATE_LIMIT_WINDOW_MS, SUITE_RUN_RATE_LIMIT_MAX, MAX_ASSERTION_REGEX_INPUT } from '../lib/constants'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -124,8 +125,8 @@ function parseSuiteBody(body: unknown): { name: string; description: string; cas
   if (description.length > 512) throw new Error('description must be at most 512 characters')
   if (!Array.isArray(b.cases)) throw new Error('cases must be an array')
   if (b.cases.length > 50) throw new Error('cases may have at most 50 items')
-  const sandboxId = typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0
-    ? b.sandboxId.trim() : null
+  const sandboxId = typeof b.sandboxId === 'string' && isUUID(b.sandboxId)
+    ? b.sandboxId : null
   return {
     name: b.name,
     description,
@@ -186,7 +187,7 @@ async function evaluateAssertion(
     case 'matches': {
       try {
         const re = new RegExp(assertion.pattern)
-        const passed = re.test(response)
+        const passed = re.test(response.slice(0, MAX_ASSERTION_REGEX_INPUT))
         return {
           type: 'matches',
           passed,
@@ -299,11 +300,14 @@ const getSuite: Handler = async (_req, env, params) => {
 
     if (!row) return json(err('Suite not found'), 404)
 
+    let cases: TestCase[]
+    try { cases = JSON.parse(row.cases) as TestCase[] } catch { return json(err('Suite data corrupted'), 500) }
+
     const suite: Suite = {
       id: row.id,
       name: row.name,
       description: row.description,
-      cases: JSON.parse(row.cases) as TestCase[],
+      cases,
       created_at: row.created_at,
       updated_at: row.updated_at,
     }
@@ -334,11 +338,14 @@ const patchSuite: Handler = async (req, env, params) => {
       'UPDATE assertion_suites SET name = ?, description = ?, cases = ?, updated_at = ? WHERE id = ?',
     ).bind(newName, newDescription, newCases, now, params.id).run()
 
+    let patchedCases: TestCase[]
+    try { patchedCases = JSON.parse(newCases) as TestCase[] } catch { return json(err('Suite data corrupted'), 500) }
+
     const suite: Suite = {
       id: existing.id,
       name: newName,
       description: newDescription,
-      cases: JSON.parse(newCases) as TestCase[],
+      cases: patchedCases,
       created_at: existing.created_at,
       updated_at: now,
     }
@@ -363,7 +370,10 @@ const deleteSuite: Handler = async (_req, env, params) => {
   }
 }
 
-const runSuite: Handler = async (_req, env: Env, params) => {
+const runSuite: Handler = async (req, env: Env, params) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:suite-run:${ip}`, SUITE_RUN_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, env)
+  if (rl) return rl
   try {
     const row = await env.DB.prepare(
       'SELECT id, name, description, cases, sandbox_id, created_at, updated_at FROM assertion_suites WHERE id = ?',
@@ -381,7 +391,8 @@ const runSuite: Handler = async (_req, env: Env, params) => {
       if (ctx.systemPrompt) sandboxSystemPrompt = ctx.systemPrompt
     }
 
-    const cases = JSON.parse(row.cases) as TestCase[]
+    let cases: TestCase[]
+    try { cases = JSON.parse(row.cases) as TestCase[] } catch { return json(err('Suite data corrupted'), 500) }
     const runResults: CaseRunResult[] = []
 
     for (let i = 0; i < cases.length; i++) {

@@ -1,7 +1,8 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
-import { newId } from '../lib/utils'
+import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { newId, isUUID } from '../lib/utils'
+import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX } from '../lib/constants'
 import {
   complete, embed, estimateEntropy, runCoTProbe,
   generatePromptVariants, computeSimilarityMatrix,
@@ -95,8 +96,8 @@ function parseCreateProbe(body: unknown): {
     ? (b.threshold as Record<string, unknown>)
     : {}
 
-  const sandboxId = typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0
-    ? b.sandboxId.trim()
+  const sandboxId = typeof b.sandboxId === 'string' && isUUID(b.sandboxId)
+    ? b.sandboxId
     : null
 
   return {
@@ -170,8 +171,8 @@ function parsePatchProbe(body: unknown): Partial<{
       : {}
   }
   if (b.sandboxId !== undefined) {
-    out.sandboxId = typeof b.sandboxId === 'string' && b.sandboxId.trim().length > 0
-      ? b.sandboxId.trim()
+    out.sandboxId = typeof b.sandboxId === 'string' && isUUID(b.sandboxId)
+      ? b.sandboxId
       : null
   }
   return out
@@ -384,7 +385,10 @@ const deleteProbe: Handler = async (_req: Request, env: Env, params) => {
   }
 }
 
-const runProbe: Handler = async (_req: Request, env: Env, params) => {
+const runProbe: Handler = async (req: Request, env: Env, params) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:probe-run:${ip}`, PROBE_RUN_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, env)
+  if (rl) return rl
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   try {

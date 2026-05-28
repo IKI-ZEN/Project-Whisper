@@ -1912,6 +1912,15 @@ function scanInGuardLab(text) {
   document.getElementById('gl-text').value = text
 }
 
+// Delegated click handler for .scan-btn buttons rendered inside the monitor feed and audit log.
+// Using data-flagged avoids injecting user content into onclick attributes (XSS prevention).
+;['mon-feed', 'mon-audit'].forEach(containerId => {
+  document.addEventListener('click', e => {
+    const btn = e.target.closest && e.target.closest(`#${containerId} .scan-btn`)
+    if (btn && btn.dataset.flagged !== undefined) scanInGuardLab(btn.dataset.flagged)
+  })
+})
+
 async function runGuardLab() {
   const text = document.getElementById('gl-text').value
   const out  = document.getElementById('gl-results')
@@ -2016,8 +2025,8 @@ function runMonitorStream() {
       }
       const color = data.event_type === 'guard_flag' ? 'var(--red)' : data.event_type === 'response_flag' ? '#fb923c' : 'var(--muted)'
       const meta = JSON.stringify(data.metadata).slice(0, 120)
-      const flaggedInput = (data.event_type === 'guard_flag' || data.event_type === 'response_flag') && data.metadata?.flaggedInput
-      const scanBtn = flaggedInput ? `<button onclick="scanInGuardLab(${JSON.stringify(data.metadata.flaggedInput)})" style="font-size:10px;padding:1px 7px;margin-left:8px;min-height:0">Scan →</button>` : ''
+      const hasScan = (data.event_type === 'guard_flag' || data.event_type === 'response_flag') && data.metadata?.flaggedInput
+      const scanBtn = hasScan ? `<button class="scan-btn" data-flagged="${escHtml(data.metadata.flaggedInput)}" style="font-size:10px;padding:1px 7px;margin-left:8px;min-height:0">Scan →</button>` : ''
       feed.insertAdjacentHTML('beforeend',
         `<div class="mon-event" style="border-left:3px solid ${color};padding:4px 8px;margin-bottom:4px;font-size:11px">
           <span style="color:${color};font-weight:600">${escHtml(data.event_type)}</span>
@@ -2067,7 +2076,7 @@ async function loadAuditLog() {
       const isFlagged = ev.event_type === 'guard_flag' || ev.event_type === 'response_flag'
       const evColor = ev.event_type === 'guard_flag' ? 'var(--red)' : ev.event_type === 'response_flag' ? '#fb923c' : 'var(--accent2)'
       const fi = ev.metadata?.flaggedInput
-      const scanBtn = isFlagged && fi ? `<button onclick="scanInGuardLab(${JSON.stringify(fi)})" style="font-size:10px;padding:1px 7px;margin-left:8px;min-height:0">Scan →</button>` : ''
+      const scanBtn = isFlagged && fi ? `<button class="scan-btn" data-flagged="${escHtml(fi)}" style="font-size:10px;padding:1px 7px;margin-left:8px;min-height:0">Scan →</button>` : ''
       return `<div style="border-bottom:1px solid var(--border);padding:6px 0;font-size:11px">
         <span style="color:${evColor};font-family:var(--mono)">${escHtml(ev.event_type)}</span>
         <span style="color:var(--muted);margin-left:8px">${escHtml(ev.sandbox_id)}</span>
