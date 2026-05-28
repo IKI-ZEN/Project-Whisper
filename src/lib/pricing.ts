@@ -34,9 +34,16 @@ const PRICES: Record<string, Price> = {
   'deepseek-reasoner':                         { inputPer1k: 0.00055, outputPer1k: 0.00219  },
   // xAI (Grok)
   'grok-2-latest':                             { inputPer1k: 0.002,   outputPer1k: 0.010    },
+  'grok-4':                                    { inputPer1k: 0.003,   outputPer1k: 0.015    },
   // Perplexity (includes search costs)
   'sonar-pro':                                 { inputPer1k: 0.003,   outputPer1k: 0.015    },
   'sonar':                                     { inputPer1k: 0.001,   outputPer1k: 0.001    },
+  // Cohere
+  'command-r-plus':                            { inputPer1k: 0.0025,  outputPer1k: 0.01     },
+  'command-r':                                 { inputPer1k: 0.00015, outputPer1k: 0.0006   },
+  'command':                                   { inputPer1k: 0.001,   outputPer1k: 0.002    },
+  // Cerebras (ultra-fast Llama inference — same model key as Groq but different pricing)
+  'llama-3.3-70b':                             { inputPer1k: 0.00006, outputPer1k: 0.00006  },
 }
 
 const FALLBACK: Price = { inputPer1k: 0.0001, outputPer1k: 0.0001 }

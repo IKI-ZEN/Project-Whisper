@@ -86,36 +86,76 @@ export const MODELS = {
 
 type WireFormat = 'openai' | 'anthropic' | 'google' | 'cohere' | 'huggingface' | 'replicate'
 
+interface ProviderCapabilities {
+  tools?:        boolean
+  vision?:       boolean
+  streaming?:    boolean
+  systemPrompt?: boolean
+  jsonMode?:     boolean
+}
+
 interface GatewayProviderDef {
-  format:       WireFormat
-  path:         (id: string) => string   // URL path after gateway base
-  apiKey:       (env: Env) => string
-  authHeaders?: (key: string) => Record<string, string>  // overrides Authorization: Bearer {key}
-  modelId?:     (id: string) => string                   // transforms model ID for request body
+  format:        WireFormat
+  path:          (id: string) => string
+  apiKey:        (env: Env) => string
+  authHeaders?:  (key: string) => Record<string, string>
+  modelId?:      (id: string) => string
+  capabilities?: ProviderCapabilities
 }
 
 // Each entry maps the model prefix (before ':') to its gateway path and auth.
 // All OpenAI-compatible providers share the same request/response format.
 // Paths are confirmed against official Cloudflare AI Gateway provider docs.
 const GATEWAY_PROVIDERS: Record<string, GatewayProviderDef> = {
-  openai:     { format: 'openai',    path: _  => '/openai/chat/completions',                                              apiKey: e => e.OPENAI_API_KEY     ?? '' },
-  anthropic:  { format: 'anthropic', path: _  => '/anthropic/v1/messages',                                               apiKey: e => e.ANTHROPIC_API_KEY  ?? '' },
-  google:     { format: 'google',    path: id => `/google-ai-studio/v1/models/${encodeURIComponent(id)}:generateContent`, apiKey: e => e.GOOGLE_AI_KEY      ?? '' },
-  groq:       { format: 'openai',    path: _  => '/groq/chat/completions',                                               apiKey: e => e.GROQ_API_KEY       ?? '' },
-  mistral:    { format: 'openai',    path: _  => '/mistral/v1/chat/completions',                                         apiKey: e => e.MISTRAL_API_KEY    ?? '' },
-  deepseek:   { format: 'openai',    path: _  => '/deepseek/chat/completions',                                          apiKey: e => e.DEEPSEEK_API_KEY   ?? '' },
-  xai:        { format: 'openai',    path: _  => '/grok/v1/chat/completions',                                           apiKey: e => e.XAI_API_KEY        ?? '' },
-  perplexity: { format: 'openai',    path: _  => '/perplexity-ai/chat/completions',                                     apiKey: e => e.PERPLEXITY_API_KEY ?? '' },
-  cerebras:   { format: 'openai',    path: _  => '/cerebras/chat/completions',                                          apiKey: e => e.CEREBRAS_API_KEY   ?? '' },
-  openrouter: { format: 'openai',    path: _  => '/openrouter/chat/completions',                                        apiKey: e => e.OPENROUTER_API_KEY ?? '' },
+  openai: {
+    format: 'openai', path: _ => '/openai/chat/completions', apiKey: e => e.OPENAI_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  anthropic: {
+    format: 'anthropic', path: _ => '/anthropic/v1/messages', apiKey: e => e.ANTHROPIC_API_KEY ?? '',
+    authHeaders: key => ({ 'x-api-key': key }),
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true },
+  },
+  google: {
+    format: 'google', path: id => `/google-ai-studio/v1/models/${encodeURIComponent(id)}:generateContent`,
+    apiKey: e => e.GOOGLE_AI_KEY ?? '', authHeaders: key => ({ 'x-goog-api-key': key }),
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  groq: {
+    format: 'openai', path: _ => '/groq/chat/completions', apiKey: e => e.GROQ_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  mistral: {
+    format: 'openai', path: _ => '/mistral/v1/chat/completions', apiKey: e => e.MISTRAL_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  deepseek: {
+    format: 'openai', path: _ => '/deepseek/chat/completions', apiKey: e => e.DEEPSEEK_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  xai: {
+    format: 'openai', path: _ => '/grok/v1/chat/completions', apiKey: e => e.XAI_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  perplexity: {
+    format: 'openai', path: _ => '/perplexity-ai/chat/completions', apiKey: e => e.PERPLEXITY_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  cerebras: {
+    format: 'openai', path: _ => '/cerebras/chat/completions', apiKey: e => e.CEREBRAS_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
+  openrouter: {
+    format: 'openai', path: _ => '/openrouter/chat/completions', apiKey: e => e.OPENROUTER_API_KEY ?? '',
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
   // Bedrock via AI Gateway compat endpoint. Auth is CF_AIG_TOKEN; body model becomes "aws-bedrock/{id}".
   // Requires BYOK credentials configured in CF dashboard and CF_AIG_TOKEN set.
   bedrock: {
-    format: 'openai',
-    path: _ => '/compat/chat/completions',
-    apiKey: e => e.CF_AIG_TOKEN ?? '',
-    authHeaders: key => ({ 'cf-aig-authorization': `Bearer ${key}` }),
+    format: 'openai', path: _ => '/compat/chat/completions',
+    apiKey: e => e.CF_AIG_TOKEN ?? '', authHeaders: key => ({ 'cf-aig-authorization': `Bearer ${key}` }),
     modelId: id => `aws-bedrock/${id}`,
+    capabilities: { tools: true, streaming: true, systemPrompt: true, jsonMode: true },
   },
   // Azure OpenAI — model string format: azure:{resource-name}/{deployment-name}
   azure: {
@@ -126,33 +166,44 @@ const GATEWAY_PROVIDERS: Record<string, GatewayProviderDef> = {
       const dep      = encodeURIComponent(slash === -1 ? id : id.slice(slash + 1))
       return `/azure-openai/${resource}/${dep}/chat/completions?api-version=${AZURE_OPENAI_API_VERSION}`
     },
-    apiKey: e => e.AZURE_OPENAI_API_KEY ?? '',
-    authHeaders: key => ({ 'api-key': key }),
+    apiKey: e => e.AZURE_OPENAI_API_KEY ?? '', authHeaders: key => ({ 'api-key': key }),
     modelId: id => { const s = id.indexOf('/'); return s === -1 ? id : id.slice(s + 1) },
+    capabilities: { tools: true, vision: true, streaming: true, systemPrompt: true, jsonMode: true },
   },
   // Baseten — OpenAI-compatible inference for custom and open-source models
-  baseten: { format: 'openai', path: _ => '/baseten/v1/chat/completions', apiKey: e => e.BASETEN_API_KEY ?? '' },
+  baseten: {
+    format: 'openai', path: _ => '/baseten/v1/chat/completions', apiKey: e => e.BASETEN_API_KEY ?? '',
+    capabilities: { tools: true, streaming: true, systemPrompt: true, jsonMode: true },
+  },
   // Cohere — native Cohere chat format; auth uses "Token {key}" not "Bearer"
-  cohere: { format: 'cohere', path: _ => '/cohere/v1/chat', apiKey: e => e.COHERE_API_KEY ?? '' },
+  cohere: {
+    format: 'cohere', path: _ => '/cohere/v1/chat', apiKey: e => e.COHERE_API_KEY ?? '',
+    authHeaders: key => ({ Authorization: `Token ${key}` }),
+    capabilities: { tools: true, streaming: true, systemPrompt: true },
+  },
   // HuggingFace — model ID is embedded in the URL path; body uses "inputs" key
-  huggingface: { format: 'huggingface', path: id => `/huggingface/${id}`, apiKey: e => e.HUGGINGFACE_API_KEY ?? '' },
+  huggingface: {
+    format: 'huggingface', path: id => `/huggingface/${id}`, apiKey: e => e.HUGGINGFACE_API_KEY ?? '',
+    capabilities: { streaming: false, systemPrompt: true },
+  },
   // Replicate — async prediction API; polls until completion
-  replicate: { format: 'replicate', path: _ => '/replicate/predictions', apiKey: e => e.REPLICATE_API_KEY ?? '' },
+  replicate: {
+    format: 'replicate', path: _ => '/replicate/predictions', apiKey: e => e.REPLICATE_API_KEY ?? '',
+    capabilities: { streaming: false },
+  },
   // Parallel — chat via unified compat endpoint; model format "parallel/{model-id}"
   parallel: {
-    format: 'openai',
-    path: _ => '/compat/chat/completions',
-    apiKey: e => e.PARALLEL_API_KEY ?? '',
-    authHeaders: key => ({ 'x-api-key': key }),
+    format: 'openai', path: _ => '/compat/chat/completions',
+    apiKey: e => e.PARALLEL_API_KEY ?? '', authHeaders: key => ({ 'x-api-key': key }),
     modelId: id => `parallel/${id}`,
+    capabilities: { tools: true, streaming: true, systemPrompt: true, jsonMode: true },
   },
   // Google Vertex AI via compat endpoint + BYOK; model format "google-vertex-ai/{model}"
   vertex: {
-    format: 'openai',
-    path: _ => '/compat/chat/completions',
-    apiKey: e => e.CF_AIG_TOKEN ?? '',
-    authHeaders: key => ({ 'cf-aig-authorization': `Bearer ${key}` }),
+    format: 'openai', path: _ => '/compat/chat/completions',
+    apiKey: e => e.CF_AIG_TOKEN ?? '', authHeaders: key => ({ 'cf-aig-authorization': `Bearer ${key}` }),
     modelId: id => `google-vertex-ai/${id}`,
+    capabilities: { tools: true, streaming: true, systemPrompt: true, jsonMode: true },
   },
 }
 
@@ -408,6 +459,27 @@ function buildOpenAIMessages(opts: CompletionOpts): Array<Record<string, unknown
   return out
 }
 
+// ── Gateway header builder ────────────────────────────────────────────────────
+
+// Constructs the standard set of headers for every AI Gateway request.
+// All cache/metadata headers live here — never inline them in provider functions.
+function buildGatewayHeaders(
+  key: string,
+  authH: Record<string, string>,
+  opts: CompletionOpts,
+  modelLabel: string,
+): Record<string, string> {
+  const temp = opts.temperature ?? DEFAULT_TEMPERATURE
+  const h: Record<string, string> = {
+    'Content-Type':      'application/json',
+    ...authH,
+    'cf-aig-cache-ttl':  '3600',
+    'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
+  }
+  if (opts.sandboxId) h['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model: modelLabel })
+  return h
+}
+
 // ── Provider completions (gateway) ────────────────────────────────────────────
 
 // Handles all OpenAI-compatible providers: openai, groq, mistral, deepseek, xai, perplexity,
@@ -437,17 +509,9 @@ async function completeOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts)
   }
   const key = def.apiKey(env)
   const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Bearer ${key}` }
-  const metaHeaders: Record<string, string> = {}
-  if (opts.sandboxId) metaHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model: wireModel })
   const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authH,
-      'cf-aig-cache-ttl':  '3600',
-      'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
-      ...metaHeaders,
-    },
+    headers: buildGatewayHeaders(key, authH, opts, wireModel),
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
@@ -464,7 +528,8 @@ async function completeOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts)
   return choice?.message?.content ?? ''
 }
 
-async function completeAnthropic(env: Env, model: string, opts: CompletionOpts): Promise<string> {
+async function completeAnthropic(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
+  const { id: model, def } = gw
   const temp = opts.temperature ?? DEFAULT_TEMPERATURE
   const messages = buildAnthropicMessages(opts)
   // thinking mode requires temperature=1
@@ -486,18 +551,15 @@ async function completeAnthropic(env: Env, model: string, opts: CompletionOpts):
     body.tools = opts.tools.map(toAnthropicTool)
     if (opts.toolChoice) body.tool_choice = { type: opts.toolChoice }
   }
-  const anthHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'x-api-key': env.ANTHROPIC_API_KEY ?? '',
-    'anthropic-version': '2023-06-01',
-    'anthropic-beta': 'prompt-caching-2024-07-31',
-    'cf-aig-cache-ttl':  temp === 0 ? '3600' : '300',
-    'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
-  }
-  if (opts.sandboxId) anthHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
-  const res = await fetch(`${gatewayBase(env)}/anthropic/v1/messages`, {
+  const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { 'x-api-key': key }
+  const res = await fetch(`${gatewayBase(env)}${def.path(model)}`, {
     method: 'POST',
-    headers: anthHeaders,
+    headers: {
+      ...buildGatewayHeaders(key, authH, opts, model),
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'prompt-caching-2024-07-31',
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
@@ -520,7 +582,8 @@ async function completeAnthropic(env: Env, model: string, opts: CompletionOpts):
   return thinking ? `<thinking>\n${thinking}\n</thinking>\n\n${text}` : text
 }
 
-async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Promise<string> {
+async function completeGoogle(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
+  const { id: model, def } = gw
   const msgList = opts.messages?.length
     ? opts.messages.filter(m => m.role !== 'system')
     : opts.prompt ? [{ role: 'user' as const, content: opts.prompt, timestamp: 0 }] : []
@@ -541,22 +604,14 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
       ? { tools: [{ functionDeclarations: opts.tools.map(toGoogleFunctionDeclaration) }] }
       : {}),
   }
-  const googleHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'cf-aig-cache-ttl':  '3600',
-    'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
-  }
-  if (opts.sandboxId) googleHeaders['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model })
-  if (env.GOOGLE_AI_KEY) googleHeaders['x-goog-api-key'] = env.GOOGLE_AI_KEY
-  const res = await fetch(
-    `${gatewayBase(env)}/google-ai-studio/v1/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: googleHeaders,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
-    },
-  )
+  const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { 'x-goog-api-key': key }
+  const res = await fetch(`${gatewayBase(env)}${def.path(model)}`, {
+    method: 'POST',
+    headers: buildGatewayHeaders(key, authH, opts, model),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+  })
   if (!res.ok) throw new Error(`Google gateway error ${res.status}: ${await res.text()}`)
   type GoogleResp = { candidates: Array<{ content: { parts: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> } }> } }> }
   const data = await res.json() as GoogleResp
@@ -571,6 +626,7 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
 async function completeCohere(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
   const { id: modelId, def } = gw
   const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Token ${key}` }
   const msgs = buildMessages(opts)
   const last = msgs[msgs.length - 1]
   const message = last?.content ?? opts.prompt ?? ''
@@ -586,23 +642,40 @@ async function completeCohere(env: Env, gw: GatewayResult, opts: CompletionOpts)
     temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
   }
   if (opts.systemPrompt) body.preamble = opts.systemPrompt
+  if (opts.tools?.length) {
+    body.tools = opts.tools.map(t => ({
+      name: t.name,
+      description: t.description,
+      parameter_definitions: Object.fromEntries(
+        Object.entries(t.parameters).map(([k, p]) => [k, { description: p.description, type: p.type, required: p.required ?? false }]),
+      ),
+    }))
+  }
   const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Token ${key}` },
+    headers: buildGatewayHeaders(key, authH, opts, modelId),
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`Cohere gateway error ${res.status}: ${await res.text()}`)
-  type CohereResp = { text: string }
+  type CohereResp = { text?: string; tool_calls?: Array<{ name: string; parameters: Record<string, unknown> }> }
   const data = await res.json() as CohereResp
+  if (data.tool_calls?.length) {
+    return encodeToolCalls(data.tool_calls.map((tc, i) => ({ id: `cohere_${i}`, name: tc.name, input: tc.parameters })))
+  }
   return data.text ?? ''
 }
 
 async function completeHuggingFace(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
   const { id: modelId, def } = gw
   const key = def.apiKey(env)
-  // Convert conversation to a single prompt string — HF inference API uses "inputs" key
-  const prompt = buildMessages(opts).map(m => `${m.role}: ${m.content}`).join('\n')
+  const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Bearer ${key}` }
+  // Build prompt: separate system prefix from conversation turns for HF "inputs" key
+  const msgs = buildMessages(opts)
+  const system = msgs.find(m => m.role === 'system')
+  const rest = msgs.filter(m => m.role !== 'system')
+  const systemPrefix = system ? `System: ${system.content}\n` : ''
+  const prompt = systemPrefix + rest.map(m => `${m.role}: ${m.content}`).join('\n')
   const body = {
     inputs: prompt,
     parameters: {
@@ -613,7 +686,7 @@ async function completeHuggingFace(env: Env, gw: GatewayResult, opts: Completion
   }
   const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    headers: buildGatewayHeaders(key, authH, opts, modelId),
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
@@ -626,13 +699,19 @@ async function completeHuggingFace(env: Env, gw: GatewayResult, opts: Completion
 async function completeReplicate(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
   const { id: modelId, def } = gw
   const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Bearer ${key}` }
   const base = gatewayBase(env)
   const prompt = buildMessages(opts).map(m => `${m.role}: ${m.content}`).join('\n')
-  // Create prediction
+  // Create prediction — gateway headers only on the create request, not on polling
+  const input: Record<string, unknown> = {
+    prompt,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+  }
   const createRes = await fetch(`${base}${def.path(modelId)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ version: modelId, input: { prompt, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS } }),
+    headers: buildGatewayHeaders(key, authH, opts, modelId),
+    body: JSON.stringify({ version: modelId, input }),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
   type ReplicatePred = { id: string; status: string; output?: string[] | string; error?: string; urls?: { get: string } }
@@ -724,7 +803,7 @@ function streamOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts): Readab
     `${gatewayBase(env)}${def.path(modelId)}`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authH },
+      headers: buildGatewayHeaders(key, authH, opts, wireModel),
       body: JSON.stringify({ model: wireModel, messages: buildMessages(opts), temperature: opts.temperature ?? DEFAULT_TEMPERATURE, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, stream: true }),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
@@ -732,13 +811,16 @@ function streamOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts): Readab
   ))
 }
 
-function streamAnthropic(env: Env, model: string, opts: CompletionOpts): ReadableStream {
+function streamAnthropic(env: Env, gw: GatewayResult, opts: CompletionOpts): ReadableStream {
+  const { id: model, def } = gw
+  const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { 'x-api-key': key }
   const messages = buildMessages(opts).filter(m => m.role !== 'system')
   return toReadableStream(() => streamSSEFetch(
-    `${gatewayBase(env)}/anthropic/v1/messages`,
+    `${gatewayBase(env)}${def.path(model)}`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY ?? '', 'anthropic-version': '2023-06-01' },
+      headers: { ...buildGatewayHeaders(key, authH, opts, model), 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model, messages, ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}), max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, temperature: opts.temperature ?? DEFAULT_TEMPERATURE, stream: true }),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
@@ -746,7 +828,10 @@ function streamAnthropic(env: Env, model: string, opts: CompletionOpts): Readabl
   ))
 }
 
-function streamGoogle(env: Env, model: string, opts: CompletionOpts): ReadableStream {
+function streamGoogle(env: Env, gw: GatewayResult, opts: CompletionOpts): ReadableStream {
+  const { id: model, def } = gw
+  const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { 'x-goog-api-key': key }
   const allMessages = buildMessages(opts)
   const system = allMessages.find(m => m.role === 'system')
   const contents = allMessages
@@ -758,8 +843,13 @@ function streamGoogle(env: Env, model: string, opts: CompletionOpts): ReadableSt
     ...(system ? { systemInstruction: { parts: [{ text: system.content }] } } : {}),
   }
   return toReadableStream(() => streamSSEFetch(
-    `${gatewayBase(env)}/google-ai-studio/v1/models/${model}:streamGenerateContent?alt=sse&key=${env.GOOGLE_AI_KEY ?? ''}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS) },
+    `${gatewayBase(env)}/google-ai-studio/v1/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`,
+    {
+      method: 'POST',
+      headers: buildGatewayHeaders(key, authH, opts, model),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+    },
     (c: unknown) => (c as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.[0]?.text,
   ))
 }
@@ -767,6 +857,7 @@ function streamGoogle(env: Env, model: string, opts: CompletionOpts): ReadableSt
 function streamCohere(env: Env, gw: GatewayResult, opts: CompletionOpts): ReadableStream {
   const { id: modelId, def } = gw
   const key = def.apiKey(env)
+  const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Token ${key}` }
   const msgs = buildMessages(opts)
   const last = msgs[msgs.length - 1]
   const message = last?.content ?? opts.prompt ?? ''
@@ -782,7 +873,12 @@ function streamCohere(env: Env, gw: GatewayResult, opts: CompletionOpts): Readab
   if (opts.systemPrompt) body.preamble = opts.systemPrompt
   return toReadableStream(() => streamSSEFetch(
     `${gatewayBase(env)}${def.path(modelId)}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Token ${key}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS) },
+    {
+      method: 'POST',
+      headers: buildGatewayHeaders(key, authH, opts, modelId),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+    },
     (c: unknown) => { const ch = c as { event_type?: string; text?: string }; return ch.event_type === 'text-generation' ? ch.text : undefined },
   ))
 }
@@ -794,8 +890,8 @@ export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<
   const gw = parseGateway(opts.model ?? '')
   let result: string
   if (gw) {
-    if      (gw.def.format === 'anthropic')  result = await completeAnthropic(env, gw.id, opts)
-    else if (gw.def.format === 'google')     result = await completeGoogle(env, gw.id, opts)
+    if      (gw.def.format === 'anthropic')  result = await completeAnthropic(env, gw, opts)
+    else if (gw.def.format === 'google')     result = await completeGoogle(env, gw, opts)
     else if (gw.def.format === 'cohere')     result = await completeCohere(env, gw, opts)
     else if (gw.def.format === 'huggingface') result = await completeHuggingFace(env, gw, opts)
     else if (gw.def.format === 'replicate')  result = await completeReplicate(env, gw, opts)
@@ -844,7 +940,7 @@ export async function think(ai: Ai, env: Env, opts: CompletionOpts & { budgetTok
   const gw = parseGateway(opts.model ?? '')
   let raw: string
   if (gw?.def.format === 'anthropic') {
-    raw = await completeAnthropic(env, gw.id, { ...opts, thinking: opts.budgetTokens ?? 8000, temperature: 1 })
+    raw = await completeAnthropic(env, gw, { ...opts, thinking: opts.budgetTokens ?? 8000, temperature: 1 })
   } else {
     // Fallback: prompt the model to think step-by-step and wrap its thinking in XML
     raw = await complete(ai, env, {
@@ -905,8 +1001,8 @@ export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): Readable
   const gw = parseGateway(opts.model ?? '')
   let inner: ReadableStream
   if (gw) {
-    if      (gw.def.format === 'anthropic')   inner = streamAnthropic(env, gw.id, opts)
-    else if (gw.def.format === 'google')      inner = streamGoogle(env, gw.id, opts)
+    if      (gw.def.format === 'anthropic')   inner = streamAnthropic(env, gw, opts)
+    else if (gw.def.format === 'google')      inner = streamGoogle(env, gw, opts)
     else if (gw.def.format === 'cohere')      inner = streamCohere(env, gw, opts)
     else if (gw.def.format === 'huggingface' || gw.def.format === 'replicate') {
       // These providers don't support SSE streaming — emit the full result as one chunk
