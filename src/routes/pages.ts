@@ -362,7 +362,10 @@ async function load() {
             <span class="badge" title="\${esc(app.model)}">\${esc(modelShort)}</span>
             <span class="card-date">\${date}</span>
           </div>
-          <a href="/app/\${esc(app.id)}" class="open-btn">Open App <span aria-hidden="true">→</span></a>
+          <div style="display:flex;gap:8px;align-items:center">
+            <a href="/app/\${esc(app.id)}" class="open-btn">Open App <span aria-hidden="true">→</span></a>
+            <a href="/tools.html?sandbox=\${esc(app.id)}" class="open-btn" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px">Probe →</a>
+          </div>
         </div>
       \`)
     })

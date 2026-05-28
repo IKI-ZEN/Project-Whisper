@@ -88,6 +88,14 @@ hr{border:none;border-top:1px solid var(--border)}
 #atlas-map{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:320px}
 #atlas-map svg circle{cursor:pointer;transition:r .15s,opacity .15s}
 #atlas-map svg circle:hover{opacity:1!important}
+.sb-picker{padding:8px 12px 10px;border-bottom:1px solid var(--border)}
+.sb-picker-row{display:flex;gap:4px;margin-top:4px}
+.sb-picker-row input{padding:5px 8px;font-size:11px;height:28px}
+.sb-picker-row button{padding:0 10px;font-size:11px;height:28px;min-height:0;white-space:nowrap;flex-shrink:0}
+.sb-active{margin-top:6px;padding:6px 8px;background:var(--bg);border-radius:4px;border:1px solid #14b8a633}
+.sb-active-name{font-size:11px;font-weight:600;color:var(--teal);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-clear{font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;padding:0;font-family:inherit;min-height:0;margin-top:2px;text-decoration:underline}
+.sb-clear:hover{color:var(--red);background:none}
 </style>
 </head>
 <body>
@@ -101,6 +109,18 @@ hr{border:none;border-top:1px solid var(--border)}
 </nav>
 <div class="layout">
   <nav class="tool-sidebar" aria-label="Tools navigation">
+    <div class="sb-picker" id="sb-picker">
+      <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Active Sandbox</span>
+      <div class="sb-picker-row">
+        <input id="sb-id-input" placeholder="Sandbox ID…"/>
+        <button id="sb-load-btn">Load</button>
+      </div>
+      <div id="sb-active-info" style="display:none" class="sb-active">
+        <div class="sb-active-name" id="sb-active-name"></div>
+        <button class="sb-clear" id="sb-clear-btn">× clear</button>
+      </div>
+      <div id="sb-status" style="font-size:10px;color:var(--muted);margin-top:4px;min-height:14px"></div>
+    </div>
     <span class="sidebar-section">Workbench</span>
     <button class="tool-nav-btn active" data-tool="complete" onclick="switchTool('complete',this)">Complete</button>
     <button class="tool-nav-btn" data-tool="stream" onclick="switchTool('stream',this)">Stream</button>
@@ -404,7 +424,10 @@ hr{border:none;border-top:1px solid var(--border)}
       <h3 style="margin:0">Guard Laboratory</h3>
       <p style="margin:0;opacity:.6;font-size:12px">Inspect why text was flagged. The scanner strips invisible Unicode, NFKC-normalises, then recursively decodes up to three base64 layers — each stage is shown below.</p>
       <div class="field"><label>Text to scan</label><textarea id="gl-text" rows="6" placeholder="Paste a prompt, system message, or any text to analyse…"></textarea></div>
-      <button id="btn-guard-lab">Scan</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button id="btn-guard-lab">Scan</button>
+        <button class="outline" id="btn-gl-load-sandbox" style="display:none;font-size:11px;padding:5px 10px;min-height:0">Load active sandbox system prompt</button>
+      </div>
       <div id="gl-results"></div>
     </div>
 
@@ -1306,6 +1329,69 @@ function feedArchaeologyToThink() {
   document.getElementById('wth-prompt').value = `Analyse this AI response and explain what it reveals about the model's system prompt and behaviour:\n\n${response}`
   document.getElementById('wth-prompt').focus()
 }
+
+// ── Sandbox Picker ────────────────────────────────────────────────────────────
+const SB_SS_KEY = 'whisper:activeSandbox'
+let activeSandboxCfg = null
+
+const SB_MODEL_FIELDS = ['bc-model','bs-model','ws-model','wsn-model','wct-model','wen-model','war-model','wth-model','rpl-model','prb-model']
+const SB_SYS_FIELDS   = ['bc-sys','bs-sys','wc-sys','ws-sys','wsn-sys','wct-sys','wen-sys','wth-sys','rpl-sys']
+
+function applySandboxToFields(cfg) {
+  if (cfg.model) SB_MODEL_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = cfg.model })
+  if (cfg.systemPrompt) SB_SYS_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = cfg.systemPrompt })
+}
+
+async function loadSandbox(id) {
+  const status = document.getElementById('sb-status')
+  if (!id) return
+  status.textContent = 'Loading…'; status.style.color = 'var(--muted)'
+  try {
+    const r = await fetch('/api/sandbox/' + encodeURIComponent(id))
+    const d = await r.json()
+    if (!d.ok) throw new Error(d.error || 'Not found')
+    const cfg = d.data
+    activeSandboxCfg = cfg
+    sessionStorage.setItem(SB_SS_KEY, id)
+    document.getElementById('sb-id-input').value = id
+    document.getElementById('sb-active-name').textContent = cfg.name || id
+    document.getElementById('sb-active-info').style.display = ''
+    status.textContent = ''
+    const glBtn = document.getElementById('btn-gl-load-sandbox')
+    if (glBtn) glBtn.style.display = cfg.systemPrompt ? '' : 'none'
+    applySandboxToFields(cfg)
+  } catch (e) {
+    status.textContent = String(e); status.style.color = 'var(--red)'
+  }
+}
+
+function clearSandbox() {
+  activeSandboxCfg = null
+  sessionStorage.removeItem(SB_SS_KEY)
+  document.getElementById('sb-id-input').value = ''
+  document.getElementById('sb-active-info').style.display = 'none'
+  document.getElementById('sb-status').textContent = ''
+  const glBtn = document.getElementById('btn-gl-load-sandbox')
+  if (glBtn) glBtn.style.display = 'none'
+}
+
+;(function initSandboxPicker() {
+  const params = new URLSearchParams(location.search)
+  const fromUrl = params.get('sandbox')
+  const fromSS  = sessionStorage.getItem(SB_SS_KEY)
+  const startId = fromUrl || fromSS
+  if (startId) { document.getElementById('sb-id-input').value = startId; loadSandbox(startId) }
+  document.getElementById('sb-load-btn').onclick = () => {
+    const id = document.getElementById('sb-id-input').value.trim(); if (id) loadSandbox(id)
+  }
+  document.getElementById('sb-id-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const id = e.target.value.trim(); if (id) loadSandbox(id) }
+  })
+  document.getElementById('sb-clear-btn').onclick = clearSandbox
+  document.getElementById('btn-gl-load-sandbox').onclick = () => {
+    if (activeSandboxCfg?.systemPrompt) document.getElementById('gl-text').value = activeSandboxCfg.systemPrompt
+  }
+})()
 
 // ── Guard Laboratory ──────────────────────────────────────────────────────────
 const GUARD_PATTERN_DESCRIPTIONS = {
