@@ -592,3 +592,24 @@ export function parseGuardProbeRequest(body: unknown): GuardProbeRequest {
   if (body.text.length > MAX_GUARD_PROBE_CHARS) throw new Error(`text exceeds ${MAX_GUARD_PROBE_CHARS} character limit`)
   return { text: body.text }
 }
+
+// ── Consistency Probe ─────────────────────────────────────────────────────────
+
+export interface ConsistencyRequest {
+  prompt: string
+  model?: string
+  systemPrompt?: string
+  maxTokens?: number
+  samples: number
+}
+
+export function parseConsistencyRequest(body: unknown): ConsistencyRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  return {
+    prompt:       str(body.prompt, 'prompt'),
+    model:        body.model        !== undefined ? str(body.model,        'model')        : undefined,
+    systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    maxTokens:    body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
+    samples:      body.samples      !== undefined ? num(body.samples,      'samples',      3, 3, MAX_ENTROPY_SAMPLES) : 3,
+  }
+}

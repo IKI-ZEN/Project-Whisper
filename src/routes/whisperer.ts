@@ -4,7 +4,7 @@ import { json, ok, err, parseBody } from '../lib/http'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
-  parseGuardProbeRequest,
+  parseGuardProbeRequest, parseConsistencyRequest,
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
@@ -125,6 +125,33 @@ const thinkHandler: Handler = async (req: Request, env: Env) => {
   }
 }
 
+const consistency: Handler = async (req: Request, env: Env) => {
+  const p = await parseBody(req, parseConsistencyRequest)
+  if (!p.ok) return p.response
+  const { prompt, model, systemPrompt, maxTokens, samples } = p.data
+  try {
+    const result = await estimateEntropy(env.AI, env, { prompt, model, systemPrompt, temperature: 0, maxTokens }, samples)
+    const n = result.samples.length
+    const totalPairs = (n * (n - 1)) / 2
+    let exactPairs = 0
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++)
+        if (result.samples[i].trim() === result.samples[j].trim()) exactPairs++
+    const exactMatchRate = totalPairs > 0 ? exactPairs / totalPairs : 1
+    // Re-embed to get per-pair cosine similarities for nearMatchRate
+    const embeddings = await embed(env.AI, result.samples)
+    const matrix = computeSimilarityMatrix(embeddings)
+    let nearPairs = 0
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++)
+        if (matrix[i][j] >= 0.99) nearPairs++
+    const nearMatchRate = totalPairs > 0 ? nearPairs / totalPairs : 1
+    return json(ok({ ...result, exactMatchRate, nearMatchRate }))
+  } catch (e) {
+    return json(err('Consistency probe failed', String(e)), 500)
+  }
+}
+
 const guardLab: Handler = async (req: Request, _env: Env) => {
   const p = await parseBody(req, parseGuardProbeRequest)
   if (!p.ok) return p.response
@@ -149,5 +176,6 @@ export const whispererRoutes: Array<[string, string, Handler]> = [
   ['POST', '/api/ai/entropy',      entropy],
   ['POST', '/api/ai/archaeology',  archaeology],
   ['POST', '/api/ai/pipeline',     pipeline],
+  ['POST', '/api/ai/consistency',  consistency],
   ['POST', '/api/ai/guard-probe',  guardLab],
 ]

@@ -317,14 +317,18 @@ hr{border:none;border-top:1px solid var(--border)}
     <!-- Entropy -->
     <div id="pane-entropy" class="tool-pane">
       <h3 style="margin:0">Token Entropy / Attractor Stability</h3>
-      <p style="margin:0;opacity:.6;font-size:12px">Sample the model multiple times at the same temperature and measure how much the responses diverge.</p>
+      <p style="margin:0;opacity:.6;font-size:12px">Sample the model multiple times and measure response divergence. Enable Determinism Mode to audit T=0 predictability.</p>
       <div class="field"><label>Prompt</label><textarea id="wen-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
       <div class="field"><label>System Prompt (optional)</label><input id="wen-sys" type="text" placeholder="You are a helpful assistant."/></div>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wen-model" list="whisperer-models-list" placeholder="default" style="width:220px"/></label>
-        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wen-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px" id="wen-temp-label">Temp <input type="number" id="wen-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples <input type="number" id="wen-samples" value="3" min="2" max="10" style="width:50px"/></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="wen-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--teal)">
+          <input type="checkbox" id="wen-determinism" style="width:auto;accent-color:var(--teal)"/>
+          Determinism Mode
+        </label>
         <button id="btn-entropy">Measure</button>
       </div>
       <div id="wen-results"></div>
@@ -971,6 +975,19 @@ async function runCoT() {
   finally { clearLoading(btn, 'Probe') }
 }
 
+// determinism mode: lock temp to 0 when checkbox is toggled
+document.addEventListener('DOMContentLoaded', () => {
+  const cb = document.getElementById('wen-determinism')
+  const tempInput = document.getElementById('wen-temp')
+  const tempLabel = document.getElementById('wen-temp-label')
+  if (cb && tempInput && tempLabel) {
+    cb.addEventListener('change', () => {
+      if (cb.checked) { tempInput.value = '0'; tempInput.disabled = true; tempLabel.style.opacity = '.4' }
+      else { tempInput.disabled = false; tempLabel.style.opacity = '' }
+    })
+  }
+})
+
 async function runEntropy() {
   const prompt = document.getElementById('wen-prompt').value.trim()
   if (!prompt) return
@@ -979,16 +996,42 @@ async function runEntropy() {
   const temp = parseFloat(document.getElementById('wen-temp').value)
   const samples = parseInt(document.getElementById('wen-samples').value, 10)
   const maxTokens = parseInt(document.getElementById('wen-tokens').value, 10) || undefined
+  const determinism = document.getElementById('wen-determinism').checked
   const out = document.getElementById('wen-results')
   const btn = document.getElementById('btn-entropy')
   setLoading(btn, 'Sampling…')
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sampling…'
   try {
-    const data = await client.ai.entropy(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens })
+    let data
+    if (determinism) {
+      const res = await fetch('/api/ai/consistency', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt, model, systemPrompt: sys || undefined, samples: Math.max(samples, 3), maxTokens }),
+      })
+      const j = await res.json(); if (!j.ok) throw new Error(j.error || 'Consistency probe failed')
+      data = j.data
+    } else {
+      data = await client.ai.entropy(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens })
+    }
     const stabPct = Math.round(data.avgCosineSimilarity * 100)
     const stabColor = stabPct >= 90 ? 'var(--green)' : stabPct >= 70 ? '#f59e0b' : 'var(--red)'
+    const gaugeBar = (pct, color) => `
+      <div style="background:var(--bg);border-radius:99px;height:8px;overflow:hidden;margin-top:6px">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:99px;transition:width .4s ease"></div>
+      </div>`
+    const deterministicCards = determinism ? `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;min-width:120px">
+          <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--teal)">${Math.round(data.exactMatchRate * 100)}%</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Exact Match</div>
+          ${gaugeBar(data.exactMatchRate * 100, 'var(--teal)')}
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;min-width:120px">
+          <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--accent2)">${Math.round(data.nearMatchRate * 100)}%</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Near Match (≥0.99)</div>
+          ${gaugeBar(data.nearMatchRate * 100, 'var(--accent2)')}
+        </div>` : ''
     out.innerHTML = `
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
           <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--accent2)">${data.entropy.toFixed(3)}</div>
           <div style="font-size:10px;opacity:.6;margin-top:2px">Shannon Entropy</div>
@@ -1005,6 +1048,7 @@ async function runEntropy() {
           <div style="font-size:22px;font-weight:700;font-family:var(--mono)">${data.latencyMs}ms</div>
           <div style="font-size:10px;opacity:.6;margin-top:2px">Latency</div>
         </div>
+        ${deterministicCards}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${data.samples.map((s, i) => `
@@ -1014,7 +1058,6 @@ async function runEntropy() {
           </div>`).join('')}
       </div>`
     lastResult['entropy'] = data
-    const entropyEl = out.querySelector('[style*="flex-direction:column;gap:6px"]') ? out : out
     const chainDiv = document.createElement('div')
     chainDiv.style.marginTop = '6px'
     chainDiv.innerHTML = '<button class="chain-link" onclick="feedEntropyToSweep()">→ Temperature sweep on this prompt</button>'
