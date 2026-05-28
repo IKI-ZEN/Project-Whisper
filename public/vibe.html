@@ -6,14 +6,15 @@
   <title>Vibe — Whisper</title>
   <style>
     :root {
-      --bg: #0c0c0f;
-      --surface: #141418;
-      --border: #252530;
-      --muted: #4a4a60;
-      --text: #d8d8e8;
-      --accent: #7c3aed;
-      --accent2: #a78bfa;
-      --radius: 8px;
+      --bg: #080c14;
+      --surface: #0e1521;
+      --border: #1c2a40;
+      --muted: #4d6480;
+      --text: #cdd9e5;
+      --accent: #6366f1;
+      --accent2: #818cf8;
+      --teal: #14b8a6;
+      --radius: 6px;
       --mono: "JetBrains Mono", ui-monospace, monospace;
     }
 
@@ -68,7 +69,7 @@
       transition: color 0.15s, background 0.15s;
     }
     .navlink:hover { color: var(--text); background: rgba(255,255,255,0.05); }
-    .navlink.active { color: var(--accent2); background: rgba(124,58,237,0.15); }
+    .navlink.active { color: var(--accent2); background: rgba(99,102,241,0.15); }
 
     /* ── Main layout ── */
     .vibe-layout {
@@ -194,7 +195,7 @@
       background: var(--accent);
       color: #fff;
     }
-    button.primary:hover:not(:disabled) { background: #6d28d9; }
+    button.primary:hover:not(:disabled) { background: #4f46e5; }
 
     button.outline {
       background: transparent;
@@ -202,7 +203,7 @@
       border: 1px solid var(--border);
     }
     button.outline:hover:not(:disabled) { background: rgba(255,255,255,0.05); border-color: var(--muted); }
-    button.outline.active { border-color: var(--accent2); color: var(--accent2); background: rgba(124,58,237,0.1); }
+    button.outline.active { border-color: var(--accent2); color: var(--accent2); background: rgba(99,102,241,0.1); }
 
     button.green {
       background: #065f46;
@@ -346,8 +347,8 @@
 
     /* ── Build status bar ── */
     #build-status-bar {
-      background: rgba(124,58,237,0.1);
-      border: 1px solid rgba(124,58,237,0.25);
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.25);
       border-radius: var(--radius);
       padding: 8px 12px;
       font-size: 12px;
@@ -897,7 +898,7 @@
       btn.disabled = true
       btn.textContent = 'Deploying…'
       statusEl.style.display = 'block'
-      statusEl.style.background = '#7c3aed22'
+      statusEl.style.background = '#6366f122'
       statusEl.style.color = 'var(--accent2)'
       statusEl.textContent = 'Deploying to Cloudflare Pages…'
       try {

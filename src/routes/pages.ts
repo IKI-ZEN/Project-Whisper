@@ -20,7 +20,7 @@ function appPageHtml(sandboxId: string, nonce: string): string {
 <title>Loading…</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
+:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
 .brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
@@ -29,14 +29,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .navlink.active{background:var(--accent);color:#fff}
 #app-name{font-size:13px;font-weight:600;color:var(--accent2);margin-left:auto}
 #app-desc{display:none}
-.badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#7c3aed22;color:var(--accent2);font-family:var(--mono);flex-shrink:0}
+.badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono);flex-shrink:0}
 .hbtn{font-size:12px;padding:8px 14px;min-height:36px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
 .hbtn:hover{border-color:var(--accent2);color:var(--accent2)}
 .hbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 #messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55;animation:msgIn .15s ease-out both}
-.msg.user{align-self:flex-end;background:#7c3aed28;border:1px solid #7c3aed44}
+.msg.user{align-self:flex-end;background:#6366f128;border:1px solid #6366f144}
 .msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border)}
 .msg.system{align-self:center;color:var(--muted);font-size:12px;font-style:italic}
 .msg.error{align-self:center;color:#f87171;font-size:12px}
@@ -57,7 +57,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .input-row textarea:focus{border-color:var(--accent)}
 .input-row textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .input-row button{padding:10px 18px;min-height:40px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
-.input-row button:hover:not(:disabled){background:#6d28d9}
+.input-row button:hover:not(:disabled){background:#4f46e5}
 .input-row button:disabled{opacity:.45;cursor:not-allowed}
 .input-row button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 @media(max-width:600px){#messages{padding:12px}.input-row{padding:8px 12px}.input-row textarea{font-size:16px}}
@@ -283,7 +283,7 @@ function appsGalleryHtml(nonce: string): string { return `<!DOCTYPE html>
 <title>Whisper — Apps</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
+:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;flex-shrink:0}
 .brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
@@ -300,15 +300,15 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .card-name{font-size:14px;font-weight:600}
 .card-desc{font-size:12px;color:var(--muted);flex:1;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .card-foot{display:flex;align-items:center;gap:8px}
-.badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#22234a;color:var(--accent2);font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#1e2558;color:var(--accent2);font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card-date{font-size:10px;color:var(--muted)}
 .open-btn{padding:8px 16px;min-height:36px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
-.open-btn:hover{background:#6d28d9}
+.open-btn:hover{background:#4f46e5}
 .open-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px;color:var(--muted)}
 .empty h3{font-size:18px;margin-bottom:8px;color:var(--text)}
 .empty-cta{display:inline-block;margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500}
-.empty-cta:hover{background:#6d28d9}
+.empty-cta:hover{background:#4f46e5}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
 @keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .skeleton{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;animation:pulse 1.4s ease-in-out infinite}
@@ -443,7 +443,7 @@ function chatPageHtml(nonce: string): string { return `<!DOCTYPE html>
 <title>Whisper — Chat</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
+:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
 .brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
@@ -454,11 +454,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .sidebar{width:240px;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;flex-shrink:0}
 .sidebar-top{padding:12px}
 .new-thread-btn{width:100%;padding:8px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s}
-.new-thread-btn:hover{background:#6d28d9}
+.new-thread-btn:hover{background:#4f46e5}
 .thread-list{flex:1;overflow-y:auto;padding:4px 8px}
 .thread-item{padding:8px 10px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--muted);transition:background .1s,color .1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:1px 0;user-select:none}
 .thread-item:hover{background:var(--surface);color:var(--text)}
-.thread-item.active{background:#7c3aed22;color:var(--accent2)}
+.thread-item.active{background:#6366f122;color:var(--accent2)}
 .config-section{padding:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
 .cfg-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .cfg-select{width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:11px;outline:none;cursor:pointer}
@@ -474,7 +474,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 @keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 #messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55;animation:msgIn .15s ease-out both}
-.msg.user{align-self:flex-end;background:#7c3aed28;border:1px solid #7c3aed44}
+.msg.user{align-self:flex-end;background:#6366f128;border:1px solid #6366f144}
 .msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border)}
 .msg.system{align-self:center;color:var(--muted);font-size:12px;font-style:italic}
 .msg.error{align-self:center;color:#f87171;font-size:12px}
@@ -499,7 +499,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .input-row textarea{flex:1;resize:none;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
 .input-row textarea:focus{border-color:var(--accent)}
 .input-row button{padding:10px 18px;min-height:40px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
-.input-row button:hover:not(:disabled){background:#6d28d9}
+.input-row button:hover:not(:disabled){background:#4f46e5}
 .input-row button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:768px){.sidebar{display:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
@@ -538,7 +538,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .ctx-menu{position:fixed;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:4px;min-width:144px;display:none;box-shadow:0 4px 24px #00000077}
 .ctx-menu.open{display:block}
 .ctx-item{padding:6px 12px;font-size:12px;color:var(--text);cursor:pointer;border-radius:4px;white-space:nowrap}
-.ctx-item:hover{background:#7c3aed22;color:var(--accent2)}
+.ctx-item:hover{background:#6366f122;color:var(--accent2)}
 .ctx-item.danger{color:var(--muted)}
 .ctx-item.danger:hover{background:#f8717122;color:#f87171}
 </style>
@@ -1077,7 +1077,7 @@ function dashboardHtml(nonce: string): string { return `<!DOCTYPE html>
 <title>Whisper — Dashboard</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
+:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
 .brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
@@ -1100,7 +1100,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .sandboxes-table td{padding:8px 10px;border-bottom:1px solid #ffffff08;color:var(--text)}
 .sandboxes-table tr:last-child td{border-bottom:none}
 .sandboxes-table tr:hover td{background:#ffffff04}
-.badge-model{font-size:10px;padding:2px 7px;border-radius:99px;background:#7c3aed22;color:var(--accent2);font-family:var(--mono)}
+.badge-model{font-size:10px;padding:2px 7px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono)}
 .guard-badge{font-size:10px;padding:2px 7px;border-radius:99px}
 .guard-badge.strict{background:var(--accent);color:#fff}
 .guard-badge.audit{background:#f59e0b22;color:#f59e0b}

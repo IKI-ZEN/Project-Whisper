@@ -6,7 +6,7 @@
 <title>Whisper — Tools</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--green:#34d399;--red:#f87171;--radius:8px;--mono:"JetBrains Mono","Fira Code",ui-monospace,monospace}
+:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--green:#10b981;--red:#f87171;--radius:6px;--mono:"JetBrains Mono","Fira Code",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
@@ -20,7 +20,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .out-placeholder{color:var(--muted);font-size:12px;opacity:.5;font-style:italic;padding:2px 0}
 .tool-nav-btn{width:100%;text-align:left;padding:8px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:color .1s,background .1s,border-color .1s;min-height:34px;font-family:inherit}
 .tool-nav-btn:hover{color:var(--text);background:var(--bg)}
-.tool-nav-btn.active{color:var(--accent2);background:#7c3aed18;border-left-color:var(--accent)}
+.tool-nav-btn.active{color:var(--accent2);background:#6366f118;border-left-color:var(--accent)}
 .tool-content{flex:1;overflow:hidden;position:relative}
 .tool-pane{display:none;flex-direction:column;gap:12px;padding:20px 20px 44px;overflow-y:auto;height:100%}
 .tool-pane.active{display:flex}
@@ -34,7 +34,7 @@ textarea{resize:vertical;min-height:72px}
 textarea.mono{font-family:var(--mono);font-size:12px}
 select option{background:var(--surface)}
 button{padding:8px 16px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;min-height:36px;transition:background .15s,opacity .15s}
-button:hover:not(:disabled){background:#6d28d9}
+button:hover:not(:disabled){background:#4f46e5}
 button:disabled{opacity:.45;cursor:not-allowed}
 button.outline{background:none;border:1px solid var(--border);color:var(--text)}
 button.outline:hover:not(:disabled){border-color:var(--accent2);color:var(--accent2);background:none}
@@ -76,7 +76,7 @@ hr{border:none;border-top:1px solid var(--border)}
 .chain-link{font-size:11px;color:var(--muted);cursor:pointer;background:none;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;transition:all .15s;font-family:inherit}
 .chain-link:hover{border-color:var(--accent2);color:var(--accent2)}
 /* New Directions panels */
-.live-dot{display:inline-block;width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse 1.5s ease-in-out infinite;margin-right:6px}
+.live-dot{display:inline-block;width:7px;height:7px;background:var(--teal);border-radius:50%;animation:pulse 1.5s ease-in-out infinite;margin-right:6px}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .assert-case{border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px}
 .assert-case.passed{border-color:#052e1a}
@@ -885,7 +885,7 @@ async function runCluster() {
   out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Clustering…'
   try {
     const data = await client.ai.cluster(texts, { k })
-    const cols = ['#7c3aed','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#6366f1','#ec4899']
+    const cols = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#818cf8','#ec4899']
     const clusterHTML = data.clusters.map(c => `
       <div style="background:var(--surface);border-left:3px solid ${cols[c.label % cols.length]};border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px">
         <div style="font-size:11px;opacity:.6;margin-bottom:4px">Cluster ${c.label+1} — ${c.items.length} items</div>
@@ -1103,7 +1103,7 @@ function renderHeatmap(matrix, labels) {
   const rows = matrix.map((row, i) =>
     `<tr><td style="font-size:9px;padding:0 4px;opacity:.6;white-space:nowrap;font-family:var(--mono)">${escHtml(labels[i] ?? String(i))}</td>${row.map((v, j) => {
       const pct = Math.round(v * 100)
-      const bg = `rgba(124,58,237,${(v * 0.8).toFixed(2)})`
+      const bg = `rgba(99,102,241,${(v * 0.8).toFixed(2)})`
       return `<td class="hm-cell" title="${escHtml(String(labels[i] ?? i))} vs ${escHtml(String(labels[j] ?? j))}: ${pct}%" style="width:${Math.floor(300/n)}px;height:${Math.floor(300/n)}px;background:${bg};text-align:center;font-size:${n <= 6 ? 10 : 8}px;font-family:var(--mono);color:#fff;opacity:.9;border:1px solid var(--bg);cursor:default">${pct}</td>`
     }).join('')}</tr>`
   ).join('')
@@ -1575,7 +1575,7 @@ async function deleteAssertionSuite(id, btn) {
 }
 
 // ── Semantic Map ──────────────────────────────────────────────────────────────
-const CLUSTER_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2','#16a34a','#9333ea']
+const CLUSTER_COLORS = ['#6366f1','#2563eb','#14b8a6','#d97706','#dc2626','#0891b2','#10b981','#818cf8']
 async function addAtlasPrompt() {
   const status = document.getElementById('atl-add-status')
   const text = document.getElementById('atl-text').value.trim()
