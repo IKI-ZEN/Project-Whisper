@@ -20,7 +20,14 @@ XAI_API_KEY=         # xai:grok-2-latest, xai:grok-4
 PERPLEXITY_API_KEY=  # perplexity:sonar-pro (includes real-time web search)
 CEREBRAS_API_KEY=    # cerebras:llama-3.3-70b (ultra-fast Llama inference)
 OPENROUTER_API_KEY=  # openrouter:{provider}/{model} — 200+ models via one key (e.g. openrouter:openai/gpt-4o)
-ELEVENLABS_API_KEY=  # reserved for TTS endpoint (POST /api/ai/tts)
+COHERE_API_KEY=      # cohere:command-r-plus, cohere:command-r, cohere:command
+HUGGINGFACE_API_KEY= # huggingface:{org}/{model} — e.g. huggingface:bigcode/starcoder
+REPLICATE_API_KEY=   # replicate:{version-hash} or replicate:{owner}/{model}
+PARALLEL_API_KEY=    # parallel:speed — web research & structured extraction (x-api-key auth)
+FAL_API_KEY=         # fal:{model-path} — 600+ generative media models, returns image URL (e.g. fal:fal-ai/fast-sdxl)
+IDEOGRAM_API_KEY=    # ideogram:V_3 — image generation, returns image URL
+CARTESIA_API_KEY=    # cartesia TTS via POST /api/ai/tts with provider:"cartesia"
+ELEVENLABS_API_KEY=  # elevenlabs TTS via POST /api/ai/tts with provider:"elevenlabs"
 
 # Amazon Bedrock via AI Gateway compat endpoint + BYOK.
 # Requires AWS credentials configured as Provider Keys in the CF AI Gateway dashboard.

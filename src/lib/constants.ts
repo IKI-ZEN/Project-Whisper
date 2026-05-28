@@ -148,3 +148,9 @@ export const MAX_JSON_SCHEMA_BYTES  = 65_536     // 64 KB
 
 // Azure OpenAI stable API version
 export const AZURE_OPENAI_API_VERSION = '2024-02-01'
+
+// Cartesia TTS API version header
+export const CARTESIA_API_VERSION = '2024-06-10'
+
+// TTS text input limit
+export const MAX_TTS_TEXT_LEN = 5_000

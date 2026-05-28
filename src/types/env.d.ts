@@ -76,6 +76,13 @@ export interface Env {
   BASETEN_API_KEY?: string
   CEREBRAS_API_KEY?: string
   OPENROUTER_API_KEY?: string
+  COHERE_API_KEY?: string
+  HUGGINGFACE_API_KEY?: string
+  REPLICATE_API_KEY?: string
+  PARALLEL_API_KEY?: string
+  FAL_API_KEY?: string
+  IDEOGRAM_API_KEY?: string
+  CARTESIA_API_KEY?: string
   SIGNING_SECRET?: string
   ALLOWED_ORIGINS?: string   // comma-separated origins, or '*' (default)
 

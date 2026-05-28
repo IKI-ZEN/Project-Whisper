@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Message, SandboxConfig, Tool, ContentBlock } from './schema'
 import { sseEvent } from './http'
-import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS, AZURE_OPENAI_API_VERSION } from './constants'
+import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS, AZURE_OPENAI_API_VERSION, CARTESIA_API_VERSION } from './constants'
 import { sha256 } from './utils'
 import { estimateCost, type CallType } from './pricing'
 
@@ -66,11 +66,25 @@ export const MODELS = {
   cerebras:     'cerebras:llama-3.3-70b',
   // OpenRouter — unified model router (access 200+ models with one API key)
   openrouter:   'openrouter:openai/gpt-4o',
+  // Cohere — command-r series with native retrieval & web-search connectors
+  cohere:       'cohere:command-r-plus',
+  // HuggingFace — model org/name encoded in model string (e.g. huggingface:bigcode/starcoder)
+  huggingface:  'huggingface:bigcode/starcoder',
+  // Replicate — async predictions; model string is a version hash or owner/model format
+  replicate:    'replicate:meta/llama-4-maverick-instruct-basic',
+  // Parallel — specialised web research & structured extraction
+  parallel:     'parallel:speed',
+  // Google Vertex AI via compat endpoint + BYOK (requires CF_AIG_TOKEN with Vertex SA configured)
+  vertex:       'vertex:google/gemini-2.5-pro',
+  // Fal AI — 600+ generative media models (image/video/audio); returns image URL
+  imageFal:     'fal:fal-ai/fast-sdxl',
+  // Ideogram — high-quality image generation; returns image URL
+  imageIdeogram: 'ideogram:V_3',
 } as const
 
 // ── Gateway provider registry ─────────────────────────────────────────────────
 
-type WireFormat = 'openai' | 'anthropic' | 'google'
+type WireFormat = 'openai' | 'anthropic' | 'google' | 'cohere' | 'huggingface' | 'replicate'
 
 interface GatewayProviderDef {
   format:       WireFormat
@@ -118,6 +132,28 @@ const GATEWAY_PROVIDERS: Record<string, GatewayProviderDef> = {
   },
   // Baseten — OpenAI-compatible inference for custom and open-source models
   baseten: { format: 'openai', path: _ => '/baseten/v1/chat/completions', apiKey: e => e.BASETEN_API_KEY ?? '' },
+  // Cohere — native Cohere chat format; auth uses "Token {key}" not "Bearer"
+  cohere: { format: 'cohere', path: _ => '/cohere/v1/chat', apiKey: e => e.COHERE_API_KEY ?? '' },
+  // HuggingFace — model ID is embedded in the URL path; body uses "inputs" key
+  huggingface: { format: 'huggingface', path: id => `/huggingface/${id}`, apiKey: e => e.HUGGINGFACE_API_KEY ?? '' },
+  // Replicate — async prediction API; polls until completion
+  replicate: { format: 'replicate', path: _ => '/replicate/predictions', apiKey: e => e.REPLICATE_API_KEY ?? '' },
+  // Parallel — chat via unified compat endpoint; model format "parallel/{model-id}"
+  parallel: {
+    format: 'openai',
+    path: _ => '/compat/chat/completions',
+    apiKey: e => e.PARALLEL_API_KEY ?? '',
+    authHeaders: key => ({ 'x-api-key': key }),
+    modelId: id => `parallel/${id}`,
+  },
+  // Google Vertex AI via compat endpoint + BYOK; model format "google-vertex-ai/{model}"
+  vertex: {
+    format: 'openai',
+    path: _ => '/compat/chat/completions',
+    apiKey: e => e.CF_AIG_TOKEN ?? '',
+    authHeaders: key => ({ 'cf-aig-authorization': `Bearer ${key}` }),
+    modelId: id => `google-vertex-ai/${id}`,
+  },
 }
 
 type GatewayResult = { provider: string; id: string; def: GatewayProviderDef }
@@ -532,6 +568,96 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
   return parts.filter(p => p.text).map(p => p.text).join('') ?? ''
 }
 
+async function completeCohere(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
+  const { id: modelId, def } = gw
+  const key = def.apiKey(env)
+  const msgs = buildMessages(opts)
+  const last = msgs[msgs.length - 1]
+  const message = last?.content ?? opts.prompt ?? ''
+  const chatHistory = msgs.slice(0, -1).map(m => ({
+    role: m.role === 'user' ? 'USER' : 'CHATBOT',
+    message: m.content,
+  }))
+  const body: Record<string, unknown> = {
+    message,
+    model: modelId,
+    chat_history: chatHistory,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+  }
+  if (opts.systemPrompt) body.preamble = opts.systemPrompt
+  const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Token ${key}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`Cohere gateway error ${res.status}: ${await res.text()}`)
+  type CohereResp = { text: string }
+  const data = await res.json() as CohereResp
+  return data.text ?? ''
+}
+
+async function completeHuggingFace(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
+  const { id: modelId, def } = gw
+  const key = def.apiKey(env)
+  // Convert conversation to a single prompt string — HF inference API uses "inputs" key
+  const prompt = buildMessages(opts).map(m => `${m.role}: ${m.content}`).join('\n')
+  const body = {
+    inputs: prompt,
+    parameters: {
+      max_new_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+      return_full_text: false,
+    },
+  }
+  const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`HuggingFace gateway error ${res.status}: ${await res.text()}`)
+  type HFResp = { generated_text?: string } | Array<{ generated_text?: string }>
+  const data = await res.json() as HFResp
+  return (Array.isArray(data) ? data[0]?.generated_text : data.generated_text) ?? ''
+}
+
+async function completeReplicate(env: Env, gw: GatewayResult, opts: CompletionOpts): Promise<string> {
+  const { id: modelId, def } = gw
+  const key = def.apiKey(env)
+  const base = gatewayBase(env)
+  const prompt = buildMessages(opts).map(m => `${m.role}: ${m.content}`).join('\n')
+  // Create prediction
+  const createRes = await fetch(`${base}${def.path(modelId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ version: modelId, input: { prompt, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS } }),
+    signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+  })
+  type ReplicatePred = { id: string; status: string; output?: string[] | string; error?: string; urls?: { get: string } }
+  const pred = await createRes.json() as ReplicatePred
+  if (!createRes.ok) throw new Error(`Replicate create error ${createRes.status}: ${pred.error ?? ''}`)
+  // Poll until succeeded (up to timeout)
+  const pollUrl = pred.urls?.get ?? `${base}/replicate/predictions/${pred.id}`
+  const deadline = Date.now() + AI_GATEWAY_TIMEOUT_MS - 5_000
+  while (Date.now() < deadline) {
+    await new Promise<void>(r => setTimeout(r, 1_500))
+    const pollRes = await fetch(pollUrl, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(15_000),
+    })
+    const polled = await pollRes.json() as ReplicatePred
+    if (polled.status === 'succeeded') {
+      const out = polled.output
+      return Array.isArray(out) ? out.join('') : (out ?? '')
+    }
+    if (polled.status === 'failed' || polled.status === 'canceled')
+      throw new Error(`Replicate prediction ${polled.status}: ${polled.error ?? ''}`)
+  }
+  throw new Error('Replicate prediction timed out')
+}
+
 // ── SSE streaming helpers ─────────────────────────────────────────────────────
 
 // Fetches a streaming endpoint and yields decoded SSE response tokens.
@@ -638,6 +764,29 @@ function streamGoogle(env: Env, model: string, opts: CompletionOpts): ReadableSt
   ))
 }
 
+function streamCohere(env: Env, gw: GatewayResult, opts: CompletionOpts): ReadableStream {
+  const { id: modelId, def } = gw
+  const key = def.apiKey(env)
+  const msgs = buildMessages(opts)
+  const last = msgs[msgs.length - 1]
+  const message = last?.content ?? opts.prompt ?? ''
+  const chatHistory = msgs.slice(0, -1).map(m => ({ role: m.role === 'user' ? 'USER' : 'CHATBOT', message: m.content }))
+  const body: Record<string, unknown> = {
+    message,
+    model: modelId,
+    chat_history: chatHistory,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+    stream: true,
+  }
+  if (opts.systemPrompt) body.preamble = opts.systemPrompt
+  return toReadableStream(() => streamSSEFetch(
+    `${gatewayBase(env)}${def.path(modelId)}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Token ${key}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS) },
+    (c: unknown) => { const ch = c as { event_type?: string; text?: string }; return ch.event_type === 'text-generation' ? ch.text : undefined },
+  ))
+}
+
 // ── Public complete ───────────────────────────────────────────────────────────
 
 export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<string> {
@@ -645,8 +794,11 @@ export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<
   const gw = parseGateway(opts.model ?? '')
   let result: string
   if (gw) {
-    if (gw.def.format === 'anthropic') result = await completeAnthropic(env, gw.id, opts)
-    else if (gw.def.format === 'google') result = await completeGoogle(env, gw.id, opts)
+    if      (gw.def.format === 'anthropic')  result = await completeAnthropic(env, gw.id, opts)
+    else if (gw.def.format === 'google')     result = await completeGoogle(env, gw.id, opts)
+    else if (gw.def.format === 'cohere')     result = await completeCohere(env, gw, opts)
+    else if (gw.def.format === 'huggingface') result = await completeHuggingFace(env, gw, opts)
+    else if (gw.def.format === 'replicate')  result = await completeReplicate(env, gw, opts)
     else result = await completeOpenAI(env, gw, opts)
   } else {
     const response = await run(ai)(opts.model ?? MODELS.text, {
@@ -753,8 +905,13 @@ export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): Readable
   const gw = parseGateway(opts.model ?? '')
   let inner: ReadableStream
   if (gw) {
-    if (gw.def.format === 'anthropic') inner = streamAnthropic(env, gw.id, opts)
-    else if (gw.def.format === 'google') inner = streamGoogle(env, gw.id, opts)
+    if      (gw.def.format === 'anthropic')   inner = streamAnthropic(env, gw.id, opts)
+    else if (gw.def.format === 'google')      inner = streamGoogle(env, gw.id, opts)
+    else if (gw.def.format === 'cohere')      inner = streamCohere(env, gw, opts)
+    else if (gw.def.format === 'huggingface' || gw.def.format === 'replicate') {
+      // These providers don't support SSE streaming — emit the full result as one chunk
+      inner = toReadableStream(async function*() { yield await complete(ai, env, opts) })
+    }
     else inner = streamOpenAI(env, gw, opts)
   } else {
     const encoder = new TextEncoder()
@@ -848,6 +1005,85 @@ export async function generateImage(ai: Ai, prompt: string, model?: string, step
 
   if (env) logUsage(env, undefined, model ?? MODELS.image, 'workers-ai', 'image', 1, 0, Date.now() - t0)
   return bytes
+}
+
+// ── TTS (ElevenLabs / Cartesia via gateway) ───────────────────────────────────
+
+export interface TTSOpts {
+  provider: 'elevenlabs' | 'cartesia'
+  text: string
+  voiceId?: string
+  modelId?: string
+  voice?: { mode: string; id: string }
+  outputFormat?: { container: string; encoding: string; sampleRate: number }
+}
+
+export async function synthesizeSpeech(env: Env, opts: TTSOpts): Promise<{ audio: ArrayBuffer; contentType: string }> {
+  const base = gatewayBase(env)
+  if (opts.provider === 'elevenlabs') {
+    const voiceId = opts.voiceId ?? 'EXAVITQu4vr4xnSDxMaL'
+    const url = `${base}/elevenlabs/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': env.ELEVENLABS_API_KEY ?? '' },
+      body: JSON.stringify({ text: opts.text, model_id: opts.modelId ?? 'eleven_multilingual_v2' }),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`ElevenLabs error ${res.status}: ${await res.text()}`)
+    return { audio: await res.arrayBuffer(), contentType: 'audio/mpeg' }
+  }
+  // Cartesia
+  const voice = opts.voice ?? { mode: 'id', id: '79a125e8-cd45-4c13-8a67-188112f4dd22' }
+  const outputFmt = opts.outputFormat ?? { container: 'mp3', encoding: 'mp3', sampleRate: 44100 }
+  const res = await fetch(`${base}/cartesia/tts/bytes`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': env.CARTESIA_API_KEY ?? '',
+      'Cartesia-Version': CARTESIA_API_VERSION,
+    },
+    body: JSON.stringify({
+      transcript: opts.text,
+      model_id: opts.modelId ?? 'sonic-english',
+      voice,
+      output_format: outputFmt,
+    }),
+    signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`Cartesia error ${res.status}: ${await res.text()}`)
+  return { audio: await res.arrayBuffer(), contentType: 'audio/mpeg' }
+}
+
+// ── Image generation via gateway (Fal AI / Ideogram) ─────────────────────────
+
+export async function generateImageGateway(env: Env, prompt: string, model: string): Promise<string> {
+  const base = gatewayBase(env)
+  const sep = model.indexOf(':')
+  const provider = sep === -1 ? '' : model.slice(0, sep)
+  const modelId  = sep === -1 ? model : model.slice(sep + 1)
+  if (provider === 'fal') {
+    const res = await fetch(`${base}/fal/${modelId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Key ${env.FAL_API_KEY ?? ''}` },
+      body: JSON.stringify({ prompt }),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`Fal error ${res.status}: ${await res.text()}`)
+    type FalResp = { images?: Array<{ url: string }> }
+    return ((await res.json() as FalResp).images?.[0]?.url) ?? ''
+  }
+  if (provider === 'ideogram') {
+    const res = await fetch(`${base}/ideogram/v1/ideogram-v3/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Api-Key': env.IDEOGRAM_API_KEY ?? '' },
+      body: JSON.stringify({ prompt, model: modelId || 'V_3' }),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`Ideogram error ${res.status}: ${await res.text()}`)
+    type IdeogramResp = { data?: Array<{ url: string }> }
+    return ((await res.json() as IdeogramResp).data?.[0]?.url) ?? ''
+  }
+  throw new Error(`Unknown image gateway provider: ${provider}`)
 }
 
 // ── Audio transcription ───────────────────────────────────────────────────────

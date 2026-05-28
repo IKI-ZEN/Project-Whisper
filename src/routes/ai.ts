@@ -2,11 +2,11 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, sseResponse, parseBody } from '../lib/http'
 import {
-  complete, completeStream, embed, generateImage, transcribe, MODELS,
+  complete, completeStream, embed, generateImage, generateImageGateway, transcribe, synthesizeSpeech, MODELS,
 } from '../lib/ai'
 import {
   parseCompleteRequest, parseEmbedRequest, parseImageRequest,
-  parseCompareRequest, parseSweepRequest, parseUsageQuery,
+  parseCompareRequest, parseSweepRequest, parseUsageQuery, parseTTSRequest,
 } from '../lib/schema'
 import { toBase64 } from '../lib/utils'
 import { MAX_AUDIO_BYTES } from '../lib/constants'
@@ -45,15 +45,35 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     }
   }],
 
-  // POST /api/ai/image — generate image, returns base64 PNG
+  // POST /api/ai/image — generate image via Workers AI (default) or gateway (fal:/ideogram: prefix)
   ['POST', '/api/ai/image', async (req: Request, env: Env) => {
     const p = await parseBody(req, parseImageRequest)
     if (!p.ok) return p.response
+    const model = p.data.model ?? ''
+    const isGateway = model.startsWith('fal:') || model.startsWith('ideogram:')
     try {
-      const bytes = await generateImage(env.AI, p.data.prompt, p.data.model, p.data.steps, env)
+      if (isGateway) {
+        const url = await generateImageGateway(env, p.data.prompt, model)
+        return json(ok({ url, format: 'url' }))
+      }
+      const bytes = await generateImage(env.AI, p.data.prompt, model || undefined, p.data.steps, env)
       return json(ok({ image: toBase64(bytes), format: 'png' }))
     } catch (e) {
       return json(err('Image generation failed'), 500)
+    }
+  }],
+
+  // POST /api/ai/tts — text-to-speech via ElevenLabs or Cartesia; returns binary audio
+  ['POST', '/api/ai/tts', async (req: Request, env: Env) => {
+    const p = await parseBody(req, parseTTSRequest)
+    if (!p.ok) return p.response
+    try {
+      const { audio, contentType } = await synthesizeSpeech(env, p.data)
+      return new Response(audio, {
+        headers: { 'Content-Type': contentType, 'Content-Length': String(audio.byteLength) },
+      })
+    } catch (e) {
+      return json(err('TTS failed'), 500)
     }
   }],
 

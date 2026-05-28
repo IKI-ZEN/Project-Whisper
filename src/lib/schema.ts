@@ -8,6 +8,7 @@ import {
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
   MAX_DRIFT_TURNS, MAX_STRESS_LEVELS, MAX_RUBRIC_CRITERIA, MAX_RUBRIC_SAMPLES,
   MAX_WEBHOOK_URL_LEN, MAX_IMAGE_BASE64_BYTES, MAX_IMAGES_PER_MESSAGE, MAX_JSON_SCHEMA_BYTES,
+  MAX_TTS_TEXT_LEN,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -950,4 +951,42 @@ export function parseWebhookUrl(v: unknown): string | undefined {
   if (host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.localhost'))
     throw new Error('webhookUrl must not target internal hostnames')
   return v
+}
+
+// ── TTS request ───────────────────────────────────────────────────────────────
+
+export interface TTSRequest {
+  provider: 'elevenlabs' | 'cartesia'
+  text: string
+  voiceId?: string
+  modelId?: string
+  voice?: { mode: string; id: string }
+  outputFormat?: { container: string; encoding: string; sampleRate: number }
+}
+
+export function parseTTSRequest(body: unknown): TTSRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const providerRaw = typeof body.provider === 'string' ? body.provider : 'elevenlabs'
+  if (providerRaw !== 'elevenlabs' && providerRaw !== 'cartesia')
+    throw new Error('provider must be "elevenlabs" or "cartesia"')
+  const provider = providerRaw as 'elevenlabs' | 'cartesia'
+  const text = str(body.text, 'text')
+  if (text.length === 0) throw new Error('text is required')
+  if (text.length > MAX_TTS_TEXT_LEN) throw new Error(`text must be <= ${MAX_TTS_TEXT_LEN} characters`)
+  const result: TTSRequest = { provider, text }
+  if (body.voiceId    !== undefined) result.voiceId  = str(body.voiceId, 'voiceId')
+  if (body.modelId    !== undefined) result.modelId  = str(body.modelId, 'modelId')
+  if (body.voice      !== undefined) {
+    if (!isObj(body.voice)) throw new Error('voice must be an object')
+    result.voice = { mode: str(body.voice.mode, 'voice.mode'), id: str(body.voice.id, 'voice.id') }
+  }
+  if (body.outputFormat !== undefined) {
+    if (!isObj(body.outputFormat)) throw new Error('outputFormat must be an object')
+    result.outputFormat = {
+      container:  str(body.outputFormat.container,  'outputFormat.container'),
+      encoding:   str(body.outputFormat.encoding,   'outputFormat.encoding'),
+      sampleRate: num(body.outputFormat.sampleRate, 'outputFormat.sampleRate', 44100, 8000, 48000),
+    }
+  }
+  return result
 }

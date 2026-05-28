@@ -414,7 +414,7 @@ Each entry lists: gateway path segment, authentication header(s), wire format, m
 
 ---
 
-### 7A. Implemented Providers (13 total)
+### 7A. Implemented Providers (23 total)
 
 ---
 
@@ -738,9 +738,9 @@ Each entry lists: gateway path segment, authentication header(s), wire format, m
 
 ---
 
-### 7B. Not-Yet-Wired Providers
+### 7B. Extended Providers (10 additional)
 
-These providers are supported by AI Gateway but do not have an implementation in this project's `src/lib/ai.ts`. Each requires a custom handler due to non-OpenAI-compatible request formats, binary responses, or async polling patterns.
+These providers are fully implemented. Text-completion providers (Cohere, HuggingFace, Replicate, Parallel, Google Vertex AI) are wired into the `GATEWAY_PROVIDERS` registry in `src/lib/ai.ts` and dispatched through `complete()`/`completeStream()`. Media providers (ElevenLabs, Cartesia, Fal AI, Ideogram) use dedicated gateway functions called from new/extended route handlers. Deepgram is available via Workers AI hosted models with no gateway changes required.
 
 ---
 
@@ -750,14 +750,15 @@ These providers are supported by AI Gateway but do not have an implementation in
 |-------|-------|
 | Gateway path | `/cohere/v1/chat` |
 | Auth header | `Authorization: Token {key}` |
-| Wire format | Cohere-native |
+| Wire format | `cohere` (custom handler) |
+| Project model string | `cohere:{model}` e.g. `cohere:command-r-plus` |
+| Env var | `COHERE_API_KEY` |
 
 **Notes:**
 - Auth uses `Token {key}` — **not** `Bearer`. This is a Cohere-specific convention.
-- Cohere's request body uses `chat_history` (array of `{role, message}` objects), a `message` field for the current user turn, and `connectors` for retrieval.
-- Web search: add `connectors: [{ id: "web-search" }]` to the request body.
-- Also accessible via the REST API unified endpoint with model `cohere/{model}`.
-- Different schema from OpenAI — requires a dedicated handler function.
+- Cohere's request body uses `chat_history` (array of `{role, message}` objects), a `message` field for the current user turn, and a `preamble` field for the system prompt.
+- Web search: add `connectors: [{ id: "web-search" }]` to the request body (not currently exposed via the API).
+- Streaming: real SSE streaming via Cohere's `stream: true` — extracts `text-generation` events.
 
 **Available models:** `command-r-plus`, `command-r`, `command`
 
@@ -769,11 +770,15 @@ These providers are supported by AI Gateway but do not have an implementation in
 |-------|-------|
 | Gateway path | `/huggingface/{org}/{model}` e.g. `/huggingface/bigcode/starcoder` |
 | Auth header | `Authorization: Bearer {key}` |
-| Wire format | HuggingFace Inference API |
+| Wire format | `huggingface` (custom handler) |
+| Project model string | `huggingface:{org}/{model}` |
+| Env var | `HUGGINGFACE_API_KEY` |
 
 **Notes:**
-- The model identifier is part of the **URL path**, not the request body. This is incompatible with the OpenAI-compat registry pattern and requires a custom handler that constructs the URL dynamically.
-- Request body uses `inputs` as the top-level key (not `messages`).
+- The model identifier is part of the **URL path** (`/huggingface/${id}` where `id` = everything after `huggingface:`).
+- Request body uses `inputs` (prompt string) and `parameters.max_new_tokens`/`temperature`.
+- No streaming support — blocking completion only; `completeStream` emits the full result as one chunk.
+- Response is `[{"generated_text": "..."}]` or `{"generated_text": "..."}`.
 
 ---
 
@@ -783,12 +788,15 @@ These providers are supported by AI Gateway but do not have an implementation in
 |-------|-------|
 | Gateway path | `/replicate/predictions` |
 | Auth header | `Authorization: Bearer {key}` |
-| Wire format | Replicate-native |
+| Wire format | `replicate` (async polling handler) |
+| Project model string | `replicate:{version-hash}` |
+| Env var | `REPLICATE_API_KEY` |
 
 **Notes:**
 - Request body uses `version` (model version hash) and `input.prompt`.
-- Responses are **asynchronous**: the initial response returns a prediction object with an `id` and `status: "starting"`. The caller must poll the prediction URL or use webhooks to retrieve the final output.
-- This async pattern is fundamentally different from synchronous chat completions and requires a dedicated polling implementation.
+- Implementation: create prediction → poll `urls.get` every 1.5s until `status: "succeeded"` or timeout.
+- No streaming support — blocking poll only; `completeStream` emits the full result as one chunk.
+- Output is `string[]` joined or a single string; joined with `''`.
 
 **Available models:** `anthropic/claude-4.5-haiku`, `google/nano-banana`, and many others (community + official).
 
@@ -799,21 +807,23 @@ These providers are supported by AI Gateway but do not have an implementation in
 | Field | Value |
 |-------|-------|
 | Auth header | `x-api-key: {key}` |
-| Wire format | Parallel-native per API; Chat uses OpenAI-compat |
+| Wire format | OpenAI-compat via unified `/compat` endpoint |
+| Project model string | `parallel:{model-id}` e.g. `parallel:speed` |
+| Env var | `PARALLEL_API_KEY` |
 
 **Gateway paths:**
 
 | API | Path |
 |-----|------|
+| Chat (compat — implemented) | `/compat/chat/completions` with model `parallel/{model-id}` |
 | Tasks API | `/parallel/v1/tasks/runs` |
 | Search API | `/parallel/v1beta/search` |
 | FindAll API | `/parallel/v1beta/findall/ingest` |
-| Chat (compat) | `/compat/chat/completions` with model `parallel/{model-id}` |
 
 **Notes:**
-- Auth uses `x-api-key:` — not `Authorization: Bearer`.
+- Auth uses `x-api-key:` — not `Authorization: Bearer`. The `authHeaders` override handles this.
+- Model string `parallel:speed` → compat body model `parallel/speed`.
 - Parallel is purpose-built for AI agents — specialised in web research, evidence-based outputs, and structured data extraction.
-- Chat completions via the compat endpoint support model strings like `parallel/speed`.
 
 ---
 
@@ -824,18 +834,17 @@ These providers are supported by AI Gateway but do not have an implementation in
 | Gateway path | `/cartesia/tts/bytes` |
 | Auth headers | `X-API-Key: {key}` + `Cartesia-Version: 2024-06-10` |
 | Wire format | Cartesia-native; returns binary audio |
+| Route | `POST /api/ai/tts` with `{ "provider": "cartesia" }` |
+| Env var | `CARTESIA_API_KEY` |
 
 **Request body fields:**
 
 | Field | Description |
 |-------|-------------|
-| `transcript` | Text to synthesise |
-| `model_id` | Model to use (e.g. `sonic-english`) |
-| `voice.mode` | Voice selection mode |
-| `voice.id` | Voice identifier |
-| `output_format.container` | Audio container format |
-| `output_format.encoding` | Audio encoding |
-| `output_format.sample_rate` | Sample rate in Hz |
+| `text` | Text to synthesise (field mapped to `transcript` internally) |
+| `modelId` | Model to use (default: `sonic-english`) |
+| `voice` | `{ "mode": "id", "id": "{voice-uuid}" }` |
+| `outputFormat` | `{ "container": "mp3", "encoding": "mp3", "sampleRate": 44100 }` |
 
 **Available models:** `sonic-english`
 
@@ -850,8 +859,8 @@ These providers are supported by AI Gateway but do not have an implementation in
 | Wire format | Deepgram real-time streaming WebSocket |
 
 **Notes:**
-- Used for real-time speech-to-text via WebSocket.
-- Deepgram models are also available as **Workers AI hosted models** (`@cf/deepgram/nova-3`, `@cf/deepgram/aura-2-en`, `@cf/deepgram/aura-2-es`, `@cf/deepgram/flux`) and can be used without gateway routing via `env.AI.run()`.
+- Real-time WebSocket gateway path is not wired — requires a WebSocket upgrade handler, not a REST endpoint.
+- Deepgram models are available as **Workers AI hosted models** and are fully usable today via `POST /api/ai/transcribe` with model `@cf/deepgram/nova-3`, `@cf/deepgram/aura-2-en`, etc. No additional API key needed.
 
 ---
 
@@ -861,19 +870,21 @@ These providers are supported by AI Gateway but do not have an implementation in
 |-------|-------|
 | Gateway path | `/elevenlabs/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128` |
 | Auth header | `xi-api-key: {key}` |
-| Wire format | ElevenLabs-native; returns binary audio (MP3 or WAV) |
-| Env var | `ELEVENLABS_API_KEY` (already defined in `env.d.ts`) |
+| Wire format | ElevenLabs-native; returns binary audio (MP3) |
+| Route | `POST /api/ai/tts` with `{ "provider": "elevenlabs" }` |
+| Env var | `ELEVENLABS_API_KEY` |
 
 **Request body fields:**
 
 | Field | Description |
 |-------|-------------|
 | `text` | Text to convert to speech |
-| `model_id` | Model to use (e.g. `eleven_multilingual_v2`) |
+| `voiceId` | Voice ID (default: `EXAVITQu4vr4xnSDxMaL`) |
+| `modelId` | Model to use (default: `eleven_multilingual_v2`) |
 
 **Notes:**
 - Auth uses `xi-api-key:` — **not** `Authorization: Bearer`.
-- The voice ID is part of the URL path. The `output_format` query parameter controls the returned audio format.
+- The voice ID is URL-path-encoded internally by `synthesizeSpeech`.
 
 **Available models:** `eleven_multilingual_v2`
 
@@ -885,13 +896,15 @@ These providers are supported by AI Gateway but do not have an implementation in
 |-------|-------|
 | Gateway path | `/fal/{model-path}` e.g. `/fal/fal-ai/fast-sdxl` |
 | Auth header | `Authorization: Key {key}` |
-| Wire format | Fal-native; response is image/video URL |
+| Wire format | Fal-native; response is image URL |
+| Route | `POST /api/ai/image` with `model: "fal:{model-path}"` |
+| Env var | `FAL_API_KEY` |
 
 **Notes:**
 - Auth uses `Authorization: Key {key}` — **not** `Bearer`. This is a Fal-specific convention.
-- For custom model routing, send requests to `/fal` with the `x-fal-target-url: https://queue.fal.run/...` header.
+- Response returns `{ url: "...", format: "url" }` (not base64 bytes like Workers AI).
+- For custom model routing, send requests to `/fal` with the `x-fal-target-url: https://queue.fal.run/...` header (advanced use; not currently exposed).
 - Fal provides 600+ generative media models (image, video, voice, audio).
-- Also supports a real-time WebSocket API for interactive generation.
 
 ---
 
@@ -901,17 +914,20 @@ These providers are supported by AI Gateway but do not have an implementation in
 |-------|-------|
 | Gateway path | `/ideogram/v1/ideogram-v3/generate` |
 | Auth header | `Api-Key: {key}` |
-| Wire format | Ideogram-native; returns image URLs |
+| Wire format | Ideogram-native; returns image URL |
+| Route | `POST /api/ai/image` with `model: "ideogram:V_3"` |
+| Env var | `IDEOGRAM_API_KEY` |
 
 **Request body fields:**
 
 | Field | Description |
 |-------|-------------|
 | `prompt` | Text description of the image to generate |
-| `model` | Model version (e.g. `V_3`) |
+| `model` | Model version (default: `V_3`) |
 
 **Notes:**
 - Auth uses `Api-Key:` — **not** `Authorization: Bearer` or `Authorization: Key`.
+- Response returns `{ url: "...", format: "url" }`.
 
 **Available models:** `V_3`
 
@@ -921,14 +937,17 @@ These providers are supported by AI Gateway but do not have an implementation in
 
 | Field | Value |
 |-------|-------|
-| Gateway path | `/google-vertex-ai/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent` |
-| Wire format | Gemini API (`contents` / `parts`) |
+| Gateway path | `/compat/chat/completions` (unified compat) |
+| Auth header | `cf-aig-authorization: Bearer {CF_AIG_TOKEN}` |
+| Wire format | OpenAI-compat via `/compat` endpoint |
+| Project model string | `vertex:{model}` e.g. `vertex:google/gemini-2.5-pro` |
+| Env var | `CF_AIG_TOKEN` (shared with Bedrock BYOK) |
 
 **Authentication options:**
 
 | Method | Headers required |
 |--------|-----------------|
-| **BYOK (recommended)** | `cf-aig-authorization: Bearer {CF_AIG_TOKEN}` only — gateway signs with stored service account |
+| **BYOK (implemented)** | `cf-aig-authorization: Bearer {CF_AIG_TOKEN}` only — gateway signs with stored service account |
 | Service account JSON (direct) | `cf-aig-authorization: Bearer {CF_AIG_TOKEN}` + `Authorization: Bearer {base64-encoded-service-account-json-with-region-key}` |
 | Direct access token | `cf-aig-authorization: Bearer {CF_AIG_TOKEN}` + `Authorization: Bearer {gcloud-access-token}` |
 
@@ -945,13 +964,10 @@ These providers are supported by AI Gateway but do not have an implementation in
 }
 ```
 
-**Compat endpoint:** Use model string `google-vertex-ai/google/gemini-2.5-pro` with the `/compat/chat/completions` endpoint.
-
 **Notes:**
+- Model string `vertex:google/gemini-2.5-pro` → compat body model `google-vertex-ai/google/gemini-2.5-pro`.
 - Use specific region names (e.g. `us-central1`, `europe-west4`) — **not** `global`. The `global` endpoint has limited model support and often returns `UNAUTHENTICATED` errors.
-- When using the service account JSON method (not BYOK), the JSON object must include a `"region"` key alongside the standard service account fields, and the entire object must be base64-encoded before use as the Bearer value.
-- Common errors:
-  - `CREDENTIALS_MISSING` / `UNAUTHENTICATED` → check that the region key is present in the service account JSON and that BYOK is correctly configured in the dashboard.
+- Common errors: `CREDENTIALS_MISSING` / `UNAUTHENTICATED` → check that the region key is present in the service account JSON and that BYOK is correctly configured in the dashboard.
 
 ---
 
@@ -1251,6 +1267,20 @@ openrouter:openai/gpt-5-mini
 bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
 azure:my-resource/gpt-4o-deploy
 baseten:openai/gpt-oss-120b
+cohere:command-r-plus
+huggingface:bigcode/starcoder
+replicate:meta/llama-4-maverick-instruct-basic
+parallel:speed
+vertex:google/gemini-2.5-pro
+```
+
+**Non-text model strings (new routes):**
+
+```
+fal:fal-ai/fast-sdxl          → POST /api/ai/image  → { url, format:"url" }
+ideogram:V_3                   → POST /api/ai/image  → { url, format:"url" }
+provider:"elevenlabs"          → POST /api/ai/tts    → binary audio (MP3)
+provider:"cartesia"            → POST /api/ai/tts    → binary audio (MP3)
 ```
 
 ### Project-specific features
