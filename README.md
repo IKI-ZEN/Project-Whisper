@@ -25,7 +25,11 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 - **Replay Engine** — replay a conversation session against a different model or system prompt with per-turn cosine similarity scoring (`POST /api/replay`)
 - **Model Assertions** — behaviour contract testing with 7 assertion types (`contains`, `not-contains`, `matches`, `similarity-gte`, `judge`, `latency-lte`, `guard-clean`) and pass/fail history (`/api/assertions`)
 - **Semantic Map (Atlas)** — prompt library with embedding, k-means clustering, PCA-2D scatter plot, and nearest-prompt search (`/api/atlas`)
-- **Cron Whisper (Probes)** — scheduled whisperer tool runs (entropy, sensitivity, CoT, sweep) on hourly/daily/weekly cron triggers with time-series results (`/api/probes`)
+- **Cron Whisper (Probes)** — scheduled whisperer tool runs (entropy, sensitivity, CoT, sweep, pipeline) on hourly/daily/weekly cron triggers with time-series results; optional webhook alerts on threshold breach (`/api/probes`)
+- **Saved Pipelines** — persist named DAG pipeline definitions to D1; reuse them across probes and scheduled runs via full CRUD at `/api/pipelines`
+- **Vault Cluster Analysis** — embed vault records and cluster by k-means to surface prompt patterns and tool-usage breakdown (`POST /api/vault/analyze`; rate-limited 3 req / 5 min per IP)
+- **Sandbox Fork** — clone any sandbox config into a new independent sandbox with empty memory (`POST /api/sandbox/:id/fork`)
+- **Prompt Auto-versioning** — patching `systemPrompt` on a sandbox automatically saves the previous value to the vault tagged `system-prompt-version`, providing free version history
 
 ## API
 
@@ -55,7 +59,8 @@ GET  /api/sandbox              list all sandboxes
 POST /api/sandbox/import       create sandbox from exported config (verifies HMAC signature)
 POST /api/sandbox              create sandbox
 GET  /api/sandbox/:id          config (no memory) + integrityHash + tampered flag
-PATCH /api/sandbox/:id         update config fields (including guardMode)
+PATCH /api/sandbox/:id         update config fields (including guardMode); saving old systemPrompt to vault automatically
+POST /api/sandbox/:id/fork     create independent copy with cloned config, empty memory
 POST /api/sandbox/:id/run      blocking turn (persists to memory); ?sessionId= for isolated threads
 POST /api/sandbox/:id/stream   SSE stream (preview, no memory write); ?sessionId= supported
 GET  /api/sandbox/:id/history  full conversation history; ?sessionId= for a specific thread
@@ -79,6 +84,7 @@ POST   /api/vault              save a prompt/response pair with metadata
 PATCH  /api/vault/:id/tags     update tags on a saved record
 DELETE /api/vault/:id          delete a vault record
 GET    /api/vault/export.jsonl streaming JSONL export in OpenAI fine-tuning format
+POST   /api/vault/analyze      cluster vault records by embedding similarity (k-means); returns cluster representatives and tools breakdown; rate-limited 3 req / 5 min per IP
 
 POST /api/replay               replay a session export against a new model/system prompt → per-turn similarity scores
 GET  /api/replay/:id           retrieve replay result from R2
@@ -98,11 +104,18 @@ POST   /api/atlas/embed        batch embed library → k-means clusters + PCA-2D
 POST   /api/atlas/nearest      find N nearest prompts to a query by cosine distance
 
 GET    /api/probes             list scheduled probes
-POST   /api/probes             create probe (tool, prompt, model, schedule: hourly|daily|weekly)
+POST   /api/probes             create probe (tool: entropy|sweep|sensitivity|cot|pipeline, prompt, model, schedule: hourly|daily|weekly; optional webhookUrl for threshold-breach alerts)
 PATCH  /api/probes/:id         update probe
 DELETE /api/probes/:id         delete probe
 POST   /api/probes/:id/run     run probe immediately → result stored in D1
 GET    /api/probes/:id/history time-series results (last 50 runs)
+
+GET    /api/pipelines          list saved pipeline definitions (limit/offset; default 50)
+POST   /api/pipelines          create pipeline (name, description, nodes, entryId)
+GET    /api/pipelines/:id      fetch pipeline definition
+PATCH  /api/pipelines/:id      update pipeline name/description/nodes/entryId
+DELETE /api/pipelines/:id      delete pipeline definition
+POST   /api/pipelines/:id/run  execute pipeline with { input } → { output, trace }
 
 POST /api/v2/build             create app build → { buildId, wsUrl, appUrl }
 GET  /api/v2/build/:id         build status + blueprint + file list
@@ -180,13 +193,14 @@ Set `ALLOWED_ORIGINS=https://yourdomain.com,https://app.example.com` to restrict
 
 ### Rate limiting
 
-Three independent sliding-window layers:
+Three independent sliding-window layers (plus vault analysis):
 
 | Layer | Limit | Applied at |
 |-------|-------|-----------|
 | Per-IP on `/api/ai/*` | 30 req / 60 s | Router, before dispatch, keyed by `CF-Connecting-IP` |
 | Per-sandbox `run`/`stream` | 20 req / 60 s | `SandboxDO`, persists across hibernation |
 | Per-app email (`/api/app/:id/email`) | 5 req / 60 s | `sendEmailHandler`, keyed by build ID |
+| Per-IP vault cluster analysis | 3 req / 5 min | `POST /api/vault/analyze` |
 
 Excess requests return 429.
 
@@ -302,6 +316,9 @@ wrangler d1 execute whisper --file=./migrations/0004_probes.sql
 wrangler d1 execute whisper --file=./migrations/0005_vault.sql
 wrangler d1 execute whisper --file=./migrations/0006_assertions.sql
 wrangler d1 execute whisper --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --file=./migrations/0008_sandbox_analysis.sql
+wrangler d1 execute whisper --file=./migrations/0009_usage_cost.sql
+wrangler d1 execute whisper --file=./migrations/0010_pipelines_webhooks.sql
 
 # Local dev (uses remote Workers AI — requires wrangler login)
 npm run dev
@@ -346,4 +363,3 @@ Copy `.dev.vars.example` to `.dev.vars` and fill in the values you need:
 | Time-series telemetry | Analytics Engine |
 | Outbound email | Email Routing (`SEND_EMAIL` binding) |
 | App hosting | Cloudflare Pages (deploy target via Direct Upload API) |
-

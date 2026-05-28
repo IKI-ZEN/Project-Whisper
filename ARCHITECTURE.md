@@ -16,9 +16,16 @@
 9. [Security Subsystem](#9-security-subsystem)
 10. [Documents and RAG Pipeline](#10-documents-and-rag-pipeline)
 11. [App Builder Pipeline](#11-app-builder-pipeline)
-12. [SDK and Public Assets](#12-sdk-and-public-assets)
-13. [Key Design Decisions](#13-key-design-decisions)
-14. [Storage Key Reference](#14-storage-key-reference)
+12. [Analysis Flywheel](#12-analysis-flywheel)
+    - [Saved Pipelines](#saved-pipelines)
+    - [Pipeline Probe Tool](#pipeline-probe-tool)
+    - [Probe Webhook Alerts](#probe-webhook-alerts)
+    - [Vault Cluster Analysis](#vault-cluster-analysis)
+    - [Sandbox Fork](#sandbox-fork)
+    - [Prompt Auto-versioning](#prompt-auto-versioning)
+13. [SDK and Public Assets](#13-sdk-and-public-assets)
+14. [Key Design Decisions](#14-key-design-decisions)
+15. [Storage Key Reference](#15-storage-key-reference)
 
 ---
 
@@ -142,8 +149,12 @@ All other requests go to `router.handle(req, env)`.
 Route groups are mounted from individual route files using a simple spread into `router.on()`:
 
 ```typescript
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...])
-  router.on(method, path, handler)
+for (const [method, path, handler] of [
+  ...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes,
+  ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes,
+  ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes,
+  ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes,
+]) router.on(method, path, handler)
 ```
 
 ---
@@ -311,7 +322,7 @@ Server → Client: streaming token string
 
 `src/durable/AppBuilderDO.ts` — one instance per build UUID. Runs a phased, WebSocket-driven multi-file code generation pipeline. State stored under `'state'` as `BuildState`.
 
-See [Section 11](#11-app-builder-pipeline) for the full pipeline.
+See [Section 11](#11-app-builder-pipeline) for the App Builder pipeline.
 
 **WebSocket endpoint** (`GET /api/v2/build/:id/ws`) — client sends `{ type: 'start', description, name?, sandboxId?, model? }`, server streams back progress events through five phases. The Worker routes this directly before the HTTP router sees it.
 
@@ -360,7 +371,7 @@ rl:email:{buildId}         → number[] (email limiter, 5/60 s per app)
 
 ### D1 — `DB`
 
-Audit log and usage metrics. Two tables:
+Audit log, usage metrics, and analysis data. All tables:
 
 ```sql
 -- Append-only audit log
@@ -368,7 +379,32 @@ sandbox_events (id, sandbox_id, event_type, metadata JSON, created_at, request_i
 -- event_type: 'guard_flag' | 'response_flag' | 'sandbox_deleted' | 'vibe_created' | 'csp_violation'
 
 -- Per-inference usage rows (aggregated at query time)
-usage_metrics (id, sandbox_id, model, tokens_in, tokens_out, latency_ms, created_at)
+-- provider: 'workers-ai' | 'openai' | 'anthropic' | 'google' (migration 0009)
+-- call_type: 'complete' | 'embed' | 'image' | 'transcribe' (migration 0009)
+-- cost_usd: provider-reported cost in USD (migration 0009)
+usage_metrics (id, sandbox_id, model, provider, call_type, tokens_in, tokens_out, latency_ms, cost_usd, created_at)
+
+-- Cron health probes and run history (migrations 0004, 0008)
+-- sandbox_id: optional link to a monitored sandbox (migration 0008)
+-- webhook_url: HTTPS URL to POST when a threshold is breached (migration 0010)
+probes (id, name, prompt, tool, model, params JSON, schedule, threshold JSON, sandbox_id, webhook_url, created_at, updated_at)
+probe_runs (id, probe_id, result JSON, metric_value, metrics_json, created_at)
+
+-- Prompt/response dataset (migrations 0005, 0008)
+-- sandbox_id: optional link to the source sandbox (migration 0008)
+vault_records (id, prompt, response, model, temperature, system_prompt, tool, metadata JSON, tags JSON, sandbox_id, created_at)
+
+-- Assertion suites and test run history (migration 0006, 0008)
+-- sandbox_id: optional link to the target sandbox (migration 0008)
+assertion_suites (id, name, model, system_prompt, sandbox_id, created_at, updated_at)
+assertion_cases (id, suite_id, type, expected, options JSON, created_at)
+assertion_runs (id, suite_id, results JSON, passed, total, created_at)
+
+-- Prompt library with embeddings (migration 0007)
+atlas_prompts (id, text, tags JSON, embedding BLOB, cluster_label, pca_x, pca_y, created_at)
+
+-- Saved pipeline DAG definitions (migration 0010)
+pipelines (id, name, description, nodes JSON, entry_id, created_at, updated_at)
 ```
 
 `GET /api/sandbox/:id/metrics` aggregates `usage_metrics` rows at query time (no materialised view). CSP violations are written by `POST /api/csp-report` with no authentication required.
@@ -596,7 +632,115 @@ Falls back to a minimal `index.html` vanilla app on JSON parse failure.
 
 ---
 
-## 12. SDK and Public Assets
+## 12. Analysis Flywheel
+
+Six interconnected features turn the passive data stores into an active feedback loop. None require new Cloudflare bindings — they connect existing infrastructure.
+
+### Saved Pipelines
+
+`src/routes/pipelines.ts` — the existing stateless `executePipeline()` DAG executor in `src/lib/pipeline.ts` now has a D1 persistence layer. A pipeline definition stores the node graph (`PipelineNode[]`) and entry node ID so callers don't need to resend the full graph on every invocation.
+
+**Routes:**
+
+| Method | Path | Action |
+|--------|------|--------|
+| POST | `/api/pipelines` | Create pipeline (name, description, nodes, entryId) |
+| GET | `/api/pipelines` | List (limit/offset) |
+| GET | `/api/pipelines/:id` | Fetch definition |
+| PATCH | `/api/pipelines/:id` | Update name/description/nodes/entryId |
+| DELETE | `/api/pipelines/:id` | Delete |
+| POST | `/api/pipelines/:id/run` | Execute: `{ input }` → `{ output, trace }` |
+
+`POST /:id/run` resolves the definition from D1, deserialises `nodes`, and calls `executePipeline(env.AI, env, input, nodes, entry_id)`. Returns the standard `PipelineResult` shape (same as `POST /api/ai/pipeline`).
+
+### Pipeline Probe Tool
+
+Probes (`src/routes/probes.ts`) now accept `tool: 'pipeline'` as a fifth tool type alongside `entropy | sweep | sensitivity | cot`. A pipeline probe requires `params.pipelineId` — the UUID of a saved pipeline definition.
+
+When `runProbeTool()` encounters `tool === 'pipeline'`, it fetches the pipeline from D1, parses the nodes JSON, and calls `executePipeline()`. The result is treated identically to any other probe run (stored in `probe_runs`, compared against threshold).
+
+`extractMetrics()` in `src/lib/analysis.ts` handles the `'pipeline'` case by extracting `{ traceLength, totalLatencyMs, avgNodeLatencyMs }` from `PipelineResult.trace`.
+
+### Probe Webhook Alerts
+
+Probes accept an optional `webhookUrl` field (HTTPS prefix required, max 512 characters). When a probe run causes a threshold breach, a fire-and-forget POST is sent to the webhook URL:
+
+```json
+{
+  "probeId": "<uuid>",
+  "probeName": "<name>",
+  "metricValue": 0.82,
+  "metrics": { "traceLength": 3, "totalLatencyMs": 1200 },
+  "breachedAt": 1748390400000
+}
+```
+
+The dispatch uses `AbortSignal.timeout(5000)` — the probe result is returned regardless of webhook delivery. Implemented as a `void fetch(...).catch(() => {})` after the threshold check block in `runProbeById()`.
+
+**Constant:** `PROBE_WEBHOOK_TIMEOUT_MS = 5_000` in `src/lib/constants.ts`.
+
+### Vault Cluster Analysis
+
+`POST /api/vault/analyze` (in `src/routes/vault.ts`) clusters vault records by prompt embedding similarity.
+
+**Flow:**
+1. Fetch up to `limit` (10–500, default 200) vault records from D1, optionally filtered by `tool` and `since`.
+2. Batch-embed all prompts via `embed(env.AI, prompts, undefined, env)` → `Float32Array[]`.
+3. Run `kMeansClusters(embeddings, k)` (k: 2–20, default 5) → `{ labels, centroids }`.
+4. Group records by cluster label; find the centroid representative (highest avg cosine similarity to all cluster members).
+5. Return clusters sorted by descending size:
+
+```typescript
+{
+  clusters: Array<{
+    label: number
+    size: number
+    representative: string  // prompt text closest to centroid
+    tools: string[]         // distinct tool names in cluster
+    sampleIds: string[]     // first 3 vault record IDs
+  }>
+  totalAnalysed: number
+}
+```
+
+**Rate limit:** `rl:vault-analyze:{ip}` — 3 requests per 5 minutes (`VAULT_ANALYZE_RATE_LIMIT_MAX = 3`, `VAULT_ANALYZE_RATE_LIMIT_WINDOW = 300_000`). Embedding hundreds of records is expensive; the rate limit prevents abuse.
+
+**Route ordering** — `['POST', '/api/vault/analyze', analyze]` appears before `['POST', '/api/vault/:id/tags', updateTags]` in the route table so the `:id` wildcard does not capture the literal string `"analyze"`.
+
+### Sandbox Fork
+
+`POST /api/sandbox/:id/fork` (in `src/routes/sandbox.ts`) creates an independent copy of a sandbox.
+
+**Flow:**
+1. Fetch the source sandbox config via `doFetch(stub, 'config', 'GET')`.
+2. Assign a new UUID (`newId()`), append `" (copy)"` to the name.
+3. Create a new sandbox with empty memory and fresh `createdAt`/`updatedAt`.
+4. Register the new entry in `SANDBOX_REGISTRY` KV.
+5. Write a `sandbox_forked` event to D1 with `{ forkedFrom: sourceId }` metadata.
+6. Return the new sandbox config.
+
+The forked sandbox is entirely independent — changes to either sandbox do not affect the other.
+
+### Prompt Auto-versioning
+
+The `patchConfig` handler in `src/routes/sandbox.ts` detects when the `systemPrompt` field is being changed and automatically saves the **previous** system prompt to the vault before applying the patch:
+
+```typescript
+void saveToVault(env, {
+  prompt: previousSystemPrompt,
+  response: incomingSystemPrompt,
+  tool: 'system-prompt-version',
+  model: currentConfig.model,
+  sandboxId: id,
+  tags: ['system-prompt-version'],
+})
+```
+
+This is fire-and-forget — the PATCH response is not delayed. Query vault records with `?tool=system-prompt-version&sandbox_id=<id>` to retrieve the full version history. Export via `GET /api/vault/export.jsonl` with the same filters for fine-tuning use.
+
+---
+
+## 13. SDK and Public Assets
 
 `public/` is served as Cloudflare static assets via the `[assets]` binding in `wrangler.toml`.
 
@@ -646,7 +790,7 @@ Zero-dependency Markdown → safe HTML renderer. Escape-first design: all raw HT
 
 ---
 
-## 13. Key Design Decisions
+## 14. Key Design Decisions
 
 ### Why zero runtime dependencies?
 
@@ -678,7 +822,7 @@ The alternative is injecting the build ID as a JavaScript variable in a `<script
 
 ---
 
-## 14. Storage Key Reference
+## 15. Storage Key Reference
 
 ### R2 (`FILES`)
 

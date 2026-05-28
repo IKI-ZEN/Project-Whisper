@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Saved Pipelines — persist named DAG pipeline definitions to D1; full CRUD at `/api/pipelines`; execute via `POST /api/pipelines/:id/run` with `{ input }` → `{ output, trace }`
+- `POST /api/sandbox/:id/fork` — clone a sandbox config into a new independent sandbox (name appended with " (copy)", empty memory, fresh timestamps)
+- Prompt auto-versioning — patching `systemPrompt` on a sandbox automatically saves the previous value to the vault, tagged `system-prompt-version`, providing free version history
+- `POST /api/vault/analyze` — cluster vault records by prompt embedding similarity using k-means; returns cluster representatives, size, tools breakdown, and sample IDs; rate-limited 3 req / 5 min per IP
+- Pipeline probe tool — probes now accept `tool: 'pipeline'` (fifth tool type alongside `entropy`, `sweep`, `sensitivity`, `cot`) with `params.pipelineId` to schedule saved pipeline DAGs as cron health checks
+- Probe webhook alerts — probes now accept an optional `webhookUrl` (HTTPS, max 512 chars); a fire-and-forget POST is sent to the URL when a metric threshold is breached, with payload `{ probeId, probeName, metricValue, metrics, breachedAt }`
+
+### Changed
+
+- D1 migration 0008 (`0008_sandbox_analysis.sql`) — `sandbox_id` column added to `probes` and `assertion_suites` for per-sandbox filtering; `metrics_json` column added to `probe_runs` for rich structured metrics; `sandbox_id` column added to `vault_records`
+- D1 migration 0009 (`0009_usage_cost.sql`) — `provider`, `call_type`, and `cost_usd` columns added to `usage_metrics` for cost attribution per model and call type
+- D1 migration 0010 (`0010_pipelines_webhooks.sql`) — creates the `pipelines` table; adds `webhook_url` column to `probes`
+
 ## [0.2.1] — 2026-05-28
 
 ### Fixed

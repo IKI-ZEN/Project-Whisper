@@ -31,6 +31,7 @@ Request → src/index.ts
        ├─ /api/assertions/*     src/routes/assertions.ts
        ├─ /api/atlas/*          src/routes/atlas.ts
        ├─ /api/probes/*         src/routes/probes.ts
+       ├─ /api/pipelines/*      src/routes/pipelines.ts
        ├─ /api/monitor/*        src/routes/monitor.ts
        └─ /app/:id, /build/:id  src/routes/pages.ts
 ```

@@ -45,7 +45,7 @@ Generated apps can accept image uploads directly. Files are stored in R2 and ser
 
 Generated apps can send email through Cloudflare Email Routing — contact form submissions, notification alerts, summaries. Rate-limited automatically so apps can't be used as spam relays.
 
-You can create as many sandboxes and built apps as you like. Each one is independent — its own persona, its own instructions, its own data.
+You can create as many sandboxes and built apps as you like. Each one is independent — its own persona, its own instructions, its own data. Any sandbox can be forked into a copy with a single API call, making it easy to iterate on a configuration without losing the original.
 
 ---
 
@@ -304,6 +304,49 @@ const result = await client.ai.pipeline(userInput, nodes, 'entry-node-id')
 // result.output: final string, result.trace: per-node execution log
 ```
 
+### Saved pipelines
+
+Save a named pipeline definition to the platform and run it repeatedly without resending the full graph. Schedule it as a cron probe for automated health checks:
+
+```javascript
+// Save once
+const { data } = await client.ai.complete('POST /api/pipelines', { name: 'Triage', nodes, entryId })
+
+// Run by name
+const { data: run } = await client.ai.complete(`POST /api/pipelines/${id}/run`, { input: 'Classify this ticket' })
+console.log(run.output, run.trace)
+```
+
+### Vault cluster analysis
+
+After accumulating vault records from your tool runs, cluster them by semantic similarity to surface recurring patterns, failure modes, and topic drift:
+
+```
+POST /api/vault/analyze
+{ "k": 5, "limit": 200, "tool": "entropy" }
+→ clusters with representative prompt, size, and tool breakdown
+```
+
+Returns up to k clusters, each with the prompt most representative of its centroid, the count of records in the cluster, and the distinct tool names that generated those records. Rate-limited to prevent expensive embedding runs from overwhelming the system.
+
+### Probe webhook alerts
+
+Scheduled probes can now fire an outbound webhook when a metric threshold is breached. No polling required — set `webhookUrl` on any probe and receive a POST with the metric value, structured metrics, and breach timestamp in real time.
+
+### Sandbox fork
+
+Clone any sandbox into an independent copy with a single call:
+
+```
+POST /api/sandbox/:id/fork → new sandbox with same config, empty memory
+```
+
+The copy gets a new ID and `" (copy)"` appended to the name. Changes to either sandbox after the fork are independent.
+
+### Prompt auto-versioning
+
+Every time a sandbox's system prompt is patched, the previous value is silently saved to the vault tagged `system-prompt-version`. Query vault records with `?tool=system-prompt-version` to see the full change history for any sandbox — no explicit version management needed.
+
 ### Extended thinking
 
 Request an explicit reasoning trace before the final answer. Uses Anthropic's native extended thinking for `anthropic:*` models, and XML-structured chain-of-thought for others:
@@ -347,7 +390,7 @@ The platform uses these Cloudflare primitives:
 | AppStateDO | Persistent key-value store for generated apps (to-do lists, leaderboards, settings) |
 | Workers KV | Sandbox registry and sliding-window rate limits |
 | R2 | Documents, generated app files, images, and build thumbnails |
-| D1 (SQLite) | Audit log and usage metrics |
+| D1 (SQLite) | Audit log, usage metrics with cost tracking, probes, vault, assertions, atlas, pipelines |
 | Vectorize | 768-dimension vector index for document RAG |
 | Queues | Background document processing and embedding jobs |
 | Workers AI | On-network inference for `@cf/*` models |

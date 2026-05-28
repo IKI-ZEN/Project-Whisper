@@ -57,6 +57,9 @@ wrangler d1 execute whisper --file=./migrations/0004_probes.sql
 wrangler d1 execute whisper --file=./migrations/0005_vault.sql
 wrangler d1 execute whisper --file=./migrations/0006_assertions.sql
 wrangler d1 execute whisper --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --file=./migrations/0008_sandbox_analysis.sql
+wrangler d1 execute whisper --file=./migrations/0009_usage_cost.sql
+wrangler d1 execute whisper --file=./migrations/0010_pipelines_webhooks.sql
 ```
 
 After running the above, paste the returned `id` / `preview_id` values into the placeholder entries in `wrangler.toml`.
@@ -128,7 +131,7 @@ env.SANDBOX.get(env.SANDBOX.newUniqueId())
 
 ## 5. Adding a new route
 
-1. **Add the handler** in the relevant route file (`src/routes/ai.ts`, `sandbox.ts`, `build.ts`, `appstate.ts`, etc.). If it is a genuinely new area, create a new file under `src/routes/`.
+1. **Add the handler** in the relevant route file (`src/routes/ai.ts`, `sandbox.ts`, `build.ts`, `appstate.ts`, `pipelines.ts`, etc.). If it is a genuinely new area, create a new file under `src/routes/`.
 
 2. **Add a parser** in `src/lib/schema.ts` if the route accepts a JSON body. Follow the existing `parseFooRequest(raw: unknown): FooRequest` pattern.
 
@@ -178,6 +181,7 @@ Before opening a PR, confirm all of the following:
 - [ ] New Durable Object accesses use `idFromName()`, not generated IDs.
 - [ ] No npm packages added to `dependencies` in `package.json` (dev dependencies are fine).
 - [ ] `CLAUDE.md` updated if you changed routing patterns, added a new binding, or altered a behaviour described there.
+- [ ] New pipelines or probes with `webhookUrl` fields: ensure webhook URL is validated as `https://` prefix.
 
 ---
 

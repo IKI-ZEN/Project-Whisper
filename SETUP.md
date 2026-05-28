@@ -95,6 +95,9 @@ wrangler d1 execute whisper --remote --file=./migrations/0004_probes.sql
 wrangler d1 execute whisper --remote --file=./migrations/0005_vault.sql
 wrangler d1 execute whisper --remote --file=./migrations/0006_assertions.sql
 wrangler d1 execute whisper --remote --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --remote --file=./migrations/0008_sandbox_analysis.sql
+wrangler d1 execute whisper --remote --file=./migrations/0009_usage_cost.sql
+wrangler d1 execute whisper --remote --file=./migrations/0010_pipelines_webhooks.sql
 
 # Local dev database (for `npm run dev:local`)
 wrangler d1 execute whisper --local --file=./migrations/0001_init.sql
@@ -104,9 +107,12 @@ wrangler d1 execute whisper --local --file=./migrations/0004_probes.sql
 wrangler d1 execute whisper --local --file=./migrations/0005_vault.sql
 wrangler d1 execute whisper --local --file=./migrations/0006_assertions.sql
 wrangler d1 execute whisper --local --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --local --file=./migrations/0008_sandbox_analysis.sql
+wrangler d1 execute whisper --local --file=./migrations/0009_usage_cost.sql
+wrangler d1 execute whisper --local --file=./migrations/0010_pipelines_webhooks.sql
 ```
 
-Run all seven migrations in order. They are idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` with `IF NOT EXISTS` equivalents).
+Run all ten migrations in order. They are idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` with `IF NOT EXISTS` equivalents).
 
 ---
 
@@ -246,3 +252,6 @@ Check that `CLOUDFLARE_ACCOUNT_ID`, `AI_GATEWAY_ID`, and the relevant API key ar
 
 **Vectorize operations fail locally**
 Vectorize has no local simulator. RAG uploads and retrieval will not work in `dev:local` mode; they work normally after `npm run deploy`.
+
+**Probes with `pipeline` tool return "Pipeline not found"**
+You need to create a pipeline first via `POST /api/pipelines`, then use its `id` as `params.pipelineId` in the probe definition. The pipeline must exist before the probe is run.

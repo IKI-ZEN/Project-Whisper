@@ -29,9 +29,10 @@ Include as much detail as you can: steps to reproduce, affected endpoint or comp
 - Prompt injection bypass — evading the inbound guard pipeline (pattern matching, Unicode normalisation, base64 decode-and-rescan)
 - Path traversal via R2 keys (sandbox documents, build files, app images)
 - Authentication bypass of Cloudflare Access-protected mutation endpoints
-- Rate limit bypass (per-IP AI routes, per-sandbox run/stream, per-app email)
+- Rate limit bypass (per-IP AI routes, per-sandbox run/stream, per-app email, vault analyze)
 - HMAC signature forgery on exported sandbox configs
 - Durable Object storage corruption (SandboxDO, AppBuilderDO, AppStateDO)
+- Server-side request forgery via probe `webhookUrl` field — any `https://` URL is accepted and posted to on threshold breach
 
 **Out of scope:**
 
@@ -47,8 +48,9 @@ Project Whisper includes a layered security subsystem:
 - **Integrity hashing** — SHA-256 fingerprint over sandbox config fields; tamper detection on every `GET /api/sandbox/:id`
 - **HMAC-signed exports** — config export/import uses HMAC-SHA256 over a canonical field order; rejected if `SIGNING_SECRET` is set and the signature is absent or invalid
 - **Cloudflare Access Zero Trust** — all state-mutation endpoints require a valid Access JWT when `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` are configured
-- **Three-layer rate limiting** — per-IP on `/api/ai/*`, per-sandbox on run/stream, per-app on email sends
+- **Three-layer rate limiting** — per-IP on `/api/ai/*`, per-sandbox on run/stream, per-app on email sends; vault cluster analysis additionally limited to 3 requests per 5 minutes per IP
 - **CSP headers with per-request nonces** — `script-src 'nonce-{nonce}'` on all HTML pages; violation reports written to D1
 - **X-Request-ID traceability** — every response carries a UUID for correlating HTTP logs with D1 audit rows
+- **Webhook URL validation** — probe `webhookUrl` is validated as an `https://` URL (max 512 chars) at creation/update time; outbound webhook POSTs use a 5 s `AbortSignal.timeout` and are fire-and-forget
 
-For full implementation detail, see `CLAUDE.md` under the Security subsystem section.
+For full implementation detail, see `ARCHITECTURE.md` (Security Subsystem section).
