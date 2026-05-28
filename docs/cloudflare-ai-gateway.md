@@ -16,6 +16,8 @@
    - 5.3 [Logging](#53-logging)
    - 5.4 [Analytics](#54-analytics)
    - 5.5 [Dynamic Routing](#55-dynamic-routing)
+   - 5.6 [Unified Billing](#56-unified-billing)
+   - 5.7 [Zero Data Retention (ZDR)](#57-zero-data-retention-zdr)
 6. [Per-Request Headers Reference](#6-per-request-headers-reference)
 7. [Provider Reference](#7-provider-reference)
    - 7A. [Core Providers (13)](#7a-implemented-providers-23-total)
@@ -69,12 +71,30 @@ An OpenAI-compatible endpoint that routes to any supported provider using a `{pr
 https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/compat/chat/completions
 ```
 
-### REST API endpoint (Workers AI + proxied)
+### REST API endpoint
 
-Used for accessing Workers AI models (hosted and proxied) via the Cloudflare REST API, optionally routing through a specific gateway by supplying the `cf-aig-gateway-id` header:
+Access any model — Workers AI or third-party — through the Cloudflare REST API, authenticated with a Cloudflare API token (no provider SDK or provider key needed when using Unified Billing). Three endpoints are available:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/ai/v1/chat/completions` | OpenAI-compatible chat completions for all providers |
+| `/ai/v1/responses` | Agentic workflows (built-in tools, multi-turn server-side state) |
+| `/ai/run` | All modalities (text, image, audio, embedding) |
 
 ```
 https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions
+```
+
+Model field format: `{provider}/{model-id}` — e.g. `openai/gpt-4o`, `anthropic/claude-sonnet-4-6`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast`.
+
+To route through a specific gateway, supply the `cf-aig-gateway-id` header. Without it, AI Gateway uses a `default` gateway and **automatically creates it** on the first authenticated request (third-party providers only — Workers AI requests always require the header).
+
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/ai/v1/chat/completions" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --header "cf-aig-gateway-id: my-gateway" \
+  --header "Content-Type: application/json" \
+  --data '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ---
@@ -94,13 +114,38 @@ api-key: ...                        # Azure OpenAI
 
 ### Bring Your Own Key (BYOK)
 
-Store provider credentials in the Cloudflare dashboard (Settings → Credentials) and reference them without sending the raw key on every request. Once configured, send only:
+Store provider credentials in the Cloudflare dashboard (**Provider Keys** section) backed by Cloudflare Secrets Store, then reference them without sending the raw key on every request. Once configured, send only:
 
 ```http
 cf-aig-authorization: Bearer {CF_AIG_TOKEN}
 ```
 
 The gateway resolves the stored credential and injects it before forwarding to the provider. BYOK is required for providers that need complex credential formats (e.g. AWS SigV4, GCP service account JSON, Bedrock via the compat endpoint).
+
+#### Key aliases
+
+Multiple keys can be stored per provider. Each key has an **alias** (defaults to `default`). To select a non-default key, pass:
+
+```http
+cf-aig-byok-alias: production
+```
+
+If the header is absent, the key with alias `default` is used.
+
+### Unified Billing
+
+Authenticate and pay through your Cloudflare account — no provider API key required. Cloudflare bills a single invoice for all provider usage. A 5% fee applies to credits purchased; provider per-token rates are passed through at cost.
+
+Send a Cloudflare API token in the `Authorization` header; omit all provider auth headers:
+
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/ai/v1/chat/completions" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+See [Section 5.6](#56-unified-billing) for the full feature description.
 
 ### Authenticated gateway
 
@@ -383,6 +428,83 @@ Values can be any JSON-serialisable type. Keys are arbitrary strings. Metadata i
 
 ---
 
+### 5.6 Unified Billing
+
+Unified Billing lets you call any supported provider through AI Gateway billed to your Cloudflare account — no provider API key or BYOK configuration needed. Cloudflare handles credential management and issues a single invoice.
+
+**Pricing:** A 5% fee is applied to credits purchased through Unified Billing (e.g. $100 credit → $105 charge). Provider per-token rates are passed through at cost with no markup.
+
+**Workers AI note:** `@cf/` models routed through AI Gateway are billed under [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), not Unified Billing credits.
+
+#### Setup
+
+1. Load credits via the **AI Gateway** dashboard → **Credits Available** → **Manage** → **Top-up credits**.
+2. Optionally configure **auto top-up** to replenish credits when the balance falls below a threshold.
+3. Ensure the gateway is [authenticated](#authenticated-gateway).
+
+#### Usage — AI binding
+
+```typescript
+const resp = await env.AI.run(
+  'openai/gpt-4o',
+  { messages: [{ role: 'user', content: 'Hello' }] },
+  { gateway: { id: 'my-gateway' } },
+)
+```
+
+#### Usage — REST API
+
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/ai/v1/chat/completions" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+No provider auth header is needed — Cloudflare injects credentials at the edge.
+
+#### Spend limits
+
+Set daily, weekly, or monthly spend limits in the dashboard. When a limit is reached, the gateway stops processing Unified Billing requests until the period resets or the limit is raised.
+
+#### Supported providers (Unified Billing HTTP)
+
+OpenAI, Anthropic, Google AI Studio, Google Vertex AI, xAI, Groq.
+
+---
+
+### 5.7 Zero Data Retention (ZDR)
+
+Zero Data Retention routes Unified Billing traffic through provider endpoints that **do not retain prompts or responses** on the provider's infrastructure. Applies only to Unified Billing requests that use Cloudflare-managed credentials (not BYOK or per-request keys).
+
+**ZDR does not affect AI Gateway logging** — to suppress gateway logs, configure the logging setting separately (see [5.3 Logging](#53-logging)).
+
+**Supported providers:** OpenAI, Anthropic. Requests to unsupported providers fall back to standard Unified Billing.
+
+#### Enable gateway-wide
+
+Dashboard → **AI Gateway** → select gateway → **Settings** → toggle **Zero Data Retention (ZDR)**.
+
+Via API: include `zdr: true` in the gateway PUT request body.
+
+#### Per-request override
+
+```http
+cf-aig-zdr: true
+```
+
+Set to `true` to force ZDR or `false` to opt out for a specific request, regardless of the gateway default.
+
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/ai/v1/chat/completions" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --header "cf-aig-zdr: true" \
+  --header "Content-Type: application/json" \
+  --data '{"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+---
+
 ## 6. Per-Request Headers Reference
 
 All `cf-aig-*` headers are sent by the **caller** on the way into the gateway (Request direction) unless noted as Response.
@@ -390,14 +512,16 @@ All `cf-aig-*` headers are sent by the **caller** on the way into the gateway (R
 | Header | Direction | Values / Notes |
 |--------|-----------|----------------|
 | `cf-aig-authorization` | Request | `Bearer {token}` — authenticates the caller to the gateway and/or passes the BYOK token. Required for authenticated gateways. |
+| `cf-aig-byok-alias` | Request | Selects a specific stored provider key by alias. Defaults to the key with alias `default`. See [BYOK key aliases](#key-aliases). |
 | `cf-aig-cache-ttl` | Request | Seconds (60–2,592,000). Overrides the gateway default TTL for this request. |
 | `cf-aig-skip-cache` | Request | `true` / `false`. Set `true` to bypass the cache and always reach the provider. |
 | `cf-aig-cache-key` | Request | Any string. Overrides the default SHA-256 cache key. First request always hits provider; subsequent requests with same key are cached. Falls back to dashboard TTL or 5 min default. |
 | `cf-aig-collect-log` | Request | `true` / `false`. Overrides the gateway-level log collection setting for this request. |
 | `cf-aig-collect-log-payload` | Request | `true` / `false`. When `false`, omits the request/response bodies from the log record but preserves the metadata entry. No effect if `cf-aig-collect-log: false`. |
 | `cf-aig-metadata` | Request | JSON string of arbitrary key-value pairs. Used for observability enrichment and as input to Conditional routing nodes. |
+| `cf-aig-zdr` | Request | `true` / `false`. Per-request Zero Data Retention override for Unified Billing requests. Overrides the gateway-level ZDR setting. |
 | `cf-aig-cache-status` | Response | `HIT` — served from cache. `MISS` — forwarded to provider. |
-| `cf-aig-gateway-id` | Request | **Workers AI binding only.** Specifies which AI Gateway to route the binding call through. |
+| `cf-aig-gateway-id` | Request | Specifies which AI Gateway to route the request through. Required for Workers AI binding calls; optional for REST API (defaults to `default` gateway). |
 
 ### Renamed headers (old names still accepted)
 
