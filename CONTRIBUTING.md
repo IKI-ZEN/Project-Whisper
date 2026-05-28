@@ -48,9 +48,14 @@ wrangler r2 bucket create aether-lite-files
 wrangler queues create aether-lite-jobs
 wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
 
-# Apply D1 schema migrations
+# Apply D1 schema migrations (run all in order)
 wrangler d1 execute aether-lite --file=./migrations/0001_init.sql
 wrangler d1 execute aether-lite --file=./migrations/0002_request_id.sql
+wrangler d1 execute aether-lite --file=./migrations/0003_identity.sql
+wrangler d1 execute aether-lite --file=./migrations/0004_probes.sql
+wrangler d1 execute aether-lite --file=./migrations/0005_vault.sql
+wrangler d1 execute aether-lite --file=./migrations/0006_assertions.sql
+wrangler d1 execute aether-lite --file=./migrations/0007_atlas.sql
 ```
 
 After running the above, paste the returned `id` / `preview_id` values into the placeholder entries in `wrangler.toml`.
