@@ -1,0 +1,1760 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 IKI-ZEN -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Aether-Lite — Tools</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--green:#34d399;--red:#f87171;--radius:8px;--mono:"JetBrains Mono","Fira Code",ui-monospace,monospace}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
+.navlink:hover{color:var(--text)}
+.navlink.active{background:var(--accent);color:#fff}
+.layout{display:flex;flex:1;overflow:hidden}
+.tool-sidebar{width:160px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:8px 0}
+.sidebar-section{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:8px 14px 4px}
+.sidebar-section+.sidebar-section{margin-top:12px}
+.out-placeholder{color:var(--muted);font-size:12px;opacity:.5;font-style:italic;padding:2px 0}
+.tool-nav-btn{width:100%;text-align:left;padding:8px 14px;background:none;border:none;border-left:3px solid transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:color .1s,background .1s,border-color .1s;min-height:34px;font-family:inherit}
+.tool-nav-btn:hover{color:var(--text);background:var(--bg)}
+.tool-nav-btn.active{color:var(--accent2);background:#7c3aed18;border-left-color:var(--accent)}
+.tool-content{flex:1;overflow:hidden;position:relative}
+.tool-pane{display:none;flex-direction:column;gap:12px;padding:20px 20px 44px;overflow-y:auto;height:100%}
+.tool-pane.active{display:flex}
+@keyframes panelIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.tool-pane.active{animation:panelIn .18s ease-out both}
+label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+input,textarea,select{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+textarea{resize:vertical;min-height:72px}
+textarea.mono{font-family:var(--mono);font-size:12px}
+select option{background:var(--surface)}
+button{padding:8px 16px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;min-height:36px;transition:background .15s,opacity .15s}
+button:hover:not(:disabled){background:#6d28d9}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.outline{background:none;border:1px solid var(--border);color:var(--text)}
+button.outline:hover:not(:disabled){border-color:var(--accent2);color:var(--accent2);background:none}
+button.full{width:100%}
+.output{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-family:var(--mono);font-size:12px;line-height:1.6;overflow-y:auto;white-space:pre-wrap;word-break:break-word;min-height:120px}
+.output.img-out{display:flex;align-items:center;justify-content:center;min-height:200px}
+.output.img-out img{max-width:100%;max-height:400px;border-radius:var(--radius)}
+.field{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.row>*{flex:1}
+hr{border:none;border-top:1px solid var(--border)}
+.status{font-size:12px;padding:6px 10px;border-radius:var(--radius)}
+.status.ok{background:#052e1a;color:var(--green);animation:panelIn .2s ease-out both}
+.status.err{background:#2e0505;color:var(--red);animation:panelIn .2s ease-out both}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid #ffffff44;border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+@media(max-width:700px){.tool-sidebar{width:100%;max-height:44px;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:0 4px}.layout{flex-direction:column}.sidebar-section{display:none}.tool-nav-btn{border-left:none;border-bottom:3px solid transparent;white-space:nowrap;min-width:max-content;padding:8px 12px}.tool-nav-btn.active{border-left-color:transparent;border-bottom-color:var(--accent)}.tool-pane{padding:12px 12px 44px}[id$="-results"]{overflow-x:auto}}
+@media(max-width:480px){.tool-pane{padding:8px 8px 44px}.row{flex-direction:column;align-items:stretch}.row>*{min-width:0}}
+.hm-cell:hover{outline:2px solid var(--accent2);outline-offset:-2px;opacity:1!important;position:relative;z-index:1}
+#exp-log-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);z-index:100;font-size:11px}
+#exp-log-toggle{width:100%;padding:6px 16px;background:none;border:none;color:var(--muted);text-align:left;cursor:pointer;font-family:inherit;font-size:11px;display:flex;align-items:center;gap:6px}
+#exp-log-toggle:hover{color:var(--text)}
+#exp-log-panel{display:none;max-height:220px;overflow-y:auto;padding:4px 16px 8px}
+#exp-log-export{font-size:10px;padding:3px 9px;border-radius:99px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;margin-left:auto;font-family:inherit;flex-shrink:0}
+#exp-log-export:hover{border-color:var(--accent2);color:var(--accent2)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.hist-bar{display:flex;align-items:center;justify-content:flex-end;margin-top:6px;gap:8px}
+.hist-btn{font-size:10px;padding:3px 9px;border-radius:99px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:none;font-family:inherit;transition:all .15s}
+.hist-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.hist-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-top:6px;display:none}
+.hist-item{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid #ffffff08;cursor:pointer;transition:color .15s}
+.hist-item:last-child{border-bottom:none}
+.hist-item:hover{color:var(--accent2)}
+.hist-time{font-size:10px;color:var(--muted);flex-shrink:0;font-family:var(--mono)}
+.hist-summary{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.chain-link{font-size:11px;color:var(--muted);cursor:pointer;background:none;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;transition:all .15s;font-family:inherit}
+.chain-link:hover{border-color:var(--accent2);color:var(--accent2)}
+/* New Directions panels */
+.live-dot{display:inline-block;width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse 1.5s ease-in-out infinite;margin-right:6px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.assert-case{border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px}
+.assert-case.passed{border-color:#052e1a}
+.assert-case.failed{border-color:#2e0505}
+.assert-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;margin-right:4px;font-family:var(--mono)}
+.assert-tag.pass{background:#052e1a;color:var(--green)}
+.assert-tag.fail{background:#2e0505;color:var(--red)}
+.probe-chart{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-top:8px}
+#atlas-map{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:320px}
+#atlas-map svg circle{cursor:pointer;transition:r .15s,opacity .15s}
+#atlas-map svg circle:hover{opacity:1!important}
+</style>
+</head>
+<body>
+<nav class="topnav" role="navigation" aria-label="Main">
+  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="navlink">Chat</a>
+  <a href="/vibe.html" class="navlink">Vibe</a>
+  <a href="/apps" class="navlink">Apps</a>
+  <a href="/tools.html" class="navlink active" aria-current="page">Tools</a>
+  <a href="/dashboard" class="navlink">Dashboard</a>
+</nav>
+<div class="layout">
+  <nav class="tool-sidebar" aria-label="Tools navigation">
+    <span class="sidebar-section">Workbench</span>
+    <button class="tool-nav-btn active" data-tool="complete" onclick="switchTool('complete',this)">Complete</button>
+    <button class="tool-nav-btn" data-tool="stream" onclick="switchTool('stream',this)">Stream</button>
+    <button class="tool-nav-btn" data-tool="embed" onclick="switchTool('embed',this)">Embed</button>
+    <button class="tool-nav-btn" data-tool="image" onclick="switchTool('image',this)">Image Gen</button>
+    <button class="tool-nav-btn" data-tool="transcribe" onclick="switchTool('transcribe',this)">Transcribe</button>
+    <span class="sidebar-section">Whisperer</span>
+    <button class="tool-nav-btn" data-tool="compare" onclick="switchTool('compare',this)">Compare</button>
+    <button class="tool-nav-btn" data-tool="sweep" onclick="switchTool('sweep',this)">Sweep</button>
+    <button class="tool-nav-btn" data-tool="sensitivity" onclick="switchTool('sensitivity',this)">Sensitivity</button>
+    <button class="tool-nav-btn" data-tool="cluster" onclick="switchTool('cluster',this)">Cluster</button>
+    <button class="tool-nav-btn" data-tool="cot" onclick="switchTool('cot',this)">CoT Probe</button>
+    <button class="tool-nav-btn" data-tool="entropy" onclick="switchTool('entropy',this)">Entropy</button>
+    <button class="tool-nav-btn" data-tool="archaeology" onclick="switchTool('archaeology',this)">Archaeology</button>
+    <button class="tool-nav-btn" data-tool="pipeline" onclick="switchTool('pipeline',this)">Pipeline</button>
+    <button class="tool-nav-btn" data-tool="think" onclick="switchTool('think',this)">Think</button>
+    <span class="sidebar-section">New Directions</span>
+    <button class="tool-nav-btn" data-tool="monitor" onclick="switchTool('monitor',this)">Monitor</button>
+    <button class="tool-nav-btn" data-tool="vault" onclick="switchTool('vault',this)">Evidence Vault</button>
+    <button class="tool-nav-btn" data-tool="replay" onclick="switchTool('replay',this)">Replay</button>
+    <button class="tool-nav-btn" data-tool="assertions" onclick="switchTool('assertions',this)">Assertions</button>
+    <button class="tool-nav-btn" data-tool="atlas" onclick="switchTool('atlas',this)">Semantic Map</button>
+    <button class="tool-nav-btn" data-tool="probes" onclick="switchTool('probes',this)">Cron Probes</button>
+  </nav>
+  <datalist id="whisperer-models-list">
+    <option value="@cf/meta/llama-3.1-8b-instruct">Llama 3.1 8B</option>
+    <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Llama 3.3 70B</option>
+    <option value="openai:gpt-4o">GPT-4o</option>
+    <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
+    <option value="anthropic:claude-sonnet-4-6">Claude Sonnet</option>
+    <option value="anthropic:claude-opus-4-7">Claude Opus</option>
+    <option value="google:gemini-2.0-flash">Gemini Flash</option>
+  </datalist>
+  <div class="tool-content">
+
+    <!-- Complete -->
+    <div id="pane-complete" class="tool-pane active">
+      <div class="field"><label>Model</label><input id="bc-model" placeholder="@cf/meta/llama-3.1-8b-instruct"/></div>
+      <div class="field"><label>System Prompt</label><textarea id="bc-sys" rows="3" class="mono" placeholder="You are a helpful assistant."></textarea></div>
+      <div class="field"><label>Prompt</label><textarea id="bc-prompt" rows="4" class="mono" placeholder="What is the capital of France?"></textarea></div>
+      <div class="row">
+        <div class="field"><label>Temperature</label><input id="bc-temp" type="number" value="0.7" min="0" max="2" step="0.1"/></div>
+        <div class="field"><label>Max Tokens</label><input id="bc-tokens" type="number" value="512" min="1" max="8192"/></div>
+      </div>
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;opacity:.6;cursor:pointer;user-select:none;padding:4px 0">Advanced options</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+          <div class="row">
+            <div class="field"><label>Response format</label><select id="bc-format"><option value="">text (default)</option><option value="json">json</option></select></div>
+            <div class="field"><label>Reasoning effort <span style="font-size:9px;opacity:.5">(o-series)</span></label><select id="bc-reasoning"><option value="">none</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Thinking budget <span style="font-size:9px;opacity:.5">(Anthropic)</span></label><input id="bc-thinking" type="number" placeholder="tokens (0=off)" min="0" max="80000"/></div>
+            <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px;margin-top:18px"><input type="checkbox" id="bc-grounding" style="width:auto"/> Google Search grounding</label></div>
+          </div>
+          <div class="field"><label>Tools (JSON array)</label><textarea id="bc-tools" rows="3" class="mono" placeholder='[{"name":"get_weather","description":"…","parameters":{…}}]' style="font-size:11px;resize:vertical"></textarea><div id="bc-tools-err" style="display:none;color:var(--red);font-size:11px;margin-top:2px"></div></div>
+        </div>
+      </details>
+      <button class="full" id="btn-complete">Run</button>
+      <label>Response</label>
+      <div id="bc-out" class="output"><p class="out-placeholder">Response will appear here…</p></div>
+    </div>
+
+    <!-- Stream -->
+    <div id="pane-stream" class="tool-pane">
+      <div class="field"><label>Model</label><input id="bs-model" placeholder="@cf/meta/llama-3.1-8b-instruct"/></div>
+      <div class="field"><label>System Prompt</label><textarea id="bs-sys" rows="2" class="mono" placeholder="You are a helpful assistant."></textarea></div>
+      <div class="field"><label>Prompt</label><textarea id="bs-prompt" rows="4" class="mono" placeholder="Write a haiku about Cloudflare Workers."></textarea></div>
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;opacity:.6;cursor:pointer;user-select:none;padding:4px 0">Advanced options</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+          <div class="row">
+            <div class="field"><label>Temperature</label><input id="bs-temp" type="number" value="0.7" min="0" max="2" step="0.1"/></div>
+            <div class="field"><label>Max Tokens</label><input id="bs-tokens" type="number" value="512" min="1" max="8192"/></div>
+          </div>
+          <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px"><input type="checkbox" id="bs-grounding" style="width:auto"/> Google Search grounding</label></div>
+        </div>
+      </details>
+      <button class="full" id="btn-stream">Stream</button>
+      <label>Output (streamed)</label>
+      <div id="bs-out" class="output"><p class="out-placeholder">Tokens will stream here…</p></div>
+    </div>
+
+    <!-- Embed -->
+    <div id="pane-embed" class="tool-pane">
+      <div class="field"><label>Text (one per line)</label><textarea id="be-text" rows="5" class="mono" placeholder="Hello world&#10;Cloudflare Workers&#10;Embeddings rock"></textarea></div>
+      <button class="full" id="btn-embed">Generate Embeddings</button>
+      <label>Vectors</label>
+      <div id="be-out" class="output"><p class="out-placeholder">Embedding vectors will appear here…</p></div>
+    </div>
+
+    <!-- Image Gen -->
+    <div id="pane-image" class="tool-pane">
+      <div class="field"><label>Prompt</label><textarea id="bi-prompt" rows="3" class="mono" placeholder="A futuristic city floating in purple clouds, cinematic lighting"></textarea></div>
+      <div class="field"><label>Steps (1–20)</label><input id="bi-steps" type="number" value="4" min="1" max="20"/></div>
+      <button class="full" id="btn-image">Generate Image</button>
+      <div id="bi-out" class="output img-out">Image will appear here.</div>
+    </div>
+
+    <!-- Transcribe -->
+    <div id="pane-transcribe" class="tool-pane">
+      <div class="field"><label>Audio file (wav / mp3 / m4a)</label><input id="bt-file" type="file" accept="audio/*" style="padding:6px"/></div>
+      <button class="full" id="btn-transcribe">Transcribe</button>
+      <label>Transcript</label>
+      <div id="bt-out" class="output"><p class="out-placeholder">Transcript will appear here…</p></div>
+    </div>
+
+    <!-- Compare -->
+    <div id="pane-compare" class="tool-pane">
+      <h3 style="margin:0">Model Comparison</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Run the same prompt across multiple models in parallel.</p>
+      <div class="field"><label>Prompt</label><textarea id="wc-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wc-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div id="wc-model-checks" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temperature <input type="number" id="wc-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="wc-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-compare">Compare</button>
+      </div>
+      <div id="wc-results" style="display:flex;flex-wrap:wrap;gap:12px"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-compare" onclick="toggleHist('compare')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-compare"></div>
+    </div>
+
+    <!-- Sweep -->
+    <div id="pane-sweep" class="tool-pane">
+      <h3 style="margin:0">Temperature Sweep</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Map attractor basin behavior across a temperature gradient.</p>
+      <div class="field"><label>Prompt</label><textarea id="ws-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="ws-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="ws-model" list="whisperer-models-list" value="@cf/meta/llama-3.1-8b-instruct" style="width:240px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temperatures <input id="ws-temps" value="0,0.5,1.0,1.5,2.0" style="width:150px" title="Comma-separated 0-2"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples <input type="number" id="ws-samples" value="1" min="1" max="3" style="width:50px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="ws-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-sweep">Sweep</button>
+      </div>
+      <div id="ws-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-sweep" onclick="toggleHist('sweep')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-sweep"></div>
+    </div>
+
+    <!-- Sensitivity -->
+    <div id="pane-sensitivity" class="tool-pane">
+      <h3 style="margin:0">Prompt Sensitivity Analysis</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Generate paraphrases of your prompt and measure how much the model's response varies across them.</p>
+      <div class="field"><label>Prompt</label><textarea id="wsn-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wsn-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wsn-model" list="whisperer-models-list" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Variants <input type="number" id="wsn-variants" value="4" min="2" max="8" style="width:50px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wsn-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="wsn-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-sensitivity">Analyse</button>
+      </div>
+      <div id="wsn-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-sensitivity" onclick="toggleHist('sensitivity')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-sensitivity"></div>
+    </div>
+
+    <!-- Cluster -->
+    <div id="pane-cluster" class="tool-pane">
+      <h3 style="margin:0">Semantic Response Clustering</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Embed texts and group them by semantic similarity using k-means with cosine distance.</p>
+      <div class="field"><label>Texts (one per line)</label><textarea id="wcl-texts" rows="8" class="mono" placeholder="The sky is blue&#10;Clouds appear white&#10;Water boils at 100°C&#10;Ice melts at 0°C&#10;Fire burns hot&#10;Stars shine at night"></textarea></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">k (clusters) <input type="number" id="wcl-k" value="3" min="2" max="10" style="width:50px"/></label>
+        <button id="btn-cluster">Cluster</button>
+      </div>
+      <div id="wcl-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-cluster" onclick="toggleHist('cluster')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-cluster"></div>
+    </div>
+
+    <!-- CoT Probe -->
+    <div id="pane-cot" class="tool-pane">
+      <h3 style="margin:0">Chain-of-Thought Probing</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Run 4 reasoning styles in parallel: plain, step-by-step, XML-structured, and self-consistency.</p>
+      <div class="field"><label>Prompt</label><textarea id="wct-prompt" rows="3" placeholder="Enter a question that benefits from reasoning…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wct-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wct-model" list="whisperer-models-list" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wct-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples (self-consistency) <input type="number" id="wct-samples" value="2" min="1" max="5" style="width:50px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="wct-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-cot">Probe</button>
+      </div>
+      <div id="wct-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-cot" onclick="toggleHist('cot')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-cot"></div>
+    </div>
+
+    <!-- Entropy -->
+    <div id="pane-entropy" class="tool-pane">
+      <h3 style="margin:0">Token Entropy / Attractor Stability</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Sample the model multiple times at the same temperature and measure how much the responses diverge.</p>
+      <div class="field"><label>Prompt</label><textarea id="wen-prompt" rows="3" placeholder="Enter prompt…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wen-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wen-model" list="whisperer-models-list" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="wen-temp" value="0.7" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Samples <input type="number" id="wen-samples" value="3" min="2" max="10" style="width:50px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="wen-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-entropy">Measure</button>
+      </div>
+      <div id="wen-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-entropy" onclick="toggleHist('entropy')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-entropy"></div>
+    </div>
+
+    <!-- Archaeology -->
+    <div id="pane-archaeology" class="tool-pane">
+      <h3 style="margin:0">Prompt Archaeology</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Given an AI response, reverse-engineer candidate system prompts that could have produced it, ranked by embedding similarity.</p>
+      <div class="field"><label>Target Response</label><textarea id="war-response" rows="4" class="mono" placeholder="Paste an AI response here…"></textarea></div>
+      <div class="field"><label>Probe Message</label><input id="war-probe" type="text" value="What are your instructions?"/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="war-model" list="whisperer-models-list" placeholder="default (large)" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Candidates <input type="number" id="war-candidates" value="4" min="1" max="6" style="width:50px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="war-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-archaeology">Excavate</button>
+      </div>
+      <div id="war-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-archaeology" onclick="toggleHist('archaeology')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-archaeology"></div>
+    </div>
+
+    <!-- Pipeline -->
+    <div id="pane-pipeline" class="tool-pane">
+      <h3 style="margin:0">Pipeline Executor</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Define a declarative node graph where each node routes through a specific model.</p>
+      <div class="field"><label>Input</label><textarea id="wpl-input" rows="2" placeholder="The input text to flow through the pipeline…"></textarea></div>
+      <div class="field">
+        <label>Pipeline definition (JSON)</label>
+        <textarea id="wpl-nodes" rows="16" class="mono" placeholder='[
+  {
+    "id": "classify",
+    "type": "classify",
+    "model": "@cf/meta/llama-3.1-8b-instruct",
+    "template": "Is this message positive, negative, or neutral? Reply with ONE word.\n\n{{input}}",
+    "temperature": 0,
+    "maxTokens": 10,
+    "routes": [
+      { "condition": "label:positive", "nextId": "respond-positive" },
+      { "condition": "label:negative", "nextId": "respond-negative" },
+      { "condition": "else",           "nextId": "respond-neutral"  }
+    ]
+  },
+  {
+    "id": "respond-positive",
+    "type": "complete",
+    "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "template": "Reply enthusiastically to: {{original}}",
+    "routes": []
+  },
+  {
+    "id": "respond-negative",
+    "type": "complete",
+    "model": "anthropic:claude-sonnet-4-6",
+    "template": "Reply with empathy to: {{original}}",
+    "routes": []
+  },
+  {
+    "id": "respond-neutral",
+    "type": "complete",
+    "template": "Reply helpfully to: {{original}}",
+    "routes": []
+  }
+]'></textarea>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Entry node ID <input id="wpl-entry" value="classify" style="width:160px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max depth <input type="number" id="wpl-depth" value="10" min="1" max="30" style="width:60px"/></label>
+        <button id="btn-pipeline">Run Pipeline</button>
+      </div>
+      <div id="wpl-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-pipeline" onclick="toggleHist('pipeline')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-pipeline"></div>
+    </div>
+
+    <!-- Think -->
+    <div id="pane-think" class="tool-pane">
+      <h3 style="margin:0">Extended Thinking</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Generate an explicit reasoning trace before the final answer. Uses Anthropic extended thinking for <code>anthropic:*</code> models; falls back to XML-prompted reasoning for all others.</p>
+      <div class="field"><label>Prompt</label><textarea id="wth-prompt" rows="4" placeholder="Ask something that benefits from deliberate reasoning…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="wth-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="wth-model" list="whisperer-models-list" value="anthropic:claude-sonnet-4-6" style="width:240px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Thinking budget (tokens) <input type="number" id="wth-budget" value="8000" min="1024" max="80000" style="width:80px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max tokens <input type="number" id="wth-tokens" value="2048" min="256" max="16000" style="width:80px"/></label>
+        <button id="btn-think">Think</button>
+      </div>
+      <div id="wth-results"></div>
+      <div class="hist-bar"><button class="hist-btn" id="hist-btn-think" onclick="toggleHist('think')">↩ History</button></div>
+      <div class="hist-panel" id="hist-panel-think"></div>
+    </div>
+
+    <!-- Threat Monitor -->
+    <div id="pane-monitor" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Threat Monitor <span id="mon-status" style="font-size:11px;color:var(--muted)">idle</span></h2>
+      <div class="row">
+        <div class="field"><label>Sandbox ID (optional filter)</label><input id="mon-sandbox" placeholder="All sandboxes"/></div>
+        <div class="field"><label>Since (minutes ago)</label><input type="number" id="mon-since" value="60" min="1" max="10080" style="width:80px"/></div>
+      </div>
+      <div class="row">
+        <button id="btn-mon-stream" onclick="runMonitorStream()"><span class="live-dot"></span>Start Live Feed</button>
+        <button id="btn-mon-stop" class="outline" onclick="stopMonitorStream()" disabled>Stop</button>
+        <button class="outline" onclick="loadMonitorPatterns()">Pattern Frequency</button>
+      </div>
+      <div id="mon-feed" class="output" style="min-height:200px;max-height:300px"><span class="out-placeholder">Start live feed to see guard events…</span></div>
+      <div id="mon-patterns"></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Audit Log</h3>
+      <div class="row">
+        <div class="field"><label>Event Type</label>
+          <select id="mon-type"><option value="">All</option><option value="guard_flag">guard_flag</option><option value="response_flag">response_flag</option><option value="csp_violation">csp_violation</option><option value="job_failed">job_failed</option></select>
+        </div>
+        <div class="field"><label>Sandbox ID</label><input id="mon-audit-sandbox" placeholder="optional"/></div>
+        <div class="field"><label>Limit</label><input type="number" id="mon-limit" value="50" min="1" max="200" style="width:72px"/></div>
+        <button onclick="loadAuditLog()" style="flex:0 0 auto">Load</button>
+      </div>
+      <div id="mon-audit" class="output" style="min-height:120px"></div>
+    </div>
+
+    <!-- Evidence Vault -->
+    <div id="pane-vault" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Evidence Vault</h2>
+      <p style="font-size:12px;color:var(--muted)">Save prompt/response pairs from any tool and export as JSONL for fine-tuning.</p>
+      <div class="row">
+        <div class="field"><label>Filter by tag</label><input id="vault-tag-filter" placeholder="tag name…"/></div>
+        <div class="field"><label>Filter by tool</label>
+          <select id="vault-tool-filter"><option value="">All tools</option><option value="compare">Compare</option><option value="sweep">Sweep</option><option value="sensitivity">Sensitivity</option><option value="entropy">Entropy</option><option value="cot">CoT</option><option value="archaeology">Archaeology</option><option value="think">Think</option></select>
+        </div>
+        <div class="field"><label>Search</label><input id="vault-q" placeholder="search prompts…"/></div>
+        <button onclick="loadVault()" style="flex:0 0 auto">Load</button>
+      </div>
+      <div class="row">
+        <button class="outline" onclick="exportVaultJSONL()">Export JSONL</button>
+        <span id="vault-count" style="font-size:11px;color:var(--muted);align-self:center"></span>
+      </div>
+      <div id="vault-list" class="output" style="min-height:200px"><span class="out-placeholder">Load vault to see saved records…</span></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Save a Record</h3>
+      <div class="field"><label>Prompt</label><textarea id="vault-save-prompt" rows="3" placeholder="Prompt text…"></textarea></div>
+      <div class="field"><label>Response</label><textarea id="vault-save-response" rows="3" placeholder="Model response…"></textarea></div>
+      <div class="row">
+        <div class="field"><label>Model</label><input id="vault-save-model" list="whisperer-models-list" placeholder="optional"/></div>
+        <div class="field"><label>Tool</label><input id="vault-save-tool" placeholder="e.g. entropy"/></div>
+        <div class="field"><label>Tags (comma-sep)</label><input id="vault-save-tags" placeholder="tag1,tag2"/></div>
+      </div>
+      <button onclick="saveToVault()">Save to Vault</button>
+      <div id="vault-save-status" style="font-size:11px;margin-top:8px"></div>
+    </div>
+
+    <!-- Replay Engine -->
+    <div id="pane-replay" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Replay Engine</h2>
+      <p style="font-size:12px;color:var(--muted)">Replay a conversation against a different model or system prompt. Measures per-turn similarity to identify model-induced vs prompt-induced behaviour.</p>
+      <div class="field"><label>Session Messages (JSON array of {role, content})</label><textarea id="rpl-messages" rows="8" class="mono" placeholder='[{"role":"user","content":"Hello"},{"role":"assistant","content":"Hi there!"},{"role":"user","content":"What is 2+2?"}]'></textarea></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Target Config</h3>
+      <div class="row">
+        <div class="field"><label>Model</label><input id="rpl-model" list="whisperer-models-list" placeholder="target model…"/></div>
+        <div class="field"><label>Temperature</label><input type="number" id="rpl-temp" value="0.7" min="0" max="2" step="0.1" style="width:70px"/></div>
+        <div class="field"><label>Max Tokens</label><input type="number" id="rpl-tokens" value="512" min="1" max="8192" style="width:80px"/></div>
+      </div>
+      <div class="field"><label>System Prompt (optional)</label><input id="rpl-sys" placeholder="Override system prompt…"/></div>
+      <button id="btn-replay" onclick="runReplay()">Replay Session</button>
+      <div id="rpl-results" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Model Assertions -->
+    <div id="pane-assertions" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Model Assertions</h2>
+      <p style="font-size:12px;color:var(--muted)">Define assertion suites to contract-test model behavior. Supports: contains, not-contains, matches, similarity-gte, judge, latency-lte, guard-clean.</p>
+      <div class="row">
+        <button onclick="loadAssertionSuites()" class="outline">Load Suites</button>
+        <button onclick="showAssertionCreator()" style="flex:0 0 auto">+ New Suite</button>
+      </div>
+      <div id="assertion-suites-list" style="margin-top:8px"></div>
+      <hr/>
+      <div id="assertion-creator" style="display:none">
+        <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">New Suite</h3>
+        <div class="field"><label>Name</label><input id="ast-name" placeholder="My assertion suite"/></div>
+        <div class="field"><label>Description</label><input id="ast-desc" placeholder="What does this suite test?"/></div>
+        <div class="field"><label>Test Cases (JSON)</label>
+          <textarea id="ast-cases" rows="12" class="mono" placeholder='[
+  {
+    "prompt": "What is the capital of France?",
+    "model": "@cf/meta/llama-3.1-8b-instruct",
+    "assertions": [
+      { "type": "contains", "value": "Paris" },
+      { "type": "latency-lte", "maxMs": 5000 },
+      { "type": "guard-clean" }
+    ]
+  }
+]'></textarea>
+        </div>
+        <div class="row">
+          <button onclick="createAssertionSuite()">Create Suite</button>
+          <button class="outline" onclick="document.getElementById('assertion-creator').style.display='none'">Cancel</button>
+        </div>
+        <div id="ast-create-status" style="font-size:11px;margin-top:8px"></div>
+      </div>
+      <div id="ast-run-results" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Semantic Map (Atlas) -->
+    <div id="pane-atlas" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Semantic Map</h2>
+      <p style="font-size:12px;color:var(--muted)">Build a prompt library and visualize it in 2D embedding space. Reveals which formulations are semantically equivalent.</p>
+      <div class="row">
+        <div class="field"><label>Prompt text</label><input id="atl-text" placeholder="Add a prompt to the library…"/></div>
+        <div class="field"><label>Label (optional)</label><input id="atl-label" placeholder="e.g. Greeting"/></div>
+        <div class="field"><label>Tags</label><input id="atl-tags" placeholder="tag1,tag2"/></div>
+        <button onclick="addAtlasPrompt()" style="flex:0 0 auto">Add</button>
+      </div>
+      <div id="atl-add-status" style="font-size:11px;margin-top:4px"></div>
+      <div class="row">
+        <div class="field"><label>k (clusters)</label><input type="number" id="atl-k" value="4" min="2" max="15" style="width:60px"/></div>
+        <button id="btn-atlas-embed" onclick="runAtlasEmbed()">Embed &amp; Map</button>
+        <button class="outline" onclick="loadAtlasLibrary()">Load Library</button>
+      </div>
+      <div id="atlas-map"><span class="out-placeholder" style="color:var(--muted);font-size:12px;opacity:.5;font-style:italic">Add prompts and click "Embed &amp; Map" to generate the scatter plot.</span></div>
+      <div id="atl-library" style="margin-top:8px"></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Find Nearest</h3>
+      <div class="row">
+        <div class="field"><label>Query prompt</label><input id="atl-query" placeholder="Enter a prompt to find similar ones…"/></div>
+        <div class="field"><label>N results</label><input type="number" id="atl-n" value="5" min="1" max="20" style="width:60px"/></div>
+        <button onclick="runAtlasNearest()" style="flex:0 0 auto">Find Nearest</button>
+      </div>
+      <div id="atl-nearest" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Cron Probes -->
+    <div id="pane-probes" class="tool-pane">
+      <h2 style="font-size:14px;font-weight:600;color:var(--text)">Cron Probes</h2>
+      <p style="font-size:12px;color:var(--muted)">Schedule whisperer tools to run automatically and track model behavior over time.</p>
+      <div class="row">
+        <button onclick="loadProbes()" class="outline">Load Probes</button>
+        <button onclick="showProbeCreator()" style="flex:0 0 auto">+ New Probe</button>
+      </div>
+      <div id="probe-list" style="margin-top:8px"></div>
+      <hr/>
+      <div id="probe-creator" style="display:none">
+        <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">New Probe</h3>
+        <div class="row">
+          <div class="field"><label>Name</label><input id="prb-name" placeholder="e.g. Daily entropy check"/></div>
+          <div class="field"><label>Schedule</label>
+            <select id="prb-schedule"><option value="hourly">Hourly</option><option value="daily" selected>Daily</option><option value="weekly">Weekly</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Prompt</label><textarea id="prb-prompt" rows="3" placeholder="The prompt to run on schedule…"></textarea></div>
+        <div class="row">
+          <div class="field"><label>Tool</label>
+            <select id="prb-tool"><option value="entropy">Entropy</option><option value="sensitivity">Sensitivity</option><option value="cot">CoT Probe</option><option value="sweep">Sweep</option></select>
+          </div>
+          <div class="field"><label>Model</label><input id="prb-model" list="whisperer-models-list" placeholder="default"/></div>
+        </div>
+        <div class="row">
+          <button onclick="createProbe()">Create Probe</button>
+          <button class="outline" onclick="document.getElementById('probe-creator').style.display='none'">Cancel</button>
+        </div>
+        <div id="prb-create-status" style="font-size:11px;margin-top:8px"></div>
+      </div>
+      <div id="prb-history" style="margin-top:12px"></div>
+    </div>
+
+  </div>
+</div>
+<script type="module">
+import { AetherLiteClient } from '/vibe-sdk.js'
+import { chart } from '/chart.js'
+const client = new AetherLiteClient()
+let lastCompareResults = null
+const lastResult = {}
+
+function makeExportBtn(key, filename) {
+  const btn = document.createElement('button')
+  btn.className = 'outline'
+  btn.style.cssText = 'margin-top:10px;font-size:11px;padding:4px 10px'
+  btn.textContent = 'Export JSON'
+  btn.onclick = () => {
+    const blob = new Blob([JSON.stringify(lastResult[key], null, 2)], { type: 'application/json' })
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${filename}-${Date.now()}.json` })
+    a.click(); URL.revokeObjectURL(a.href)
+  }
+  return btn
+}
+
+const TOOL_PANES = {
+  complete:'pane-complete', stream:'pane-stream', embed:'pane-embed',
+  image:'pane-image', transcribe:'pane-transcribe',
+  compare:'pane-compare', sweep:'pane-sweep', sensitivity:'pane-sensitivity',
+  cluster:'pane-cluster', cot:'pane-cot', entropy:'pane-entropy',
+  archaeology:'pane-archaeology', pipeline:'pane-pipeline', think:'pane-think',
+  monitor:'pane-monitor', vault:'pane-vault', replay:'pane-replay',
+  assertions:'pane-assertions', atlas:'pane-atlas', probes:'pane-probes',
+}
+
+function switchTool(name, btn) {
+  const paneId = TOOL_PANES[name]
+  document.querySelectorAll('.tool-pane').forEach(p => p.classList.toggle('active', p.id === paneId))
+  document.querySelectorAll('.tool-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === name))
+}
+
+function setLoading(btn, label = 'Loading…') {
+  if (!btn) return
+  btn._originalHTML = btn.innerHTML
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + label
+  btn.disabled = true
+  btn.setAttribute('aria-busy', 'true')
+}
+function clearLoading(btn, label) {
+  if (!btn) return
+  btn.innerHTML = label !== undefined ? label : (btn._originalHTML ?? btn.textContent)
+  btn.disabled = false
+  btn.removeAttribute('aria-busy')
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+// ── Workbench ─────────────────────────────────────────────────────────────────
+
+async function doComplete() {
+  const out = document.getElementById('bc-out')
+  const btn = document.getElementById('btn-complete')
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  const toolsRaw = document.getElementById('bc-tools').value.trim()
+  const toolsErr = document.getElementById('bc-tools-err')
+  let tools
+  if (toolsRaw) {
+    try { tools = JSON.parse(toolsRaw); toolsErr.style.display = 'none' }
+    catch (e) { toolsErr.textContent = 'Invalid JSON: ' + e.message; toolsErr.style.display = 'block'; clearLoading(btn, 'Run'); return }
+  }
+  const thinking = parseInt(document.getElementById('bc-thinking').value, 10) || undefined
+  const reasoning = document.getElementById('bc-reasoning').value || undefined
+  const format = document.getElementById('bc-format').value || undefined
+  const grounding = document.getElementById('bc-grounding').checked
+  try {
+    out.textContent = await client.ai.complete({
+      prompt: document.getElementById('bc-prompt').value,
+      systemPrompt: document.getElementById('bc-sys').value || undefined,
+      model: document.getElementById('bc-model').value || undefined,
+      temperature: parseFloat(document.getElementById('bc-temp').value),
+      maxTokens: parseInt(document.getElementById('bc-tokens').value),
+      tools, responseFormat: format, reasoningEffort: reasoning, thinking,
+      groundingEnabled: grounding || undefined,
+    })
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Run') }
+}
+
+async function doStream() {
+  const out = document.getElementById('bs-out')
+  const btn = document.getElementById('btn-stream')
+  setLoading(btn, 'Streaming…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  const grounding = document.getElementById('bs-grounding').checked
+  const bsTemp = parseFloat(document.getElementById('bs-temp').value)
+  const bsTok = parseInt(document.getElementById('bs-tokens').value)
+  try {
+    let first = true
+    for await (const token of client.ai.stream({
+      prompt: document.getElementById('bs-prompt').value,
+      systemPrompt: document.getElementById('bs-sys').value || undefined,
+      model: document.getElementById('bs-model').value || undefined,
+      temperature: isNaN(bsTemp) ? undefined : bsTemp,
+      maxTokens: isNaN(bsTok) ? undefined : bsTok,
+      groundingEnabled: grounding || undefined,
+    })) {
+      if (first) { out.textContent = ''; first = false }
+      out.textContent += token
+    }
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Stream') }
+}
+
+async function doEmbed() {
+  const out = document.getElementById('be-out')
+  const btn = document.getElementById('btn-embed')
+  setLoading(btn, 'Generating…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  const lines = document.getElementById('be-text').value.split('\n').filter(Boolean)
+  try {
+    const vecs = await client.ai.embed(lines)
+    out.textContent = vecs.map((v, i) =>
+      `[${i}] dim=${v.length}  [${v.slice(0,4).map(x => x.toFixed(4)).join(', ')} …]`
+    ).join('\n')
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Generate Embeddings') }
+}
+
+async function doImage() {
+  const out = document.getElementById('bi-out')
+  const btn = document.getElementById('btn-image')
+  setLoading(btn, 'Generating…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  try {
+    const b64 = await client.ai.image(
+      document.getElementById('bi-prompt').value,
+      { steps: parseInt(document.getElementById('bi-steps').value) },
+    )
+    const img = document.createElement('img')
+    img.src = `data:image/png;base64,${b64}`
+    out.innerHTML = ''
+    out.appendChild(img)
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Generate Image') }
+}
+
+async function doTranscribe() {
+  const fileInput = document.getElementById('bt-file')
+  const out = document.getElementById('bt-out')
+  if (!fileInput.files?.length) { out.textContent = 'Select an audio file first.'; return }
+  const btn = document.getElementById('btn-transcribe')
+  setLoading(btn, 'Transcribing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span>'
+  try {
+    out.textContent = await client.ai.transcribe(fileInput.files[0])
+  } catch (e) { out.textContent = String(e) }
+  finally { clearLoading(btn, 'Transcribe') }
+}
+
+// ── Whisperer ─────────────────────────────────────────────────────────────────
+
+const WHISPERER_MODELS = [
+  { id: '@cf/meta/llama-3.1-8b-instruct',           label: 'Llama 3.1 8B' },
+  { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'Llama 3.3 70B' },
+  { id: 'openai:gpt-4o',                            label: 'GPT-4o' },
+  { id: 'openai:gpt-4o-mini',                       label: 'GPT-4o Mini' },
+  { id: 'anthropic:claude-sonnet-4-6',              label: 'Claude Sonnet' },
+  { id: 'anthropic:claude-opus-4-7',                label: 'Claude Opus' },
+  { id: 'google:gemini-2.0-flash',                  label: 'Gemini Flash' },
+]
+
+;(function initCompareModels() {
+  const container = document.getElementById('wc-model-checks')
+  WHISPERER_MODELS.forEach((m, i) => {
+    const label = document.createElement('label')
+    label.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px;cursor:pointer;background:var(--surface);padding:4px 8px;border-radius:4px'
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'; cb.value = m.id; cb.id = `wc-m-${i}`
+    if (i < 2) cb.checked = true
+    label.appendChild(cb)
+    label.appendChild(document.createTextNode(m.label))
+    container.appendChild(label)
+  })
+})()
+
+async function runCompare() {
+  const prompt = document.getElementById('wc-prompt').value.trim()
+  if (!prompt) return
+  const models = WHISPERER_MODELS
+    .map((_, i) => document.getElementById(`wc-m-${i}`))
+    .filter(cb => cb && cb.checked)
+    .map(cb => cb.value)
+  if (models.length < 2) { alert('Select at least 2 models to compare.'); return }
+  const temperature = parseFloat(document.getElementById('wc-temp').value)
+  const maxTokens = parseInt(document.getElementById('wc-tokens').value, 10) || undefined
+  const systemPrompt = document.getElementById('wc-sys').value.trim() || undefined
+  const out = document.getElementById('wc-results')
+  const btn = document.getElementById('btn-compare')
+  setLoading(btn, 'Comparing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Comparing…'
+  try {
+    const { results } = await client.ai.compare(models, prompt, { temperature, systemPrompt, maxTokens })
+    lastCompareResults = results
+    lastResult['compare'] = results
+    const modelOpts = results.map(r => `<option value="${escHtml(r.model)}">${escHtml(r.model)}</option>`).join('')
+    out.innerHTML = results.map(r => `
+      <div style="flex:1;min-width:200px;max-width:360px;background:var(--surface);border-radius:6px;padding:10px;border:1px solid var(--border)">
+        <div style="font-size:11px;font-family:var(--mono);opacity:.7;margin-bottom:6px;word-break:break-all">${escHtml(r.model)}</div>
+        <div style="white-space:pre-wrap;font-size:13px">${r.error ? '<span style="color:#ef4444">'+escHtml(r.error)+'</span>' : escHtml(r.response ?? '')}</div>
+        <div style="font-size:10px;opacity:.5;margin-top:6px">${r.latencyMs}ms</div>
+      </div>`).join('') +
+      `<div style="width:100%;margin-top:4px"><button class="chain-link" onclick="feedToSensitivity()">→ Sensitivity analysis on this prompt</button></div>` +
+      `<div style="width:100%;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;opacity:.6;margin-bottom:8px">DIFF TWO RESPONSES</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="wc-diff-a" style="width:180px">${modelOpts}</select>
+          <span style="opacity:.5">vs</span>
+          <select id="wc-diff-b" style="width:180px">${modelOpts}</select>
+          <button class="outline" onclick="showCompareDiff()">Show Diff</button>
+        </div>
+        <div id="wc-diff-out" style="margin-top:10px;font-size:12px;line-height:1.7;white-space:pre-wrap;font-family:var(--mono)"></div>
+      </div>`
+    if (results.length >= 2) document.getElementById('wc-diff-b').selectedIndex = 1
+    pushToolHistory('compare', prompt.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('compare', 'compare'))
+  } catch (e) { out.innerHTML = escHtml(String(e)) }
+  finally { clearLoading(btn, 'Compare') }
+}
+
+async function runSweep() {
+  const prompt = document.getElementById('ws-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('ws-model').value.trim() || undefined
+  const systemPrompt = document.getElementById('ws-sys').value.trim() || undefined
+  const samples = parseInt(document.getElementById('ws-samples').value, 10)
+  const maxTokens = parseInt(document.getElementById('ws-tokens').value, 10) || undefined
+  const temperatures = document.getElementById('ws-temps').value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
+  if (!temperatures.length) { alert('Enter at least one temperature value.'); return }
+  const out = document.getElementById('ws-results')
+  const btn = document.getElementById('btn-sweep')
+  setLoading(btn, 'Sweeping…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sweeping…'
+  try {
+    const { results } = await client.ai.sweep(prompt, temperatures, { model, systemPrompt, samples, maxTokens })
+    lastResult['sweep'] = results
+    const avgLenData = results.map(r => ({ label: String(r.temperature), value: r.responses.reduce((s, t) => s + t.length, 0) / Math.max(r.responses.length, 1) }))
+    const latencyData = results.map(r => ({ label: String(r.temperature), value: r.latencyMs }))
+    const w = Math.max(200, Math.min(560, out.clientWidth || 560) / 2 - 6)
+    const chartsHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      <div>${chart(avgLenData, { type: 'line', width: w, height: 180, label: 'Avg Response Length vs Temp' })}</div>
+      <div>${chart(latencyData, { type: 'line', width: w, height: 180, label: 'Latency (ms) vs Temp' })}</div>
+    </div>`
+    const rows = results.map(r => `
+      <tr>
+        <td style="font-family:var(--mono);padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top">${r.temperature.toFixed(1)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border)">
+          ${r.responses.map((resp, i) => `<div style="white-space:pre-wrap;font-size:12px${i > 0 ? ';margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)' : ''}">${escHtml(resp)}</div>`).join('')}
+        </td>
+        <td style="font-size:10px;opacity:.5;padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top">${r.latencyMs}ms</td>
+      </tr>`).join('')
+    out.innerHTML = chartsHTML + `<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr>
+        <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Temp</th>
+        <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Response${samples > 1 ? 's' : ''}</th>
+        <th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.6;border-bottom:1px solid var(--border)">Latency</th>
+      </tr></thead><tbody>${rows}</tbody></table>`
+    pushToolHistory('sweep', prompt.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('sweep', 'sweep'))
+  } catch (e) { out.innerHTML = escHtml(String(e)) }
+  finally { clearLoading(btn, 'Sweep') }
+}
+
+async function runSensitivity() {
+  const prompt = document.getElementById('wsn-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('wsn-model').value.trim() || undefined
+  const sys = document.getElementById('wsn-sys').value.trim() || undefined
+  const variants = parseInt(document.getElementById('wsn-variants').value, 10)
+  const temp = parseFloat(document.getElementById('wsn-temp').value)
+  const maxTokens = parseInt(document.getElementById('wsn-tokens').value, 10) || undefined
+  const out = document.getElementById('wsn-results')
+  const btn = document.getElementById('btn-sensitivity')
+  setLoading(btn, 'Analysing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Analysing…'
+  try {
+    const data = await client.ai.sensitivity(prompt, { variants, model, systemPrompt: sys, temperature: temp, maxTokens })
+    lastResult['sensitivity'] = data
+    const simHTML = renderHeatmap(data.similarityMatrix, data.variants.map((v, i) => `V${i+1}`))
+    out.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
+      ${data.variants.map((v, i) => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px">
+          <div style="font-size:11px;opacity:.6;margin-bottom:4px">Variant ${i+1}</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--accent2);margin-bottom:6px;word-break:break-all">${escHtml(v.prompt)}</div>
+          <div style="font-size:13px;white-space:pre-wrap">${escHtml(v.response)}</div>
+        </div>`).join('')}
+      <div><div style="font-size:11px;opacity:.6;margin-bottom:6px">COSINE SIMILARITY MATRIX</div>${simHTML}</div>
+      <div style="font-size:11px;opacity:.5">${data.latencyMs}ms total</div>
+      <div><button class="chain-link" onclick="feedToEntropy()">→ Entropy analysis on this prompt</button></div>
+    </div>`
+    pushToolHistory('sensitivity', prompt.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('sensitivity', 'sensitivity'))
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Analyse') }
+}
+
+async function runCluster() {
+  const texts = document.getElementById('wcl-texts').value.split('\n').map(s => s.trim()).filter(Boolean)
+  if (texts.length < 2) { alert('Enter at least 2 texts (one per line).'); return }
+  const k = parseInt(document.getElementById('wcl-k').value, 10)
+  const out = document.getElementById('wcl-results')
+  const btn = document.getElementById('btn-cluster')
+  setLoading(btn, 'Clustering…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Clustering…'
+  try {
+    const data = await client.ai.cluster(texts, { k })
+    const cols = ['#7c3aed','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#6366f1','#ec4899']
+    const clusterHTML = data.clusters.map(c => `
+      <div style="background:var(--surface);border-left:3px solid ${cols[c.label % cols.length]};border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px">
+        <div style="font-size:11px;opacity:.6;margin-bottom:4px">Cluster ${c.label+1} — ${c.items.length} items</div>
+        ${c.items.map(t => `<div style="font-size:12px;padding:2px 0">${escHtml(t)}</div>`).join('')}
+      </div>`).join('')
+    const simHTML = renderHeatmap(data.similarityMatrix, texts.map((_, i) => String(i+1)))
+    out.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+      <div>${clusterHTML}</div>
+      <div><div style="font-size:11px;opacity:.6;margin-bottom:6px">SIMILARITY MATRIX</div>${simHTML}</div>
+      <div style="font-size:11px;opacity:.5">${data.latencyMs}ms</div>
+    </div>`
+    lastResult['cluster'] = data
+    pushToolHistory('cluster', texts[0]?.slice(0, 60) ?? '', out.innerHTML)
+    out.appendChild(makeExportBtn('cluster', 'cluster'))
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Cluster') }
+}
+
+async function runCoT() {
+  const prompt = document.getElementById('wct-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('wct-model').value.trim() || undefined
+  const sys = document.getElementById('wct-sys').value.trim() || undefined
+  const temp = parseFloat(document.getElementById('wct-temp').value)
+  const samples = parseInt(document.getElementById('wct-samples').value, 10)
+  const maxTokens = parseInt(document.getElementById('wct-tokens').value, 10) || undefined
+  const out = document.getElementById('wct-results')
+  const btn = document.getElementById('btn-cot')
+  setLoading(btn, 'Probing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Probing…'
+  try {
+    const { results } = await client.ai.cot(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens })
+    lastResult['cot'] = results
+    const styleLabel = { plain: 'Plain', 'step-by-step': 'Step-by-Step', 'xml-structured': 'XML-Structured', 'self-consistency': 'Self-Consistency' }
+    out.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px">' +
+      results.map(r => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:600;color:var(--accent2)">${escHtml(styleLabel[r.style] ?? r.style)}</span>
+            <span style="font-size:10px;opacity:.5">${r.latencyMs}ms</span>
+          </div>
+          <div style="font-size:13px;white-space:pre-wrap">${escHtml(r.response)}</div>
+        </div>`).join('') +
+      '<div style="margin-top:6px"><button class="chain-link" onclick="feedCotToCompare()">→ Compare models on this prompt</button></div>' +
+      '</div>'
+    pushToolHistory('cot', prompt.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('cot', 'cot'))
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Probe') }
+}
+
+async function runEntropy() {
+  const prompt = document.getElementById('wen-prompt').value.trim()
+  if (!prompt) return
+  const model = document.getElementById('wen-model').value.trim() || undefined
+  const sys = document.getElementById('wen-sys').value.trim() || undefined
+  const temp = parseFloat(document.getElementById('wen-temp').value)
+  const samples = parseInt(document.getElementById('wen-samples').value, 10)
+  const maxTokens = parseInt(document.getElementById('wen-tokens').value, 10) || undefined
+  const out = document.getElementById('wen-results')
+  const btn = document.getElementById('btn-entropy')
+  setLoading(btn, 'Sampling…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sampling…'
+  try {
+    const data = await client.ai.entropy(prompt, { model, systemPrompt: sys, temperature: temp, samples, maxTokens })
+    const stabPct = Math.round(data.avgCosineSimilarity * 100)
+    const stabColor = stabPct >= 90 ? 'var(--green)' : stabPct >= 70 ? '#f59e0b' : 'var(--red)'
+    out.innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--accent2)">${data.entropy.toFixed(3)}</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Shannon Entropy</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${stabColor}">${stabPct}%</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Cosine Stability</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono)">${data.samples.length}</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Samples</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono)">${data.latencyMs}ms</div>
+          <div style="font-size:10px;opacity:.6;margin-top:2px">Latency</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${data.samples.map((s, i) => `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px">
+            <div style="font-size:10px;opacity:.5;margin-bottom:3px">Sample ${i+1}</div>
+            <div style="font-size:12px;white-space:pre-wrap">${escHtml(s)}</div>
+          </div>`).join('')}
+      </div>`
+    lastResult['entropy'] = data
+    const entropyEl = out.querySelector('[style*="flex-direction:column;gap:6px"]') ? out : out
+    const chainDiv = document.createElement('div')
+    chainDiv.style.marginTop = '6px'
+    chainDiv.innerHTML = '<button class="chain-link" onclick="feedEntropyToSweep()">→ Temperature sweep on this prompt</button>'
+    out.appendChild(chainDiv)
+    pushToolHistory('entropy', prompt.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('entropy', 'entropy'))
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Measure') }
+}
+
+async function runArchaeology() {
+  const targetResponse = document.getElementById('war-response').value.trim()
+  if (!targetResponse) return
+  const probe = document.getElementById('war-probe').value.trim() || undefined
+  const model = document.getElementById('war-model').value.trim() || undefined
+  const candidates = parseInt(document.getElementById('war-candidates').value, 10)
+  const maxTokens = parseInt(document.getElementById('war-tokens').value, 10) || undefined
+  const out = document.getElementById('war-results')
+  const btn = document.getElementById('btn-archaeology')
+  setLoading(btn, 'Excavating…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Excavating…'
+  try {
+    const data = await client.ai.archaeology(targetResponse, { probe, model, candidates, maxTokens })
+    lastResult['archaeology'] = data
+    out.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px">' +
+      data.candidates.map((c, i) => {
+        const simPct = Math.round(c.similarity * 100)
+        const bar = `<div style="height:4px;background:#252530;border-radius:2px;margin-top:6px"><div style="height:100%;width:${simPct}%;background:var(--accent);border-radius:2px"></div></div>`
+        return `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:11px;font-weight:600;color:var(--accent2)">Candidate ${i+1}</span>
+              <span style="font-size:11px;font-family:var(--mono);opacity:.7">${simPct}% similarity</span>
+            </div>
+            <div style="font-size:13px;white-space:pre-wrap;font-family:var(--mono)">${escHtml(c.candidate)}</div>
+            ${bar}
+          </div>`
+      }).join('') +
+      '<div style="margin-top:8px"><button class="chain-link" onclick="feedArchaeologyToThink()">→ Think about this response</button></div>' +
+      '</div>'
+    pushToolHistory('archaeology', targetResponse.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('archaeology', 'archaeology'))
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Excavate') }
+}
+
+async function runPipeline() {
+  const input = document.getElementById('wpl-input').value.trim()
+  const nodesRaw = document.getElementById('wpl-nodes').value.trim()
+  const entryId = document.getElementById('wpl-entry').value.trim()
+  const maxDepth = parseInt(document.getElementById('wpl-depth').value, 10)
+  if (!input || !nodesRaw || !entryId) return
+  let nodes
+  try { nodes = JSON.parse(nodesRaw) } catch (e) { alert('Invalid JSON in pipeline definition: ' + e); return }
+  const out = document.getElementById('wpl-results')
+  const btn = document.getElementById('btn-pipeline')
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running pipeline…'
+  try {
+    const data = await client.ai.pipeline(input, nodes, entryId, { maxDepth })
+    const traceHTML = data.trace.map((step, i) => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:10px;font-family:var(--mono);background:var(--accent);color:#fff;padding:2px 7px;border-radius:99px">step ${i+1}</span>
+          <span style="font-size:11px;font-family:var(--mono);color:var(--accent2)">${escHtml(step.nodeId)}</span>
+          <span style="font-size:10px;opacity:.5">${escHtml(step.type)}</span>
+          <span style="font-size:10px;opacity:.5;margin-left:auto">${step.latencyMs}ms</span>
+        </div>
+        ${step.conditionMet ? `<div style="font-size:10px;opacity:.6;margin-bottom:4px">routed via <code>${escHtml(step.conditionMet)}</code></div>` : ''}
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px">↳</div>
+        <div style="font-size:12px;white-space:pre-wrap;font-family:var(--mono)">${escHtml(step.output)}</div>
+      </div>`).join('')
+    out.innerHTML = `
+      <div style="background:#052e1a;border:1px solid #166534;border-radius:6px;padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;color:var(--green);margin-bottom:6px;font-weight:600">FINAL OUTPUT</div>
+        <div style="font-size:13px;white-space:pre-wrap">${escHtml(data.output)}</div>
+      </div>
+      <div style="font-size:11px;opacity:.6;margin-bottom:8px">EXECUTION TRACE (${data.trace.length} steps)</div>
+      ${traceHTML}`
+    lastResult['pipeline'] = data
+    pushToolHistory('pipeline', input.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('pipeline', 'pipeline'))
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Run Pipeline') }
+}
+
+async function runThink() {
+  const prompt = document.getElementById('wth-prompt').value.trim()
+  const sys = document.getElementById('wth-sys').value.trim()
+  const model = document.getElementById('wth-model').value.trim() || 'anthropic:claude-sonnet-4-6'
+  const budget = parseInt(document.getElementById('wth-budget').value, 10) || 8000
+  const maxTok = parseInt(document.getElementById('wth-tokens').value, 10) || 2048
+  if (!prompt) return
+  const out = document.getElementById('wth-results')
+  const btn = document.getElementById('btn-think')
+  setLoading(btn, 'Thinking…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Thinking…'
+  try {
+    const data = await client.ai.think(prompt, { model, systemPrompt: sys || undefined, budgetTokens: budget, maxTokens: maxTok })
+    out.innerHTML = `
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Thinking trace <span style="font-weight:normal;opacity:.6">(${data.latencyMs}ms)</span></div>
+        <pre style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:11px;font-family:var(--mono);white-space:pre-wrap;overflow:auto;max-height:320px;color:var(--muted)">${escHtml(data.thinking || '(no thinking trace — provider may not support extended thinking)')}</pre>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Response</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:13px;white-space:pre-wrap">${escHtml(data.response)}</div>
+      </div>
+      <div style="margin-top:6px"><button class="chain-link" onclick="feedThinkToSensitivity()">→ Sensitivity analysis on this prompt</button></div>`
+    lastResult['think'] = data
+    pushToolHistory('think', prompt.slice(0, 60), out.innerHTML)
+    out.appendChild(makeExportBtn('think', 'think'))
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Think') }
+}
+
+// ── Heatmap helper ────────────────────────────────────────────────────────────
+function renderHeatmap(matrix, labels) {
+  const n = matrix.length
+  const rows = matrix.map((row, i) =>
+    `<tr><td style="font-size:9px;padding:0 4px;opacity:.6;white-space:nowrap;font-family:var(--mono)">${escHtml(labels[i] ?? String(i))}</td>${row.map((v, j) => {
+      const pct = Math.round(v * 100)
+      const bg = `rgba(124,58,237,${(v * 0.8).toFixed(2)})`
+      return `<td class="hm-cell" title="${escHtml(String(labels[i] ?? i))} vs ${escHtml(String(labels[j] ?? j))}: ${pct}%" style="width:${Math.floor(300/n)}px;height:${Math.floor(300/n)}px;background:${bg};text-align:center;font-size:${n <= 6 ? 10 : 8}px;font-family:var(--mono);color:#fff;opacity:.9;border:1px solid var(--bg);cursor:default">${pct}</td>`
+    }).join('')}</tr>`
+  ).join('')
+  const headers = labels.map(l => `<th style="font-size:9px;padding:0 2px;opacity:.6;font-family:var(--mono);font-weight:normal">${escHtml(String(l).slice(0,6))}</th>`).join('')
+  return `<table style="border-collapse:collapse"><thead><tr><th></th>${headers}</tr></thead><tbody>${rows}</tbody></table>`
+}
+
+// Wire up buttons
+// ── Per-pane result history ───────────────────────────────────────────────────
+const HIST_SS_KEY = 'aether:tool-history'
+const HIST_RESULT_IDS = {
+  compare:'wc-results', sweep:'ws-results', sensitivity:'wsn-results', entropy:'wen-results',
+  cot:'wct-results', cluster:'wcl-results', archaeology:'war-results', pipeline:'wpl-results', think:'wth-results',
+}
+
+function pushToolHistory(toolName, inputSummary, html) {
+  let hist
+  try { hist = JSON.parse(localStorage.getItem(HIST_SS_KEY) || '{}') } catch { hist = {} }
+  if (!hist[toolName]) hist[toolName] = []
+  hist[toolName].unshift({ ts: Date.now(), summary: inputSummary, html })
+  if (hist[toolName].length > 10) hist[toolName] = hist[toolName].slice(0, 10)
+  localStorage.setItem(HIST_SS_KEY, JSON.stringify(hist))
+  const btn = document.getElementById('hist-btn-' + toolName)
+  if (btn) { btn.style.display = 'inline-block'; btn.textContent = '↩ ' + hist[toolName].length }
+  const total = Object.values(hist).reduce((s, arr) => s + arr.length, 0)
+  const label = document.getElementById('exp-log-label')
+  if (label) label.textContent = `Experiment Log (${total})`
+}
+
+function toggleHist(toolName) {
+  const panel = document.getElementById('hist-panel-' + toolName)
+  if (!panel) return
+  const open = panel.style.display === 'none' || !panel.style.display
+  panel.style.display = open ? 'block' : 'none'
+  if (open) renderHist(toolName, panel)
+}
+
+function renderHist(toolName, panel) {
+  let hist
+  try { hist = JSON.parse(localStorage.getItem(HIST_SS_KEY) || '{}') } catch { hist = {} }
+  const entries = hist[toolName] || []
+  const resId = HIST_RESULT_IDS[toolName]
+  if (!entries.length) { panel.innerHTML = '<div class="hist-summary" style="padding:6px 0">No history yet</div>'; return }
+  panel.innerHTML = ''
+  entries.forEach(function(e) {
+    const item = document.createElement('div')
+    item.className = 'hist-item'
+    item.innerHTML = '<span class="hist-time">' + new Date(e.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + '</span><span class="hist-summary">' + escHtml(e.summary) + '</span>'
+    item.onclick = function() {
+      if (resId) document.getElementById(resId).innerHTML = e.html
+      panel.style.display = 'none'
+    }
+    panel.appendChild(item)
+  })
+}
+
+// ── Experiment Log ────────────────────────────────────────────────────────────
+function toggleExpLog() {
+  const panel = document.getElementById('exp-log-panel')
+  const open = panel.style.display === 'none' || !panel.style.display
+  panel.style.display = open ? 'block' : 'none'
+  if (open) renderExpLog(panel)
+}
+
+function renderExpLog(panel) {
+  let hist
+  try { hist = JSON.parse(localStorage.getItem(HIST_SS_KEY) || '{}') } catch { hist = {} }
+  const entries = Object.keys(HIST_RESULT_IDS).flatMap(tool =>
+    (hist[tool] || []).map(e => ({ ...e, tool }))
+  ).sort((a, b) => b.ts - a.ts)
+  if (!entries.length) { panel.innerHTML = '<div style="padding:8px 0;opacity:.5;font-size:11px">No experiments yet — run a tool to record your first result.</div>'; return }
+  panel.innerHTML = entries.map(e =>
+    `<div class="hist-item" onclick="restoreExpEntry('${escHtml(e.tool)}',${e.ts})">
+      <span class="hist-time">${new Date(e.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+      <span style="font-size:10px;color:var(--accent2);margin:0 6px;flex-shrink:0">${escHtml(e.tool)}</span>
+      <span class="hist-summary">${escHtml(e.summary)}</span>
+    </div>`
+  ).join('')
+}
+
+function restoreExpEntry(tool, ts) {
+  let hist
+  try { hist = JSON.parse(localStorage.getItem(HIST_SS_KEY) || '{}') } catch { hist = {} }
+  const entry = (hist[tool] || []).find(e => e.ts === ts)
+  if (!entry) return
+  const resId = HIST_RESULT_IDS[tool]
+  if (resId) document.getElementById(resId).innerHTML = entry.html
+  switchTool(tool, document.querySelector(`[data-tool="${tool}"]`))
+  document.getElementById('exp-log-panel').style.display = 'none'
+}
+
+function exportExpLog(e) {
+  e.stopPropagation()
+  let hist
+  try { hist = JSON.parse(localStorage.getItem(HIST_SS_KEY) || '{}') } catch { hist = {} }
+  const exportData = Object.keys(HIST_RESULT_IDS).flatMap(tool =>
+    (hist[tool] || []).map(({ ts, summary }) => ({ tool, ts, summary, date: new Date(ts).toISOString() }))
+  ).sort((a, b) => b.ts - a.ts)
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `aether-experiments-${Date.now()}.json` })
+  a.click(); URL.revokeObjectURL(a.href)
+}
+
+// ── Word diff (for Compare tool) ──────────────────────────────────────────────
+function wordDiff(a, b) {
+  const wa = a.split(/(\s+)/), wb = b.split(/(\s+)/)
+  const m = wa.length, n = wb.length
+  if (m * n > 2_000_000) return [{ type: 'eq', text: '(inputs too large to diff — select shorter responses)' }]
+  const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1))
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = wa[i] === wb[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1])
+  const out = []
+  let i = 0, j = 0
+  while (i < m || j < n) {
+    if (i < m && j < n && wa[i] === wb[j]) { out.push({ type: 'eq', text: wa[i] }); i++; j++ }
+    else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) { out.push({ type: 'ins', text: wb[j] }); j++ }
+    else { out.push({ type: 'del', text: wa[i] }); i++ }
+  }
+  return out
+}
+
+function renderDiff(tokens) {
+  return tokens.map(t => {
+    if (t.type === 'eq') return escHtml(t.text)
+    if (t.type === 'ins') return `<ins style="background:#052e1a;color:var(--green);text-decoration:none">${escHtml(t.text)}</ins>`
+    return `<del style="background:#2e0505;color:var(--red);text-decoration:none">${escHtml(t.text)}</del>`
+  }).join('')
+}
+
+function showCompareDiff() {
+  if (!lastCompareResults) return
+  const aModel = document.getElementById('wc-diff-a')?.value
+  const bModel = document.getElementById('wc-diff-b')?.value
+  const aRes = lastCompareResults.find(r => r.model === aModel)
+  const bRes = lastCompareResults.find(r => r.model === bModel)
+  const diffOut = document.getElementById('wc-diff-out')
+  if (!diffOut || !aRes || !bRes) return
+  if (aModel === bModel) { diffOut.innerHTML = '<span style="opacity:.5">Select two different models to compare.</span>'; return }
+  const tokens = wordDiff(aRes.response ?? '', bRes.response ?? '')
+  diffOut.innerHTML = renderDiff(tokens)
+}
+
+// ── Tool chaining ─────────────────────────────────────────────────────────────
+function feedToSensitivity() {
+  const prompt = document.getElementById('wc-prompt').value.trim()
+  if (!prompt) return
+  switchTool('sensitivity', document.querySelector('[data-tool="sensitivity"]'))
+  document.getElementById('wsn-prompt').value = prompt
+  document.getElementById('wsn-prompt').focus()
+}
+
+function feedToEntropy() {
+  const prompt = document.getElementById('wsn-prompt').value.trim()
+  if (!prompt) return
+  switchTool('entropy', document.querySelector('[data-tool="entropy"]'))
+  document.getElementById('wen-prompt').value = prompt
+  document.getElementById('wen-prompt').focus()
+}
+
+function feedEntropyToSweep() {
+  const prompt = document.getElementById('wen-prompt').value.trim()
+  if (!prompt) return
+  switchTool('sweep', document.querySelector('[data-tool="sweep"]'))
+  document.getElementById('ws-prompt').value = prompt
+  document.getElementById('ws-prompt').focus()
+}
+
+function feedCotToCompare() {
+  const prompt = document.getElementById('wct-prompt').value.trim()
+  if (!prompt) return
+  switchTool('compare', document.querySelector('[data-tool="compare"]'))
+  document.getElementById('wc-prompt').value = prompt
+  document.getElementById('wc-prompt').focus()
+}
+
+function feedThinkToSensitivity() {
+  const prompt = document.getElementById('wth-prompt').value.trim()
+  if (!prompt) return
+  switchTool('sensitivity', document.querySelector('[data-tool="sensitivity"]'))
+  document.getElementById('wsn-prompt').value = prompt
+  document.getElementById('wsn-prompt').focus()
+}
+
+function feedArchaeologyToThink() {
+  const response = document.getElementById('war-response').value.trim()
+  if (!response) return
+  switchTool('think', document.querySelector('[data-tool="think"]'))
+  document.getElementById('wth-prompt').value = `Analyse this AI response and explain what it reveals about the model's system prompt and behaviour:\n\n${response}`
+  document.getElementById('wth-prompt').focus()
+}
+
+document.getElementById('btn-complete').onclick = doComplete
+document.getElementById('btn-stream').onclick = doStream
+document.getElementById('btn-embed').onclick = doEmbed
+document.getElementById('btn-image').onclick = doImage
+document.getElementById('btn-transcribe').onclick = doTranscribe
+document.getElementById('btn-compare').onclick = runCompare
+document.getElementById('btn-sweep').onclick = runSweep
+document.getElementById('btn-sensitivity').onclick = runSensitivity
+document.getElementById('btn-cluster').onclick = runCluster
+document.getElementById('btn-cot').onclick = runCoT
+document.getElementById('btn-entropy').onclick = runEntropy
+document.getElementById('btn-archaeology').onclick = runArchaeology
+document.getElementById('btn-pipeline').onclick = runPipeline
+document.getElementById('btn-think').onclick = runThink
+
+// ── Monitor ───────────────────────────────────────────────────────────────────
+let monitorES = null
+function runMonitorStream() {
+  const sandboxId = document.getElementById('mon-sandbox').value.trim()
+  const since = Date.now() - parseInt(document.getElementById('mon-since').value, 10) * 60_000
+  const feed = document.getElementById('mon-feed')
+  const btn = document.getElementById('btn-mon-stream')
+  const stopBtn = document.getElementById('btn-mon-stop')
+  const status = document.getElementById('mon-status')
+  if (monitorES) { monitorES.close(); monitorES = null }
+  feed.innerHTML = ''
+  status.textContent = 'connecting…'; status.style.color = 'var(--accent2)'
+  btn.disabled = true; stopBtn.disabled = false
+  const params = new URLSearchParams({ since: String(since) })
+  if (sandboxId) params.set('sandbox_id', sandboxId)
+  const es = new EventSource(`/api/monitor/stream?${params}`)
+  monitorES = es
+  es.onmessage = e => {
+    try {
+      const data = JSON.parse(e.data)
+      if (data.type === 'end') {
+        status.textContent = `${feed.querySelectorAll('.mon-event').length} events`
+        status.style.color = 'var(--green)'
+        btn.disabled = false; es.close(); monitorES = null; stopBtn.disabled = true
+        return
+      }
+      const color = data.event_type === 'guard_flag' ? 'var(--red)' : data.event_type === 'response_flag' ? '#fb923c' : 'var(--muted)'
+      const meta = JSON.stringify(data.metadata).slice(0, 120)
+      feed.insertAdjacentHTML('beforeend',
+        `<div class="mon-event" style="border-left:3px solid ${color};padding:4px 8px;margin-bottom:4px;font-size:11px">
+          <span style="color:${color};font-weight:600">${escHtml(data.event_type)}</span>
+          <span style="color:var(--muted);margin-left:8px">${escHtml(data.sandbox_id ?? '')}</span>
+          <span style="color:var(--text);margin-left:8px">${escHtml(meta)}</span>
+        </div>`)
+      feed.scrollTop = feed.scrollHeight
+    } catch { /* skip malformed */ }
+  }
+  es.onerror = () => {
+    status.textContent = 'disconnected'; status.style.color = 'var(--red)'
+    btn.disabled = false; stopBtn.disabled = true; es.close(); monitorES = null
+  }
+}
+function stopMonitorStream() {
+  if (monitorES) { monitorES.close(); monitorES = null }
+  document.getElementById('btn-mon-stream').disabled = false
+  document.getElementById('btn-mon-stop').disabled = true
+  document.getElementById('mon-status').textContent = 'stopped'
+}
+async function loadMonitorPatterns() {
+  const out = document.getElementById('mon-patterns')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/monitor/patterns')
+    const { data } = await res.json()
+    if (!data.patterns.length) { out.innerHTML = '<span class="out-placeholder">No guard events in the last 7 days.</span>'; return }
+    const chartData = data.patterns.map(p => ({ label: p.pattern, value: p.count }))
+    out.innerHTML = `<div class="probe-chart">${chart(chartData, { type:'bar', width:Math.min(560, out.clientWidth||560), height:180, label:'Guard Pattern Frequency (7 days)' })}</div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function loadAuditLog() {
+  const out = document.getElementById('mon-audit')
+  const eventType = document.getElementById('mon-type').value
+  const sandboxId = document.getElementById('mon-audit-sandbox').value.trim()
+  const limit = document.getElementById('mon-limit').value
+  const params = new URLSearchParams({ limit })
+  if (eventType) params.set('event_type', eventType)
+  if (sandboxId) params.set('sandbox_id', sandboxId)
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch(`/api/monitor/audit?${params}`)
+    const { data } = await res.json()
+    if (!data.events.length) { out.innerHTML = '<span class="out-placeholder">No events found.</span>'; return }
+    out.innerHTML = data.events.map(ev =>
+      `<div style="border-bottom:1px solid var(--border);padding:6px 0;font-size:11px">
+        <span style="color:var(--accent2);font-family:var(--mono)">${escHtml(ev.event_type)}</span>
+        <span style="color:var(--muted);margin-left:8px">${escHtml(ev.sandbox_id)}</span>
+        <span style="color:var(--muted);margin-left:8px">${new Date(ev.created_at).toLocaleString()}</span>
+        <pre style="margin-top:4px;font-size:10px;white-space:pre-wrap;word-break:break-all">${escHtml(JSON.stringify(ev.metadata, null, 2))}</pre>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+
+// ── Evidence Vault ────────────────────────────────────────────────────────────
+async function loadVault() {
+  const out = document.getElementById('vault-list')
+  const tag  = document.getElementById('vault-tag-filter').value.trim()
+  const tool = document.getElementById('vault-tool-filter').value
+  const q    = document.getElementById('vault-q').value.trim()
+  const params = new URLSearchParams({ limit: '100' })
+  if (tag)  params.set('tag', tag)
+  if (tool) params.set('tool', tool)
+  if (q)    params.set('q', q)
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch(`/api/vault?${params}`)
+    const { data } = await res.json()
+    document.getElementById('vault-count').textContent = `${data.total} records`
+    if (!data.records.length) { out.innerHTML = '<span class="out-placeholder">No records found.</span>'; return }
+    out.innerHTML = data.records.map(r =>
+      `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px">
+        <div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.prompt)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap">
+          <span>${escHtml(r.model||'—')}</span><span>${escHtml(r.tool||'—')}</span>
+          <span>${new Date(r.created_at).toLocaleDateString()}</span>
+          ${(r.tags||[]).map(t=>`<span style="background:var(--surface);padding:1px 5px;border-radius:99px">${escHtml(t)}</span>`).join('')}
+        </div>
+        <button class="outline" style="font-size:10px;padding:2px 8px;margin-top:6px" onclick="deleteVaultRecord('${r.id}',this)">Delete</button>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteVaultRecord(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/vault/${id}`, { method:'DELETE' }); btn.closest('div').remove() }
+  catch { btn.disabled = false }
+}
+async function saveToVault() {
+  const status = document.getElementById('vault-save-status')
+  const prompt = document.getElementById('vault-save-prompt').value.trim()
+  if (!prompt) { status.textContent = '⚠ Prompt is required'; status.style.color = 'var(--red)'; return }
+  const tags = document.getElementById('vault-save-tags').value.split(',').map(t=>t.trim()).filter(Boolean)
+  status.textContent = 'Saving…'
+  try {
+    const res = await fetch('/api/vault', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt, response: document.getElementById('vault-save-response').value.trim(),
+        model: document.getElementById('vault-save-model').value.trim(),
+        tool:  document.getElementById('vault-save-tool').value.trim(), tags })
+    })
+    const { ok: isOk, data } = await res.json()
+    if (!isOk) throw new Error(JSON.stringify(data))
+    status.textContent = `✓ Saved (id: ${data.id})`; status.style.color = 'var(--green)'
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+function exportVaultJSONL() {
+  const tag  = document.getElementById('vault-tag-filter').value.trim()
+  const tool = document.getElementById('vault-tool-filter').value
+  const q    = document.getElementById('vault-q').value.trim()
+  const params = new URLSearchParams()
+  if (tag)  params.set('tag', tag)
+  if (tool) params.set('tool', tool)
+  if (q)    params.set('q', q)
+  const a = Object.assign(document.createElement('a'), { href:`/api/vault/export.jsonl?${params}`, download:`vault-${Date.now()}.jsonl` })
+  a.click()
+}
+
+// ── Replay Engine ─────────────────────────────────────────────────────────────
+async function runReplay() {
+  const btn = document.getElementById('btn-replay')
+  const out = document.getElementById('rpl-results')
+  const rawMessages = document.getElementById('rpl-messages').value.trim()
+  if (!rawMessages) return
+  let messages
+  try { messages = JSON.parse(rawMessages) } catch { out.innerHTML = '<span style="color:var(--red)">Invalid JSON in messages field.</span>'; return }
+  const targetConfig = {
+    model:        document.getElementById('rpl-model').value.trim() || undefined,
+    systemPrompt: document.getElementById('rpl-sys').value.trim()   || undefined,
+    temperature:  parseFloat(document.getElementById('rpl-temp').value) || 0.7,
+    maxTokens:    parseInt(document.getElementById('rpl-tokens').value, 10) || 512,
+  }
+  setLoading(btn, 'Replaying…')
+  out.innerHTML = ''
+  try {
+    const res = await fetch('/api/replay', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ messages, targetConfig })
+    })
+    const { data } = await res.json()
+    const result = data.result ?? data.results?.[0]
+    if (!result) throw new Error('No result returned')
+    lastResult['replay'] = data
+    out.innerHTML = result.turns.map((t, i) =>
+      `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Turn ${i+1} · ${t.latencyMs}ms${t.similarity != null ? ` <span style="color:${t.similarity>0.7?'var(--green)':'var(--red)'}">· sim ${(t.similarity*100).toFixed(1)}%</span>` : ''}</div>
+        <div style="font-size:12px;color:var(--accent2)">User: ${escHtml(t.userMessage)}</div>
+        ${t.originalResponse ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">Original: ${escHtml(t.originalResponse.slice(0,200))}</div>` : ''}
+        <div style="font-size:12px;margin-top:6px">Replayed: ${escHtml(t.replayedResponse.slice(0,200))}</div>
+      </div>`
+    ).join('')
+    out.appendChild(makeExportBtn('replay', 'replay'))
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+
+// ── Model Assertions ──────────────────────────────────────────────────────────
+function showAssertionCreator() { document.getElementById('assertion-creator').style.display = 'block' }
+async function loadAssertionSuites() {
+  const out = document.getElementById('assertion-suites-list')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/assertions')
+    const { data } = await res.json()
+    if (!data.suites?.length) { out.innerHTML = '<span class="out-placeholder">No suites yet.</span>'; return }
+    out.innerHTML = data.suites.map(s =>
+      `<div data-suite-item style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">${escHtml(s.name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${escHtml(s.description||'')} · ${s.case_count} cases</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button style="font-size:11px;padding:4px 10px" onclick="runAssertionSuite('${s.id}',this)">Run</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px" onclick="loadSuiteHistory('${s.id}')">History</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px;color:var(--red)" onclick="deleteAssertionSuite('${s.id}',this)">Delete</button>
+        </div>
+        <div id="suite-result-${s.id}" style="margin-top:8px"></div>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function createAssertionSuite() {
+  const status = document.getElementById('ast-create-status')
+  const name = document.getElementById('ast-name').value.trim()
+  const desc = document.getElementById('ast-desc').value.trim()
+  const casesRaw = document.getElementById('ast-cases').value.trim()
+  if (!name || !casesRaw) { status.textContent = '⚠ Name and cases are required'; status.style.color = 'var(--red)'; return }
+  let cases
+  try { cases = JSON.parse(casesRaw) } catch { status.textContent = '⚠ Invalid JSON in cases'; status.style.color = 'var(--red)'; return }
+  status.textContent = 'Creating…'
+  try {
+    const res = await fetch('/api/assertions', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, description: desc, cases })
+    })
+    const { ok: isOk, data } = await res.json()
+    if (!isOk) throw new Error(JSON.stringify(data))
+    status.textContent = `✓ Created suite ${data.id}`; status.style.color = 'var(--green)'
+    document.getElementById('assertion-creator').style.display = 'none'
+    loadAssertionSuites()
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+async function runAssertionSuite(id, btn) {
+  const out = document.getElementById(`suite-result-${id}`)
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="out-placeholder">Running…</span>'
+  try {
+    const res = await fetch(`/api/assertions/${id}/run`, { method:'POST' })
+    const { data } = await res.json()
+    const pct = Math.round((data.passRate ?? 0) * 100)
+    const color = pct >= 80 ? 'var(--green)' : pct >= 50 ? '#fb923c' : 'var(--red)'
+    out.innerHTML = `<div style="font-size:12px;font-weight:600;color:${color};margin-bottom:8px">${pct}% passed (${data.passed}/${data.total_cases})</div>` +
+      (data.results||[]).map(r =>
+        `<div class="assert-case ${r.passed?'passed':'failed'}">
+          <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.prompt.slice(0,100))}</div>
+          <div style="margin-top:6px">${r.assertions.map(a => `<span class="assert-tag ${a.passed?'pass':'fail'}">${escHtml(a.type)}</span>`).join('')}</div>
+        </div>`
+      ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+async function loadSuiteHistory(id) {
+  const out = document.getElementById(`suite-result-${id}`)
+  out.innerHTML = '<span class="out-placeholder">Loading history…</span>'
+  try {
+    const res = await fetch(`/api/assertions/${id}/history`)
+    const { data } = await res.json()
+    if (!data.runs?.length) { out.innerHTML = '<span class="out-placeholder">No runs yet.</span>'; return }
+    const chartData = data.runs.slice().reverse().map(r => ({ label: new Date(r.ran_at).toLocaleDateString(), value: (r.pass_rate ?? 0) * 100 }))
+    out.innerHTML = `<div class="probe-chart">${chart(chartData, { type:'line', width:Math.min(400, out.clientWidth||400), height:140, label:'Pass Rate % Over Time' })}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">${data.runs.length} runs · latest: ${Math.round((data.runs[0]?.pass_rate||0)*100)}%</div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteAssertionSuite(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/assertions/${id}`, { method:'DELETE' }); btn.closest('[data-suite-item]').remove() }
+  catch { btn.disabled = false }
+}
+
+// ── Semantic Map ──────────────────────────────────────────────────────────────
+const CLUSTER_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2','#16a34a','#9333ea']
+async function addAtlasPrompt() {
+  const status = document.getElementById('atl-add-status')
+  const text = document.getElementById('atl-text').value.trim()
+  if (!text) return
+  const tags = document.getElementById('atl-tags').value.split(',').map(t=>t.trim()).filter(Boolean)
+  status.textContent = 'Saving…'
+  try {
+    const res = await fetch('/api/atlas/library', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, label: document.getElementById('atl-label').value.trim(), tags })
+    })
+    const { ok: isOk } = await res.json()
+    if (!isOk) throw new Error('Save failed')
+    status.textContent = '✓ Added'; status.style.color = 'var(--green)'
+    document.getElementById('atl-text').value = ''
+    document.getElementById('atl-label').value = ''
+    document.getElementById('atl-tags').value = ''
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+async function loadAtlasLibrary() {
+  const out = document.getElementById('atl-library')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/atlas/library')
+    const { data } = await res.json()
+    if (!data.prompts?.length) { out.innerHTML = '<span class="out-placeholder">No prompts in library yet.</span>'; return }
+    out.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${data.prompts.length} prompts in library</div>` +
+      data.prompts.map(p =>
+        `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid #ffffff08">
+          <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.text)}</span>
+          <span style="font-size:10px;color:var(--muted)">${escHtml(p.label||'')}</span>
+          <button class="outline" style="font-size:10px;padding:2px 6px;flex-shrink:0" onclick="deleteAtlasPrompt('${p.id}',this)">✕</button>
+        </div>`
+      ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteAtlasPrompt(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/atlas/library/${id}`, { method:'DELETE' }); btn.closest('div').remove() }
+  catch { btn.disabled = false }
+}
+async function runAtlasEmbed() {
+  const btn = document.getElementById('btn-atlas-embed')
+  const mapDiv = document.getElementById('atlas-map')
+  const k = parseInt(document.getElementById('atl-k').value, 10) || 4
+  setLoading(btn, 'Embedding…')
+  mapDiv.innerHTML = '<span class="out-placeholder" style="font-size:12px;opacity:.5;font-style:italic">Computing embeddings and PCA projection…</span>'
+  try {
+    const res = await fetch('/api/atlas/embed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ k }) })
+    const { data } = await res.json()
+    if (!data.points?.length) { mapDiv.innerHTML = '<span class="out-placeholder" style="font-size:12px;opacity:.5;font-style:italic">No prompts to map. Add some prompts first.</span>'; clearLoading(btn); return }
+    const xs = data.points.map(p => p.x), ys = data.points.map(p => p.y)
+    const xMin = Math.min(...xs), xMax = Math.max(...xs)
+    const yMin = Math.min(...ys), yMax = Math.max(...ys)
+    const W = Math.min(560, mapDiv.clientWidth || 560) - 20, H = 300, pad = 28
+    const sx = v => pad + (xMax === xMin ? (W-2*pad)/2 : (v - xMin) / (xMax - xMin) * (W - 2*pad))
+    const sy = v => H - pad - (yMax === yMin ? (H-2*pad)/2 : (v - yMin) / (yMax - yMin) * (H - 2*pad))
+    const circles = data.points.map(p => {
+      const color = CLUSTER_COLORS[p.cluster % CLUSTER_COLORS.length]
+      return `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="7" fill="${color}" opacity="0.8"><title>${escHtml(p.label||p.text.slice(0,60))}\nCluster ${p.cluster}</title></circle>`
+    }).join('')
+    mapDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${circles}</svg>`
+    lastResult['atlas'] = data
+  } catch(e) { mapDiv.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+async function runAtlasNearest() {
+  const out = document.getElementById('atl-nearest')
+  const text = document.getElementById('atl-query').value.trim()
+  if (!text) return
+  const n = parseInt(document.getElementById('atl-n').value, 10) || 5
+  out.innerHTML = '<span class="out-placeholder">Finding…</span>'
+  try {
+    const res = await fetch('/api/atlas/nearest', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, n }) })
+    const { data } = await res.json()
+    if (!data.nearest?.length) { out.innerHTML = '<span class="out-placeholder">No results.</span>'; return }
+    out.innerHTML = data.nearest.map(r =>
+      `<div style="display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid #ffffff08">
+        <div style="flex:1;font-size:11px">${escHtml(r.text)}</div>
+        <span style="font-size:10px;color:var(--accent2);font-family:var(--mono);flex-shrink:0">${(r.similarity*100).toFixed(1)}%</span>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+
+// ── Cron Probes ───────────────────────────────────────────────────────────────
+function showProbeCreator() { document.getElementById('probe-creator').style.display = 'block' }
+async function loadProbes() {
+  const out = document.getElementById('probe-list')
+  out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  try {
+    const res = await fetch('/api/probes')
+    const { data } = await res.json()
+    if (!data.probes?.length) { out.innerHTML = '<span class="out-placeholder">No probes yet.</span>'; return }
+    out.innerHTML = data.probes.map(p =>
+      `<div data-probe-item style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <span style="font-size:13px;font-weight:600">${escHtml(p.name)}</span>
+          <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${escHtml(p.schedule)} · ${escHtml(p.tool)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.prompt.slice(0,80))}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px">${p.run_count||0} runs${p.last_run_at ? ' · last: '+new Date(p.last_run_at).toLocaleDateString() : ''}</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button style="font-size:11px;padding:4px 10px" onclick="runProbeNow('${p.id}',this)">▶ Run Now</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px" onclick="loadProbeHistory('${p.id}')">History</button>
+          <button class="outline" style="font-size:11px;padding:4px 10px;color:var(--red)" onclick="deleteProbe('${p.id}',this)">Delete</button>
+        </div>
+        <div id="probe-result-${p.id}" style="margin-top:8px"></div>
+      </div>`
+    ).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function createProbe() {
+  const status = document.getElementById('prb-create-status')
+  const name = document.getElementById('prb-name').value.trim()
+  const prompt = document.getElementById('prb-prompt').value.trim()
+  if (!name || !prompt) { status.textContent = '⚠ Name and prompt required'; status.style.color = 'var(--red)'; return }
+  status.textContent = 'Creating…'
+  try {
+    const res = await fetch('/api/probes', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, prompt, tool: document.getElementById('prb-tool').value,
+        schedule: document.getElementById('prb-schedule').value,
+        model: document.getElementById('prb-model').value.trim() || undefined })
+    })
+    const { ok: isOk, data } = await res.json()
+    if (!isOk) throw new Error(JSON.stringify(data))
+    status.textContent = '✓ Probe created'; status.style.color = 'var(--green)'
+    document.getElementById('probe-creator').style.display = 'none'
+    loadProbes()
+  } catch(e) { status.textContent = `Error: ${escHtml(String(e))}`; status.style.color = 'var(--red)' }
+}
+async function runProbeNow(id, btn) {
+  const out = document.getElementById(`probe-result-${id}`)
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="out-placeholder">Running probe…</span>'
+  try {
+    const res = await fetch(`/api/probes/${id}/run`, { method:'POST' })
+    const { data } = await res.json()
+    out.innerHTML = `<div style="font-size:11px;color:var(--green)">✓ Metric: <span style="font-family:var(--mono)">${String(data.metricValue ?? '—').slice(0, 12)}</span></div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+  clearLoading(btn)
+}
+async function loadProbeHistory(id) {
+  const out = document.getElementById(`probe-result-${id}`)
+  out.innerHTML = '<span class="out-placeholder">Loading history…</span>'
+  try {
+    const res = await fetch(`/api/probes/${id}/history`)
+    const { data } = await res.json()
+    if (!data.runs?.length) { out.innerHTML = '<span class="out-placeholder">No runs yet.</span>'; return }
+    const chartData = data.runs.slice().reverse().map(r => ({ label: new Date(r.run_at).toLocaleDateString(), value: r.metric_value ?? 0 }))
+    out.innerHTML = `<div class="probe-chart">${chart(chartData, { type:'line', width:Math.min(400, out.clientWidth||400), height:140, label:'Metric Over Time' })}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">${data.runs.length} runs</div>`
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function deleteProbe(id, btn) {
+  btn.disabled = true
+  try { await fetch(`/api/probes/${id}`, { method:'DELETE' }); btn.closest('[data-probe-item]').remove() }
+  catch { btn.disabled = false }
+}
+
+Object.assign(window, {
+  switchTool, toggleHist, toggleExpLog, exportExpLog, restoreExpEntry, showCompareDiff,
+  feedToSensitivity, feedToEntropy, feedEntropyToSweep, feedCotToCompare,
+  feedThinkToSensitivity, feedArchaeologyToThink,
+  runMonitorStream, stopMonitorStream, loadMonitorPatterns, loadAuditLog,
+  loadVault, deleteVaultRecord, saveToVault, exportVaultJSONL,
+  runReplay,
+  showAssertionCreator, loadAssertionSuites, createAssertionSuite, runAssertionSuite, loadSuiteHistory, deleteAssertionSuite,
+  addAtlasPrompt, loadAtlasLibrary, deleteAtlasPrompt, runAtlasEmbed, runAtlasNearest,
+  showProbeCreator, loadProbes, createProbe, runProbeNow, loadProbeHistory, deleteProbe,
+})
+</script>
+<div id="exp-log-bar">
+  <button id="exp-log-toggle" onclick="toggleExpLog()">
+    <span id="exp-log-label">Experiment Log</span>
+    <button id="exp-log-export" onclick="exportExpLog(event)">Export JSON</button>
+  </button>
+  <div id="exp-log-panel"></div>
+</div>
+</body>
+</html>

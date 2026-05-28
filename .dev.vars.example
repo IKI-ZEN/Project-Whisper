@@ -1,0 +1,41 @@
+# Copy this file to .dev.vars and fill in real values.
+# All variables except ENVIRONMENT are optional for local dev using Workers AI.
+
+ENVIRONMENT=development
+
+# Required to use OpenAI, Anthropic, or Google models via Cloudflare AI Gateway.
+# Without these, only @cf/... Workers AI models will work.
+CLOUDFLARE_ACCOUNT_ID=
+AI_GATEWAY_ID=
+
+# API keys for flagship models (only needed if AI_GATEWAY_ID is set)
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_AI_KEY=
+
+# Optional: sign exported configs with HMAC-SHA256 so imports can verify provenance.
+# Any string works — use `openssl rand -hex 32` to generate a strong secret.
+SIGNING_SECRET=
+
+# Optional: restrict CORS to specific origins (comma-separated). Defaults to '*'.
+# Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+ALLOWED_ORIGINS=
+
+# Optional: Cloudflare Access Zero Trust authentication.
+# When set, all state-mutation API endpoints (create/update/delete sandbox, build, upload)
+# require a valid Cf-Access-Jwt-Assertion header. Read-only and run/stream endpoints
+# remain public. Set up your Access application at dash.cloudflare.com → Access.
+CF_ACCESS_AUD=             # Application Audience (AUD) tag from the Access app settings
+CF_ACCESS_TEAM_DOMAIN=     # e.g. yourteam.cloudflareaccess.com
+
+# Optional: Cloudflare Pages deployment.
+# Requires a token with Pages:Edit permission. Generate at dash.cloudflare.com → My Profile → API Tokens.
+# CLOUDFLARE_ACCOUNT_ID is already used for AI Gateway — set it once for both.
+CLOUDFLARE_API_TOKEN=      # Bearer token for Pages Direct Upload API
+
+# Optional: Email sending via Cloudflare Email Routing.
+# Requires Email Routing to be configured on your domain at dash.cloudflare.com → Email → Email Routing.
+# Create the [[send_email]] binding in wrangler.toml with your verified from-address.
+# SEND_EMAIL binding is automatically available when configured in wrangler.toml.
+EMAIL_FROM_ADDRESS=        # Must match a verified sender address in your Email Routing config.
+                           # Required when using the POST /api/app/:id/email endpoint — returns 503 if unset.
