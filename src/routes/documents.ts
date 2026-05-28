@@ -5,13 +5,10 @@ import type { Env, AetherLiteJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, checkRateLimit, parseBodyOptional } from '../lib/http'
 import { scan } from '../lib/guard'
-import { newId, now } from '../lib/utils'
+import { newId, now, isUUID } from '../lib/utils'
 import { MAX_DOCUMENT_BYTES, GUARD_SCAN_SLICE_BYTES, MAX_VECTOR_CHUNKS, REINDEX_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '../lib/constants'
 import { parseReindexBody } from '../lib/schema'
 import { sandboxExists } from './sandbox'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-function isUUID(s: string): boolean { return UUID_RE.test(s) }
 
 // ── Document metadata stored in R2 customMetadata ────────────────────────────
 

@@ -565,6 +565,7 @@ export function parseBuildRequest(body: unknown): BuildRequest {
 export interface ReindexBody { docIds: string[] | undefined }
 
 export function parseReindexBody(body: unknown): ReindexBody {
+  if (body === null || body === undefined) return { docIds: undefined }
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   if (body.docIds === undefined) return { docIds: undefined }
   if (!Array.isArray(body.docIds)) throw new Error('docIds must be an array')
@@ -580,6 +581,6 @@ export function parseSessionBody(body: unknown): SessionBody {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   if (body.sessionId === undefined) return { sessionId: undefined }
   if (typeof body.sessionId !== 'string') throw new Error('sessionId must be a string')
-  if (body.sessionId.length > 64) throw new Error('sessionId must be <= 64 characters')
+  if (body.sessionId.length > MAX_SESSION_ID_LEN) throw new Error(`sessionId must be <= ${MAX_SESSION_ID_LEN} characters`)
   return { sessionId: body.sessionId || undefined }
 }

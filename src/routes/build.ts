@@ -5,15 +5,9 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, listAllKV } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
-import { newId } from '../lib/utils'
+import { newId, isUUID } from '../lib/utils'
 import { BUILD_KEY_PREFIX, BUILD_TTL } from '../lib/constants'
 import { doFetch, identityHeader } from './sandbox'
-
-// ── Validation helpers ────────────────────────────────────────────────────────
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function isUUID(s: string): boolean { return UUID_RE.test(s) }
 
 // ── DO stub helper ────────────────────────────────────────────────────────────
 

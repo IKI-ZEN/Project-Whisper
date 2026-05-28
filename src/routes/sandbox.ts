@@ -5,7 +5,7 @@ import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, type SandboxConfig } from '../lib/schema'
-import { newId, now } from '../lib/utils'
+import { newId, now, isUUID } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
 
@@ -319,6 +319,7 @@ const importConfig: Handler = async (req, env) => {
 
 const issueSession: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox ID'), 400)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
   const p = await parseBodyOptional(req, parseSessionBody, { sessionId: undefined })

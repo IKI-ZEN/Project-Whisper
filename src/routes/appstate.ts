@@ -6,18 +6,12 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'
 import { doFetch } from './sandbox'
-import { newId } from '../lib/utils'
+import { newId, isUUID } from '../lib/utils'
 import {
   IMAGE_MAX_BYTES, ALLOWED_IMAGE_TYPES,
   IMAGE_RATE_LIMIT_WINDOW_MS, IMAGE_RATE_LIMIT_MAX,
   EMAIL_RATE_LIMIT_WINDOW_MS, EMAIL_RATE_LIMIT_MAX,
 } from '../lib/constants'
-
-// ── Validation helpers ────────────────────────────────────────────────────────
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function isUUID(s: string): boolean { return UUID_RE.test(s) }
 
 // ── AppStateDO helpers ────────────────────────────────────────────────────────
 
