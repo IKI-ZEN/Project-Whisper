@@ -242,7 +242,7 @@ async function runProbeTool(
     const responses = await Promise.all(
       variantPrompts.map(vp => complete(env.AI, env, { model: effectiveModel, prompt: vp, systemPrompt, temperature, maxTokens })),
     )
-    const embeddings = await embed(env.AI, responses)
+    const embeddings = await embed(env.AI, responses, undefined, env)
     const similarityMatrix = computeSimilarityMatrix(embeddings)
     return {
       variants: variantPrompts.map((vp, i) => ({ prompt: vp, response: responses[i] })),

@@ -200,7 +200,7 @@ async function evaluateAssertion(
 
     case 'similarity-gte': {
       try {
-        const embeddings = await embed(env.AI, [response, assertion.reference])
+        const embeddings = await embed(env.AI, [response, assertion.reference], undefined, env)
         if (!embeddings[0] || !embeddings[1]) {
           return { type: 'similarity-gte', passed: false, detail: 'Could not compute embeddings' }
         }

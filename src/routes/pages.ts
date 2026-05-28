@@ -3,6 +3,17 @@ import type { Handler, Params } from '../lib/http'
 import type { SandboxConfig } from '../lib/schema'
 import { json, err } from '../lib/http'
 import { sandboxExists, stub, doFetch } from './sandbox'
+import { issueAppToken } from '../lib/appToken'
+
+// Injects the app token as a meta tag before </head> (fallback: before </body>)
+async function injectAppToken(html: string, appId: string, env: Env): Promise<string> {
+  if (!env.SIGNING_SECRET) return html
+  const token = await issueAppToken(appId, env.SIGNING_SECRET)
+  const tag = `<meta name="whisper-token" content="${token}">`
+  if (html.includes('</head>')) return html.replace('</head>', `${tag}</head>`)
+  if (html.includes('</body>')) return html.replace('</body>', `${tag}</body>`)
+  return html
+}
 
 // ── Standalone app page ───────────────────────────────────────────────────────
 
@@ -414,7 +425,8 @@ export const appPageRoute: Handler = async (_req, env, params: Params) => {
     const res = await doFetch(stub(env, id), 'config', 'GET')
     const cfg = await res.json() as { ok: boolean; data: Omit<SandboxConfig, 'memory'> }
     if (cfg.ok && cfg.data.appHtml) {
-      const html = cfg.data.appHtml.replace(/__SANDBOX_ID__/g, JSON.stringify(id).slice(1, -1))
+      let html = cfg.data.appHtml.replace(/__SANDBOX_ID__/g, JSON.stringify(id).slice(1, -1))
+      html = await injectAppToken(html, id, env)
       return new Response(html, {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
@@ -428,7 +440,9 @@ export const appPageRoute: Handler = async (_req, env, params: Params) => {
   } catch { /* fall through to generic page */ }
 
   const nonce = genNonce()
-  return new Response(appPageHtml(id, nonce), { headers: htmlHeaders(nonce, true) })
+  let html = appPageHtml(id, nonce)
+  html = await injectAppToken(html, id, env)
+  return new Response(html, { headers: htmlHeaders(nonce, true) })
 }
 
 export const appsGalleryRoute: Handler = (_req, _env) => {
@@ -1149,6 +1163,14 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
     <div class="stat-card"><div class="stat-label">Tokens Out</div><div class="stat-value sk" id="stat-tout" style="height:32px;width:64px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Avg Latency</div><div class="stat-value sk" id="stat-lat" style="height:32px;width:72px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Vault Records</div><div class="stat-value sk" id="stat-vault" style="height:32px;width:48px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">~ Est. Cost (30d)</div><div class="stat-value sk" id="stat-cost" style="height:32px;width:80px">&nbsp;</div></div>
+  </div>
+  <div class="section" style="margin-bottom:16px">
+    <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+      AI Usage by Model — last 30 days
+      <span style="font-size:10px;color:var(--muted);font-weight:400">~ approximate costs based on public pricing</span>
+    </div>
+    <div id="cost-wrap"><div class="empty-note">Loading…</div></div>
   </div>
   <div class="two-col">
     <div>
@@ -1263,7 +1285,7 @@ async function load(){
       wrap.innerHTML='<table class="tbl"><thead><tr><th>Name</th><th>Model</th><th>Created</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
     }
   }catch(e){
-    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
+    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat','stat-cost'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
     document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
     document.getElementById('health-wrap').innerHTML='<div class="empty-note">Unable to load.</div>'
   }
@@ -1311,6 +1333,39 @@ async function load(){
   }catch(e){
     document.getElementById('stat-vault').textContent='—';document.getElementById('stat-vault').className='stat-value'
     document.getElementById('vault-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
+  }
+
+  // Cost / usage widget
+  try{
+    const from30d=Date.now()-30*86400000
+    const ur=await fetch('/api/usage?from='+from30d+'&groupBy=model').then(function(r){return r.json()})
+    const costWrap=document.getElementById('cost-wrap')
+    const statCost=document.getElementById('stat-cost')
+    if(ur&&ur.ok){
+      const rows=ur.data.rows||[]
+      const total=ur.data.totalCostUsd||0
+      statCost.textContent='$'+total.toFixed(4)
+      statCost.className='stat-value'
+      if(!rows.length){costWrap.innerHTML='<div class="empty-note">No usage data yet.</div>'}
+      else{
+        costWrap.innerHTML='<table class="tbl"><thead><tr><th>Model</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th><th>~ Cost</th></tr></thead><tbody>'
+          +rows.map(function(r){
+            const model=(r.period||'—').split('/').pop()||(r.period||'—')
+            return '<tr><td style="font-family:var(--mono);font-size:11px">'+esc(model)+'</td>'
+              +'<td>'+fmtTok(r.totalCalls||0)+'</td>'
+              +'<td>'+fmtTok(r.totalTokensIn||0)+'</td>'
+              +'<td>'+fmtTok(r.totalTokensOut||0)+'</td>'
+              +'<td style="color:var(--teal);font-family:var(--mono)">$'+(r.totalCostUsd||0).toFixed(4)+'</td></tr>'
+          }).join('')
+          +'</tbody></table>'
+      }
+    } else {
+      statCost.textContent='—';statCost.className='stat-value'
+      costWrap.innerHTML='<div class="empty-note">Usage data unavailable.</div>'
+    }
+  }catch(e){
+    document.getElementById('stat-cost').textContent='—';document.getElementById('stat-cost').className='stat-value'
+    document.getElementById('cost-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
   }
 }
 
@@ -1366,10 +1421,11 @@ async function serveBuildFile(env: Env, buildId: string, filename: string): Prom
   const ct      = buildMimeType(filename)
   const headers = { 'Content-Type': ct, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': BUILD_CSP }
 
-  // Inject __BUILD_ID__ placeholder into HTML files at serve time
+  // Inject __BUILD_ID__ placeholder and app token into HTML files at serve time
   if (filename.endsWith('.html')) {
     const text     = await obj.text()
-    const injected = text.replace(/__BUILD_ID__/g, buildId)
+    let   injected = text.replace(/__BUILD_ID__/g, buildId)
+    injected = await injectAppToken(injected, buildId, env)
     return new Response(injected, { headers })
   }
 

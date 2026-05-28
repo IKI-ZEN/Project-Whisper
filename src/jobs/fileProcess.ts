@@ -196,7 +196,7 @@ export async function processFile(job: WhisperJob, env: Env): Promise<void> {
     const BATCH  = 100
     for (let start = 0; start < chunks.length; start += BATCH) {
       const batch   = chunks.slice(start, start + BATCH)
-      const vectors = await embed(env.AI, batch)
+      const vectors = await embed(env.AI, batch, undefined, env)
       await env.VECTORS.upsert(
         vectors.map((vec, j) => ({
           id:       `${sandboxId}_${docId}_${start + j}`,

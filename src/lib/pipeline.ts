@@ -84,7 +84,7 @@ async function executeNode(
       if (results.length === 0) return input
       if (select === 'all')   return results.join('\n\n---\n\n')
       if (select === 'best') {
-        const embeds = await embed(ai, [input, ...results])
+        const embeds = await embed(ai, [input, ...results], undefined, env)
         const inputEmbed = embeds[0]
         let bestIdx = 0, bestSim = -Infinity
         for (let i = 0; i < results.length; i++) {

@@ -739,3 +739,47 @@ export function parseConsistencyRequest(body: unknown): ConsistencyRequest {
     samples:      body.samples      !== undefined ? num(body.samples,      'samples',      3, 3, MAX_ENTROPY_SAMPLES) : 3,
   }
 }
+
+// ── Usage query params ────────────────────────────────────────────────────────
+
+import { isUUID } from './utils'
+
+export type UsageGroupBy = 'model' | 'provider' | 'call_type' | 'sandbox_id' | 'day'
+
+export interface UsageQuery {
+  sandboxId?: string
+  model?:     string
+  provider?:  string
+  from?:      number
+  to?:        number
+  groupBy?:   UsageGroupBy
+  limit:      number
+}
+
+const USAGE_GROUP_BY_VALUES: UsageGroupBy[] = ['model', 'provider', 'call_type', 'sandbox_id', 'day']
+
+export function parseUsageQuery(params: URLSearchParams): UsageQuery {
+  const sandboxId = params.get('sandboxId') ?? undefined
+  if (sandboxId !== undefined && !isUUID(sandboxId)) throw new Error('sandboxId must be a valid UUID')
+
+  const model    = params.get('model')    ?? undefined
+  const provider = params.get('provider') ?? undefined
+
+  const fromStr = params.get('from')
+  const toStr   = params.get('to')
+  const from    = fromStr !== null ? parseInt(fromStr, 10) : undefined
+  const to      = toStr   !== null ? parseInt(toStr,   10) : undefined
+  if (from !== undefined && isNaN(from)) throw new Error('from must be a number (unix ms)')
+  if (to   !== undefined && isNaN(to))   throw new Error('to must be a number (unix ms)')
+
+  const groupByStr = params.get('groupBy') ?? undefined
+  if (groupByStr !== undefined && !(USAGE_GROUP_BY_VALUES as string[]).includes(groupByStr)) {
+    throw new Error(`groupBy must be one of: ${USAGE_GROUP_BY_VALUES.join(', ')}`)
+  }
+  const groupBy = groupByStr as UsageGroupBy | undefined
+
+  const limitStr = params.get('limit')
+  const limit    = limitStr !== null ? Math.min(Math.max(1, parseInt(limitStr, 10) || 100), 1000) : 100
+
+  return { sandboxId, model, provider, from, to, groupBy, limit }
+}

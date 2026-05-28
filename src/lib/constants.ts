@@ -117,3 +117,7 @@ export const SUITE_RUN_RATE_LIMIT_MAX    = 5       // 5 suite runs/min
 
 // Assertion regex input cap — prevents ReDoS on long responses
 export const MAX_ASSERTION_REGEX_INPUT   = 50_000
+
+// App tokens — short-lived HMAC-signed credentials injected at page-serve time
+export const APP_TOKEN_TTL_MS            = 3_600_000   // 1 hour
+export const APP_TOKEN_STATE_RATE_LIMIT_MAX = 200      // state mutations per minute per app via token

@@ -241,7 +241,7 @@ const embedAtlas: Handler = async (req: Request, env: Env) => {
     const missing = prompts.filter(p => !p.embedding_cache)
     for (let i = 0; i < missing.length; i += EMBED_BATCH_SIZE) {
       const batch = missing.slice(i, i + EMBED_BATCH_SIZE)
-      const vecs = await embed(env.AI, batch.map(p => p.text))
+      const vecs = await embed(env.AI, batch.map(p => p.text), undefined, env)
       // Write back to D1 in a single batch and update in-memory cache field
       const stmts: D1PreparedStatement[] = []
       for (let bi = 0; bi < batch.length; bi++) {
@@ -302,7 +302,7 @@ const nearestPrompts: Handler = async (req: Request, env: Env) => {
 
   try {
     // 1. Embed query text
-    const [queryEmb] = await embed(env.AI, [text])
+    const [queryEmb] = await embed(env.AI, [text], undefined, env)
     if (!queryEmb) return json(err('Failed to compute query embedding'), 500)
 
     // 2. Load all prompts with embedding_cache

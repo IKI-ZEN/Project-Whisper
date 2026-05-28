@@ -8,6 +8,7 @@ import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQU
 import { computeConfigHash } from '../lib/integrity'
 import { scan, type ScanResult } from '../lib/guard'
 import { sealPrompt, openPrompt, signPayload } from '../lib/vault'
+import { estimateCost } from '../lib/pricing'
 
 const RL_STORAGE_KEY = 'rlState'
 const MAX_TOOL_LOOPS = 10
@@ -365,9 +366,13 @@ export class SandboxDO extends DurableObject<Env> {
     const { reply, memory: updatedMemory } = await this.runWithToolLoop(config, memory, message)
     const latencyMs = Date.now() - startMs
 
+    const tokensIn  = Math.ceil(message.length / 4)
+    const tokensOut = Math.ceil(reply.length / 4)
+    const provider  = config.model.includes(':') ? config.model.split(':')[0] : 'workers-ai'
+    const costUsd   = estimateCost(config.model, tokensIn, tokensOut)
     void this.env.DB.prepare(
-      'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, identity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(config.id, config.model, Math.ceil(message.length / 4), Math.ceil(reply.length / 4), latencyMs, identity, now()).run()
+      'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, identity, created_at, provider, call_type, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(config.id, config.model, tokensIn, tokensOut, latencyMs, identity, now(), provider, 'complete', costUsd).run()
 
     const replyGuard = this.guardedScan(reply, gMode)
     if (replyGuard && replyGuard.riskLevel !== 'clean') {

@@ -5,6 +5,7 @@ import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, ty
 import { newId, now, isUUID } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
+import { extractAppToken, verifyAppToken } from '../lib/appToken'
 
 // ── KV metadata shape (stored with each sandbox key) ─────────────────────────
 
@@ -187,9 +188,22 @@ const metrics: Handler = async (_req, env, params: Params) => {
   }))
 }
 
+// If an app token is present, verify it is scoped to this sandbox (prevents cross-app misuse).
+async function checkAppTokenScope(id: string, req: Request, env: Env): Promise<Response | null> {
+  const rawToken = extractAppToken(req)
+  if (!rawToken || !env.SIGNING_SECRET) return null
+  const tokenAppId = await verifyAppToken(rawToken, env.SIGNING_SECRET)
+  if (tokenAppId !== null && tokenAppId !== id) return json(err('App token not valid for this sandbox'), 403)
+  return null
+}
+
 export const runHandler: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+
+  const scopeDeny = await checkAppTokenScope(id, req, env)
+  if (scopeDeny) return scopeDeny
+
   const p = await parseBody(req, parseRunSandboxRequest)
   if (!p.ok) return p.response
 
@@ -208,6 +222,10 @@ export const runHandler: Handler = async (req, env, params: Params) => {
 export const streamHandler: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+
+  const scopeDeny = await checkAppTokenScope(id, req, env)
+  if (scopeDeny) return scopeDeny
+
   const p = await parseBody(req, parseRunSandboxRequest)
   if (!p.ok) return p.response
 

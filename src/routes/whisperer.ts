@@ -27,7 +27,7 @@ const sensitivity: Handler = async (req: Request, env: Env) => {
     const responses = await Promise.all(
       variantPrompts.map(vp => complete(env.AI, env, { model, prompt: vp, systemPrompt, temperature, maxTokens })),
     )
-    const embeddings = await embed(env.AI, responses)
+    const embeddings = await embed(env.AI, responses, undefined, env)
     const similarityMatrix = computeSimilarityMatrix(embeddings)
     const result = {
       variants: variantPrompts.map((vp, i) => ({ prompt: vp, response: responses[i] })),
@@ -47,7 +47,7 @@ const cluster: Handler = async (req: Request, env: Env) => {
   const { texts, k, model } = p.data
   try {
     const t0 = Date.now()
-    const embeddings = await embed(env.AI, texts, model)
+    const embeddings = await embed(env.AI, texts, model, env)
     const kk = Math.min(k, texts.length)
     const { labels } = kMeansClusters(embeddings, kk)
     const similarityMatrix = computeSimilarityMatrix(embeddings)
@@ -244,7 +244,7 @@ const contextStress: Handler = async (req: Request, env: Env) => {
     }
     // Embed all responses and compute cosine similarity against baseline (level 0)
     const responses = results.map(r => r.response)
-    const embeddings = await embed(env.AI, responses)
+    const embeddings = await embed(env.AI, responses, undefined, env)
     const baseEmbed = embeddings[0]
     const levels2 = results.map((r, i) => ({
       ...r,
@@ -274,7 +274,7 @@ const drift: Handler = async (req: Request, env: Env) => {
       responses.push(response)
       context.push({ role: 'assistant', content: response, timestamp: 0 })
     }
-    const embeddings = await embed(env.AI, responses)
+    const embeddings = await embed(env.AI, responses, undefined, env)
     const turns = responses.map((response, i) => ({
       index: i,
       userMessage: messages[i].content,
@@ -312,7 +312,7 @@ const ablation: Handler = async (req: Request, env: Env) => {
     )
     // Embed base + all ablated responses together
     const allResponses = [baseResponse, ...ablatedResponses]
-    const embeddings = await embed(env.AI, allResponses)
+    const embeddings = await embed(env.AI, allResponses, undefined, env)
     const baseEmbed = embeddings[0]
     const results = limited.map((clause, i) => ({
       clause,
@@ -342,7 +342,7 @@ const consistency: Handler = async (req: Request, env: Env) => {
         if (result.samples[i].trim() === result.samples[j].trim()) exactPairs++
     const exactMatchRate = totalPairs > 0 ? exactPairs / totalPairs : 1
     // Re-embed to get per-pair cosine similarities for nearMatchRate
-    const embeddings = await embed(env.AI, result.samples)
+    const embeddings = await embed(env.AI, result.samples, undefined, env)
     const matrix = computeSimilarityMatrix(embeddings)
     let nearPairs = 0
     for (let i = 0; i < n; i++)

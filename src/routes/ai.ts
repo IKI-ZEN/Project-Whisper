@@ -6,10 +6,11 @@ import {
 } from '../lib/ai'
 import {
   parseCompleteRequest, parseEmbedRequest, parseImageRequest,
-  parseCompareRequest, parseSweepRequest,
+  parseCompareRequest, parseSweepRequest, parseUsageQuery,
 } from '../lib/schema'
 import { toBase64 } from '../lib/utils'
 import { MAX_AUDIO_BYTES } from '../lib/constants'
+import { requireAccess } from '../lib/access'
 
 export const aiRoutes: Array<[string, string, Handler]> = [
 
@@ -37,7 +38,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     const p = await parseBody(req, parseEmbedRequest)
     if (!p.ok) return p.response
     try {
-      const embeddings = await embed(env.AI, p.data.text, p.data.model)
+      const embeddings = await embed(env.AI, p.data.text, p.data.model, env)
       return json(ok({ embeddings, count: embeddings.length }))
     } catch (e) {
       return json(err('Embedding failed'), 500)
@@ -49,7 +50,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     const p = await parseBody(req, parseImageRequest)
     if (!p.ok) return p.response
     try {
-      const bytes = await generateImage(env.AI, p.data.prompt, p.data.model, p.data.steps)
+      const bytes = await generateImage(env.AI, p.data.prompt, p.data.model, p.data.steps, env)
       return json(ok({ image: toBase64(bytes), format: 'png' }))
     } catch (e) {
       return json(err('Image generation failed'), 500)
@@ -85,7 +86,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
 
     try {
       const buffer = await audioBlob.arrayBuffer()
-      const text = await transcribe(env.AI, buffer, typeof model === 'string' ? model : undefined)
+      const text = await transcribe(env.AI, buffer, typeof model === 'string' ? model : undefined, env)
       return json(ok({ text }))
     } catch (e) {
       return json(err('Transcription failed'), 500)
@@ -125,5 +126,74 @@ export const aiRoutes: Array<[string, string, Handler]> = [
       return { temperature, responses, latencyMs: Date.now() - start }
     }))
     return json(ok({ results, model: model ?? MODELS.text }))
+  }],
+
+  // GET /api/usage — aggregate cost/token usage (CF Access required when configured)
+  ['GET', '/api/usage', async (req: Request, env: Env) => {
+    const { deny } = await requireAccess(req, env)
+    if (deny) return deny
+
+    let query: ReturnType<typeof parseUsageQuery>
+    try {
+      query = parseUsageQuery(new URL(req.url).searchParams)
+    } catch (e) {
+      return json(err(String(e)), 422)
+    }
+
+    const { sandboxId, model, provider, from, to, groupBy, limit } = query
+
+    // Build WHERE clause
+    const conditions: string[] = []
+    const bindings: (string | number)[] = []
+    if (sandboxId) { conditions.push('sandbox_id = ?'); bindings.push(sandboxId) }
+    if (model)     { conditions.push('model = ?');      bindings.push(model) }
+    if (provider)  { conditions.push('provider = ?');   bindings.push(provider) }
+    if (from !== undefined) { conditions.push('created_at >= ?'); bindings.push(from) }
+    if (to   !== undefined) { conditions.push('created_at <= ?'); bindings.push(to) }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    // Build GROUP BY / SELECT
+    let selectCols: string
+    let groupBySql: string
+    if (groupBy === 'day') {
+      selectCols = `strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') AS period`
+      groupBySql = `GROUP BY period`
+    } else if (groupBy) {
+      selectCols = `${groupBy} AS period`
+      groupBySql = `GROUP BY ${groupBy}`
+    } else {
+      selectCols = `'all' AS period`
+      groupBySql = ''
+    }
+
+    const sql = `
+      SELECT ${selectCols},
+             SUM(cost_usd)   AS totalCostUsd,
+             SUM(tokens_in)  AS totalTokensIn,
+             SUM(tokens_out) AS totalTokensOut,
+             COUNT(*)        AS totalCalls
+      FROM usage_metrics
+      ${where}
+      ${groupBySql}
+      ORDER BY totalCostUsd DESC
+      LIMIT ?
+    `
+    bindings.push(limit)
+
+    try {
+      const stmt = env.DB.prepare(sql)
+      const result = await stmt.bind(...bindings).all<{
+        period: string; totalCostUsd: number; totalTokensIn: number; totalTokensOut: number; totalCalls: number
+      }>()
+      const rows = result.results ?? []
+      const totalCostUsd   = rows.reduce((s, r) => s + (r.totalCostUsd   ?? 0), 0)
+      const totalCalls     = rows.reduce((s, r) => s + (r.totalCalls     ?? 0), 0)
+      const totalTokensIn  = rows.reduce((s, r) => s + (r.totalTokensIn  ?? 0), 0)
+      const totalTokensOut = rows.reduce((s, r) => s + (r.totalTokensOut ?? 0), 0)
+      return json(ok({ rows, totalCostUsd, totalCalls, totalTokensIn, totalTokensOut }))
+    } catch (e) {
+      return json(err('Usage query failed', String(e)), 500)
+    }
   }],
 ]

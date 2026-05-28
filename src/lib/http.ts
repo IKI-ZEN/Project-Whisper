@@ -1,5 +1,6 @@
 import { MAX_REQUEST_BODY, AI_RATE_LIMIT_WINDOW_MS, AI_RATE_LIMIT_MAX } from './constants'
 import { requireAccess, isProtectedRequest } from './access'
+import { extractAppToken, verifyAppToken, isAppScopedPath } from './appToken'
 
 // ── Standard response envelope ────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   return {
     'Access-Control-Allow-Origin':  allow,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-App-Token',
     'Access-Control-Max-Age':       '86400',
   }
 }
@@ -165,14 +166,28 @@ export class Router {
       if (rlRes) return this.addHeaders(rlRes, cors, requestId)
     }
 
+    // App token gate: if a valid app token is present and the request is scoped to
+    // that app's own routes, let it through without CF Access.
+    let dispatchReq = req
+    let appTokenPassthrough = false
+    const rawAppToken = extractAppToken(req)
+    if (rawAppToken && env.SIGNING_SECRET) {
+      const tokenAppId = await verifyAppToken(rawAppToken, env.SIGNING_SECRET)
+      if (tokenAppId && isAppScopedPath(url.pathname, tokenAppId)) {
+        appTokenPassthrough = true
+        const headers = new Headers(req.headers)
+        headers.set('X-Whisper-App-Id', tokenAppId)
+        dispatchReq = new Request(req, { headers })
+      }
+    }
+
     // Cloudflare Access: gate state-mutation endpoints when CF_ACCESS_AUD is set.
     // Identity is forwarded on the request as X-Whisper-Identity for D1 audit trail.
-    let dispatchReq = req
-    if (isProtectedRequest(req.method, url.pathname)) {
+    if (!appTokenPassthrough && isProtectedRequest(req.method, url.pathname)) {
       const { deny: authRes, identity } = await requireAccess(req, env)
       if (authRes) return this.addHeaders(authRes, cors, requestId)
       if (identity?.email) {
-        const headers = new Headers(req.headers)
+        const headers = new Headers(dispatchReq.headers)
         headers.set('X-Whisper-Identity', identity.email)
         dispatchReq = new Request(req, { headers })
       }

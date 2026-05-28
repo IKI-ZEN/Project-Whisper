@@ -129,7 +129,7 @@ async function runReplay(
     let similarity: number | null = null
     if (originalResponse !== null) {
       try {
-        const embeddings = await embed(env.AI, [replayedResponse, originalResponse])
+        const embeddings = await embed(env.AI, [replayedResponse, originalResponse], undefined, env)
         if (embeddings.length >= 2 && embeddings[0] && embeddings[1]) {
           similarity = cosineSimilarity(embeddings[0], embeddings[1])
         }

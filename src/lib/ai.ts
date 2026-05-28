@@ -3,8 +3,30 @@ import type { Message, SandboxConfig, Tool } from './schema'
 import { sseEvent } from './http'
 import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS } from './constants'
 import { sha256 } from './utils'
+import { estimateCost, type CallType } from './pricing'
 
 const DEC = new TextDecoder()
+
+// ── Usage logging ─────────────────────────────────────────────────────────────
+// Fire-and-forget D1 insert — never blocks the hot path.
+// Only called when !sandboxId (sandbox runs are logged by SandboxDO with identity).
+
+function logUsage(
+  env: Env,
+  sandboxId: string | undefined,
+  model: string,
+  provider: string,
+  callType: CallType,
+  tokensIn: number,
+  tokensOut: number,
+  latencyMs: number,
+): void {
+  if (!env.DB) return
+  const cost = estimateCost(model, tokensIn, tokensOut)
+  void env.DB.prepare(
+    'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, identity, created_at, provider, call_type, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).bind(sandboxId ?? '', model, tokensIn, tokensOut, latencyMs, null, Date.now(), provider, callType, cost).run()
+}
 
 // ── Model registry ────────────────────────────────────────────────────────────
 
@@ -487,12 +509,20 @@ export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<
     })
     result = (response as { response?: string }).response ?? String(response)
   }
+  const latencyMs = Date.now() - t0
   if (env.ANALYTICS) {
     env.ANALYTICS.writeDataPoint({
       blobs:   [opts.model ?? MODELS.text, opts.sandboxId ?? '', gw?.provider ?? 'workers-ai'],
-      doubles: [0, 0, Date.now() - t0],
+      doubles: [0, 0, latencyMs],
       indexes: [opts.sandboxId ?? 'anon'],
     })
+  }
+  if (!opts.sandboxId) {
+    const model    = opts.model ?? MODELS.text
+    const provider = gw?.provider ?? 'workers-ai'
+    const inputText = opts.prompt ?? (opts.messages ?? []).map(m => m.content).join('')
+    logUsage(env, undefined, model, provider, 'complete',
+      Math.ceil(inputText.length / 4), Math.ceil(result.length / 4), latencyMs)
   }
   return result
 }
@@ -526,47 +556,90 @@ export async function think(ai: Ai, env: Env, opts: CompletionOpts & { budgetTok
 
 // ── Public streaming completion ───────────────────────────────────────────────
 
-export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): ReadableStream {
-  const gw = parseGateway(opts.model ?? '')
-  if (gw) {
-    if (gw.provider === 'openai')    return streamOpenAI(env, gw.id, opts)
-    if (gw.provider === 'anthropic') return streamAnthropic(env, gw.id, opts)
-    return streamGoogle(env, gw.id, opts)
-  }
-
-  const encoder = new TextEncoder()
+// Wraps a stream to accumulate SSE text tokens and log usage after the stream closes.
+function wrapStreamWithLogging(
+  inner: ReadableStream,
+  env: Env,
+  opts: CompletionOpts,
+  provider: string,
+  t0: number,
+): ReadableStream {
+  const reader  = inner.getReader()
+  const decoder = new TextDecoder()
+  let accumulated = ''
   return new ReadableStream({
-    async start(controller) {
-      try {
-        const aiStream = await run(ai)(opts.model ?? MODELS.text, {
-          messages: buildMessages(opts),
-          temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
-          max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-          stream: true,
-        }) as ReadableStream
-
-        const reader = aiStream.getReader()
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          controller.enqueue(value instanceof Uint8Array ? value : encoder.encode(String(value)))
-        }
-        controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
-      } catch (e) {
-        const safeMsg = e instanceof Error && /^\d{3}/.test(e.message)
-          ? 'AI provider temporarily unavailable'
-          : 'AI inference failed'
-        controller.enqueue(encoder.encode(sseEvent({ error: safeMsg }, 'error')))
-      } finally {
+    async pull(controller) {
+      const { done, value } = await reader.read()
+      if (done) {
         controller.close()
+        if (!opts.sandboxId) {
+          const model     = opts.model ?? MODELS.text
+          const inputText = opts.prompt ?? (opts.messages ?? []).map(m => m.content).join('')
+          logUsage(env, undefined, model, provider, 'stream',
+            Math.ceil(inputText.length / 4), Math.ceil(accumulated.length / 4), Date.now() - t0)
+        }
+        return
       }
+      // Extract text from SSE response chunks for token counting
+      const chunk = decoder.decode(value, { stream: true })
+      for (const line of chunk.split('\n')) {
+        const payload = line.trim().replace(/^data:\s*/, '')
+        if (!payload || payload === '[DONE]') continue
+        try {
+          const parsed = JSON.parse(payload) as { response?: string }
+          if (parsed.response) accumulated += parsed.response
+        } catch { /* skip malformed SSE chunks */ }
+      }
+      controller.enqueue(value)
     },
+    cancel() { reader.cancel() },
   })
+}
+
+export function completeStream(ai: Ai, env: Env, opts: CompletionOpts): ReadableStream {
+  const t0 = Date.now()
+  const gw = parseGateway(opts.model ?? '')
+  let inner: ReadableStream
+  if (gw) {
+    if (gw.provider === 'openai')    inner = streamOpenAI(env, gw.id, opts)
+    else if (gw.provider === 'anthropic') inner = streamAnthropic(env, gw.id, opts)
+    else inner = streamGoogle(env, gw.id, opts)
+  } else {
+    const encoder = new TextEncoder()
+    inner = new ReadableStream({
+      async start(controller) {
+        try {
+          const aiStream = await run(ai)(opts.model ?? MODELS.text, {
+            messages: buildMessages(opts),
+            temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+            max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+            stream: true,
+          }) as ReadableStream
+
+          const reader = aiStream.getReader()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            controller.enqueue(value instanceof Uint8Array ? value : encoder.encode(String(value)))
+          }
+          controller.enqueue(encoder.encode(sseEvent({ done: true }, 'done')))
+        } catch (e) {
+          const safeMsg = e instanceof Error && /^\d{3}/.test(e.message)
+            ? 'AI provider temporarily unavailable'
+            : 'AI inference failed'
+          controller.enqueue(encoder.encode(sseEvent({ error: safeMsg }, 'error')))
+        } finally {
+          controller.close()
+        }
+      },
+    })
+  }
+  return wrapStreamWithLogging(inner, env, opts, gw?.provider ?? 'workers-ai', t0)
 }
 
 // ── Embeddings ────────────────────────────────────────────────────────────────
 
-export async function embed(ai: Ai, text: string | string[], model?: string): Promise<Float32Array[]> {
+export async function embed(ai: Ai, text: string | string[], model?: string, env?: Env): Promise<Float32Array[]> {
   const texts = Array.isArray(text) ? text : [text]
   const totalLen = texts.reduce((n, t) => n + t.length, 0)
   if (totalLen > MAX_EMBED_CHARS) throw new Error(`Embedding input exceeds ${MAX_EMBED_CHARS} characters`)
@@ -579,6 +652,7 @@ export async function embed(ai: Ai, text: string | string[], model?: string): Pr
     return rows.map(r => new Float32Array(r))
   }
 
+  const t0 = Date.now()
   const response = await run(ai)(model ?? MODELS.embed, { text: texts })
   const r = response as { data?: number[][] }
   const result = r.data ?? []
@@ -587,37 +661,57 @@ export async function embed(ai: Ai, text: string | string[], model?: string): Pr
     headers: { 'Cache-Control': 'max-age=86400', 'Content-Type': 'application/json' },
   }))
 
+  if (env) {
+    logUsage(env, undefined, model ?? MODELS.embed, 'workers-ai', 'embed',
+      Math.ceil(totalLen / 4), 0, Date.now() - t0)
+  }
+
   return result.map(r => new Float32Array(r))
 }
 
 // ── Image generation ──────────────────────────────────────────────────────────
 
-export async function generateImage(ai: Ai, prompt: string, model?: string, steps?: number): Promise<Uint8Array> {
+export async function generateImage(ai: Ai, prompt: string, model?: string, steps?: number, env?: Env): Promise<Uint8Array> {
+  const t0 = Date.now()
   const response = await run(ai)(model ?? MODELS.image, {
     prompt,
     num_steps: steps ?? 4,
   })
 
-  if (response instanceof ArrayBuffer) return new Uint8Array(response)
-  if (response instanceof Uint8Array) return response
-  const r = response as { image?: string }
-  if (typeof r.image === 'string') {
-    const binary = atob(r.image)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-    return bytes
+  let bytes: Uint8Array
+  if (response instanceof ArrayBuffer) {
+    bytes = new Uint8Array(response)
+  } else if (response instanceof Uint8Array) {
+    bytes = response
+  } else {
+    const r = response as { image?: string }
+    if (typeof r.image === 'string') {
+      const binary = atob(r.image)
+      bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    } else {
+      throw new Error('Unexpected image response format from Workers AI')
+    }
   }
-  throw new Error('Unexpected image response format from Workers AI')
+
+  if (env) logUsage(env, undefined, model ?? MODELS.image, 'workers-ai', 'image', 1, 0, Date.now() - t0)
+  return bytes
 }
 
 // ── Audio transcription ───────────────────────────────────────────────────────
 
-export async function transcribe(ai: Ai, audio: ArrayBuffer, model?: string): Promise<string> {
+export async function transcribe(ai: Ai, audio: ArrayBuffer, model?: string, env?: Env): Promise<string> {
+  const t0 = Date.now()
   const response = await run(ai)(model ?? MODELS.transcribe, {
     audio: [...new Uint8Array(audio)],
   })
   const r = response as { text?: string }
-  return r.text ?? ''
+  const text = r.text ?? ''
+  if (env) {
+    logUsage(env, undefined, model ?? MODELS.transcribe, 'workers-ai', 'transcribe',
+      Math.ceil(audio.byteLength / 16000), 0, Date.now() - t0)
+  }
+  return text
 }
 
 // ── Sandbox-aware run ─────────────────────────────────────────────────────────
@@ -660,7 +754,7 @@ export async function runInSandboxWithRAG(
   if (!config.ragEnabled) return runInSandbox(ai, env, config, userMessage)
 
   // Embed user message and retrieve relevant document chunks scoped to this sandbox
-  const [[queryVec]] = await embed(ai, userMessage)
+  const [[queryVec]] = await embed(ai, userMessage, undefined, env)
   if (!queryVec) return runInSandbox(ai, env, config, userMessage)
 
   const results = await (env.VECTORS as VectorizeIndex).query(queryVec as unknown as number[], {
@@ -690,7 +784,7 @@ export function streamInSandboxWithRAG(ai: Ai, env: Env, config: SandboxConfig, 
   return new ReadableStream({
     async start(controller) {
       try {
-        const [[queryVec]] = await embed(ai, userMessage)
+        const [[queryVec]] = await embed(ai, userMessage, undefined, env)
         let augmented = userMessage
         if (queryVec) {
           const results = await (env.VECTORS as VectorizeIndex).query(queryVec as unknown as number[], {
@@ -868,7 +962,7 @@ export async function estimateEntropy(
     ),
   )
   const entropy = shannonEntropy(samples)
-  const embeddings = await embed(ai, samples)
+  const embeddings = await embed(ai, samples, undefined, env)
   let simSum = 0, simCount = 0
   for (let i = 0; i < embeddings.length; i++) {
     for (let j = i + 1; j < embeddings.length; j++) {
@@ -913,7 +1007,7 @@ Output ONLY a JSON array of ${n} strings (the candidate system prompts), no expl
     }
   } catch { /* fall through */ }
   if (candidates.length === 0) return []
-  const allEmbeds = await embed(ai, [targetResponse, ...candidates])
+  const allEmbeds = await embed(ai, [targetResponse, ...candidates], undefined, env)
   const targetEmbed = allEmbeds[0]
   return candidates
     .map((candidate, i) => ({ candidate, similarity: cosineSimilarity(targetEmbed, allEmbeds[i + 1]) }))
