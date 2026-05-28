@@ -6,6 +6,7 @@ import {
   MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN, MAX_BUILD_DESCRIPTION_LEN,
   MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
+  MAX_DRIFT_TURNS,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -609,6 +610,37 @@ export function parseAblationRequest(body: unknown): AblationRequest {
   if (prompt.length > MAX_SYSTEM_PROMPT_LEN) throw new Error(`prompt exceeds ${MAX_SYSTEM_PROMPT_LEN} character limit`)
   return {
     prompt,
+    model:        body.model        !== undefined ? str(body.model,        'model')        : undefined,
+    systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    temperature:  body.temperature  !== undefined ? num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2) : undefined,
+    maxTokens:    body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
+  }
+}
+
+// ── Multi-Turn Drift ──────────────────────────────────────────────────────────
+
+export interface DriftMessage { role: 'user'; content: string }
+
+export interface DriftRequest {
+  messages: DriftMessage[]
+  model?: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+export function parseDriftRequest(body: unknown): DriftRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  if (!Array.isArray(body.messages)) throw new Error('messages must be an array')
+  if (body.messages.length < 2 || body.messages.length > MAX_DRIFT_TURNS)
+    throw new Error(`messages must have 2–${MAX_DRIFT_TURNS} user turns`)
+  const messages: DriftMessage[] = body.messages.map((m: unknown, i: number) => {
+    if (!isObj(m)) throw new Error(`messages[${i}] must be an object`)
+    if (m.role !== 'user') throw new Error(`messages[${i}].role must be "user"`)
+    return { role: 'user' as const, content: str(m.content, `messages[${i}].content`) }
+  })
+  return {
+    messages,
     model:        body.model        !== undefined ? str(body.model,        'model')        : undefined,
     systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
     temperature:  body.temperature  !== undefined ? num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2) : undefined,

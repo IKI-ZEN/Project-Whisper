@@ -4,7 +4,7 @@ import { json, ok, err, parseBody } from '../lib/http'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
-  parseGuardProbeRequest, parseConsistencyRequest, parseAblationRequest,
+  parseGuardProbeRequest, parseConsistencyRequest, parseAblationRequest, parseDriftRequest,
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
@@ -126,6 +126,37 @@ const thinkHandler: Handler = async (req: Request, env: Env) => {
   }
 }
 
+const drift: Handler = async (req: Request, env: Env) => {
+  const p = await parseBody(req, parseDriftRequest)
+  if (!p.ok) return p.response
+  const { messages, model, systemPrompt, temperature, maxTokens } = p.data
+  try {
+    const t0 = Date.now()
+    const context: Array<{ role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }> = []
+    const responses: string[] = []
+    for (const msg of messages) {
+      context.push({ role: 'user', content: msg.content, timestamp: 0 })
+      const response = await complete(env.AI, env, {
+        model, systemPrompt, temperature, maxTokens,
+        messages: context.map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp })),
+      })
+      responses.push(response)
+      context.push({ role: 'assistant', content: response, timestamp: 0 })
+    }
+    const embeddings = await embed(env.AI, responses)
+    const turns = responses.map((response, i) => ({
+      index: i,
+      userMessage: messages[i].content,
+      response,
+      fromAnchor: i === 0 ? 0 : 1 - cosineSimilarity(embeddings[0], embeddings[i]),
+      fromPrior:  i === 0 ? 0 : 1 - cosineSimilarity(embeddings[i - 1], embeddings[i]),
+    }))
+    return json(ok({ turns, latencyMs: Date.now() - t0 }))
+  } catch (e) {
+    return json(err('Drift analysis failed', String(e)), 500)
+  }
+}
+
 const ablation: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseAblationRequest)
   if (!p.ok) return p.response
@@ -210,6 +241,7 @@ export const whispererRoutes: Array<[string, string, Handler]> = [
   ['POST', '/api/ai/entropy',      entropy],
   ['POST', '/api/ai/archaeology',  archaeology],
   ['POST', '/api/ai/pipeline',     pipeline],
+  ['POST', '/api/ai/drift',        drift],
   ['POST', '/api/ai/ablation',     ablation],
   ['POST', '/api/ai/consistency',  consistency],
   ['POST', '/api/ai/guard-probe',  guardLab],

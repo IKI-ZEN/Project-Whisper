@@ -89,6 +89,9 @@ export const MAX_GUARD_PROBE_CHARS       = 50_000  // max chars for guard-probe 
 // Prompt Ablation
 export const MAX_ABLATION_CLAUSES        = 12
 
+// Multi-Turn Drift
+export const MAX_DRIFT_TURNS             = 20
+
 // Document route limits
 export const GUARD_SCAN_SLICE_BYTES      = 8192    // max bytes fed to guard scan on upload
 export const MAX_VECTOR_CHUNKS           = 500     // chunk IDs deleted on document delete
