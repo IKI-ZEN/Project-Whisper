@@ -5,7 +5,7 @@ import {
   MAX_CLUSTER_TEXTS, MAX_PIPELINE_NODES, MAX_PIPELINE_DEPTH,
   MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN, MAX_BUILD_DESCRIPTION_LEN,
   MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
-  MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS,
+  MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -591,6 +591,29 @@ export function parseGuardProbeRequest(body: unknown): GuardProbeRequest {
   if (typeof body.text !== 'string' || !body.text.trim()) throw new Error('text is required')
   if (body.text.length > MAX_GUARD_PROBE_CHARS) throw new Error(`text exceeds ${MAX_GUARD_PROBE_CHARS} character limit`)
   return { text: body.text }
+}
+
+// ── Prompt Ablation ───────────────────────────────────────────────────────────
+
+export interface AblationRequest {
+  prompt: string
+  model?: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+export function parseAblationRequest(body: unknown): AblationRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const prompt = str(body.prompt, 'prompt')
+  if (prompt.length > MAX_SYSTEM_PROMPT_LEN) throw new Error(`prompt exceeds ${MAX_SYSTEM_PROMPT_LEN} character limit`)
+  return {
+    prompt,
+    model:        body.model        !== undefined ? str(body.model,        'model')        : undefined,
+    systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    temperature:  body.temperature  !== undefined ? num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2) : undefined,
+    maxTokens:    body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
+  }
 }
 
 // ── Consistency Probe ─────────────────────────────────────────────────────────

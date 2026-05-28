@@ -137,6 +137,7 @@ hr{border:none;border-top:1px solid var(--border)}
     <button class="tool-nav-btn" data-tool="archaeology" onclick="switchTool('archaeology',this)">Archaeology</button>
     <button class="tool-nav-btn" data-tool="pipeline" onclick="switchTool('pipeline',this)">Pipeline</button>
     <button class="tool-nav-btn" data-tool="think" onclick="switchTool('think',this)">Think</button>
+    <button class="tool-nav-btn" data-tool="ablation" onclick="switchTool('ablation',this)">Ablation</button>
     <button class="tool-nav-btn" data-tool="guard-lab" onclick="switchTool('guard-lab',this)">Guard Lab</button>
     <span class="sidebar-section">New Directions</span>
     <button class="tool-nav-btn" data-tool="monitor" onclick="switchTool('monitor',this)">Monitor</button>
@@ -423,6 +424,21 @@ hr{border:none;border-top:1px solid var(--border)}
       <div class="hist-panel" id="hist-panel-think"></div>
     </div>
 
+    <!-- Prompt Ablation -->
+    <div id="pane-ablation" class="tool-pane">
+      <h3 style="margin:0">Prompt Ablation Analysis</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Discover which clauses in a system prompt are load-bearing. Each clause is removed in turn; impact = semantic distance between the full-prompt response and the ablated response.</p>
+      <div class="field"><label>System Prompt to ablate</label><textarea id="abl-prompt" rows="7" class="mono" placeholder="Enter the system prompt to analyse. Works best with bullet lists or numbered instructions."></textarea></div>
+      <div class="field"><label>User Probe (the message sent to each variant)</label><input id="abl-probe" type="text" value="What can you help me with?" placeholder="What can you help me with?"/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="abl-model" list="whisperer-models-list" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Temp <input type="number" id="abl-temp" value="0.3" min="0" max="2" step="0.1" style="width:60px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="abl-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-ablation">Analyse</button>
+      </div>
+      <div id="abl-results"></div>
+    </div>
+
     <!-- Guard Laboratory -->
     <div id="pane-guard-lab" class="tool-pane">
       <h3 style="margin:0">Guard Laboratory</h3>
@@ -635,7 +651,7 @@ const TOOL_PANES = {
   compare:'pane-compare', sweep:'pane-sweep', sensitivity:'pane-sensitivity',
   cluster:'pane-cluster', cot:'pane-cot', entropy:'pane-entropy',
   archaeology:'pane-archaeology', pipeline:'pane-pipeline', think:'pane-think',
-  'guard-lab':'pane-guard-lab',
+  ablation:'pane-ablation', 'guard-lab':'pane-guard-lab',
   monitor:'pane-monitor', vault:'pane-vault', replay:'pane-replay',
   assertions:'pane-assertions', atlas:'pane-atlas', probes:'pane-probes',
 }
@@ -1373,16 +1389,79 @@ function feedArchaeologyToThink() {
   document.getElementById('wth-prompt').focus()
 }
 
+// ── Prompt Ablation ───────────────────────────────────────────────────────────
+async function runAblation() {
+  const prompt = document.getElementById('abl-prompt').value.trim()
+  const probe  = document.getElementById('abl-probe').value.trim() || 'What can you help me with?'
+  const model  = document.getElementById('abl-model').value.trim() || undefined
+  const temp   = parseFloat(document.getElementById('abl-temp').value)
+  const maxTok = parseInt(document.getElementById('abl-tokens').value, 10) || undefined
+  const out    = document.getElementById('abl-results')
+  const btn    = document.getElementById('btn-ablation')
+  if (!prompt) { out.innerHTML = '<span style="color:var(--red)">Enter a system prompt to ablate.</span>'; return }
+  setLoading(btn, 'Analysing…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running ablation…'
+  try {
+    const res = await fetch('/api/ai/ablation', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt, model, systemPrompt: probe, temperature: temp, maxTokens: maxTok }),
+    })
+    const j = await res.json()
+    if (!j.ok) throw new Error(j.error || 'Ablation failed')
+    const d = j.data
+    const maxImpact = Math.max(...d.clauses.map(c => c.impact), 0.001)
+    const clauseCards = d.clauses.map((c, i) => {
+      const pct = Math.round((c.impact / maxImpact) * 100)
+      const barColor = pct >= 70 ? 'var(--red)' : pct >= 35 ? '#f59e0b' : 'var(--green)'
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+          <span style="font-size:10px;font-family:var(--mono);color:var(--muted);flex-shrink:0">C${i+1}</span>
+          <div style="flex:1;background:var(--bg);border-radius:99px;height:8px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px;transition:width .4s ease"></div>
+          </div>
+          <span style="font-size:11px;font-family:var(--mono);color:${barColor};flex-shrink:0;min-width:40px;text-align:right">${(c.impact * 100).toFixed(1)}%</span>
+        </div>
+        <div style="font-size:12px;opacity:.8;margin-bottom:4px">${escHtml(c.clause)}</div>
+        <details style="margin-top:4px">
+          <summary style="font-size:10px;opacity:.5;cursor:pointer;list-style:none">Response without this clause ▾</summary>
+          <div style="font-size:11px;white-space:pre-wrap;margin-top:6px;padding:8px;background:var(--bg);border-radius:4px;opacity:.8">${escHtml(c.ablatedResponse)}</div>
+        </details>
+      </div>`
+    }).join('')
+    out.innerHTML = `
+      <div style="margin-bottom:12px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px">
+        <div style="font-size:10px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Baseline response</div>
+        <div style="font-size:12px;white-space:pre-wrap">${escHtml(d.baseResponse)}</div>
+      </div>
+      <div style="font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Clauses by impact (high = load-bearing)</div>
+      ${clauseCards}
+      <div style="margin-top:6px"><button class="chain-link" onclick="feedAblationToSensitivity()">→ Sensitivity analysis on this prompt</button></div>`
+    lastResult['ablation'] = d
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Analyse') }
+}
+
+function feedAblationToSensitivity() {
+  const prompt = document.getElementById('abl-prompt').value.trim()
+  if (!prompt) return
+  switchTool('sensitivity', document.querySelector('[data-tool="sensitivity"]'))
+  document.getElementById('wsn-prompt').value = prompt
+}
+
 // ── Sandbox Picker ────────────────────────────────────────────────────────────
 const SB_SS_KEY = 'whisper:activeSandbox'
 let activeSandboxCfg = null
 
-const SB_MODEL_FIELDS = ['bc-model','bs-model','ws-model','wsn-model','wct-model','wen-model','war-model','wth-model','rpl-model','prb-model']
+const SB_MODEL_FIELDS = ['bc-model','bs-model','ws-model','wsn-model','wct-model','wen-model','war-model','wth-model','rpl-model','prb-model','abl-model']
 const SB_SYS_FIELDS   = ['bc-sys','bs-sys','wc-sys','ws-sys','wsn-sys','wct-sys','wen-sys','wth-sys','rpl-sys']
+const SB_SYSPROMPT_FIELDS = ['abl-prompt'] // fields that receive the system prompt as content (not system prompt override)
 
 function applySandboxToFields(cfg) {
   if (cfg.model) SB_MODEL_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = cfg.model })
-  if (cfg.systemPrompt) SB_SYS_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = cfg.systemPrompt })
+  if (cfg.systemPrompt) {
+    SB_SYS_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = cfg.systemPrompt })
+    SB_SYSPROMPT_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = cfg.systemPrompt })
+  }
 }
 
 async function loadSandbox(id) {
@@ -1524,6 +1603,7 @@ document.getElementById('btn-entropy').onclick = runEntropy
 document.getElementById('btn-archaeology').onclick = runArchaeology
 document.getElementById('btn-pipeline').onclick = runPipeline
 document.getElementById('btn-think').onclick = runThink
+document.getElementById('btn-ablation').onclick = runAblation
 document.getElementById('btn-guard-lab').onclick = runGuardLab
 
 // ── Monitor ───────────────────────────────────────────────────────────────────

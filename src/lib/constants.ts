@@ -86,6 +86,9 @@ export const BUILD_TTL                   = 604800  // 7 days
 // Guard Laboratory
 export const MAX_GUARD_PROBE_CHARS       = 50_000  // max chars for guard-probe endpoint
 
+// Prompt Ablation
+export const MAX_ABLATION_CLAUSES        = 12
+
 // Document route limits
 export const GUARD_SCAN_SLICE_BYTES      = 8192    // max bytes fed to guard scan on upload
 export const MAX_VECTOR_CHUNKS           = 500     // chunk IDs deleted on document delete

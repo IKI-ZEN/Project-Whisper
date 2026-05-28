@@ -929,6 +929,32 @@ export interface VibeConfig {
   appHtml?: string   // custom HTML page served at /app/:id; uses __SANDBOX_ID__ as placeholder
 }
 
+/**
+ * Split a prompt into discrete clauses suitable for ablation analysis.
+ * Handles numbered lists (1. / 1)), bullet lists (- / * / •), and plain paragraphs.
+ */
+export function parsePromptClauses(prompt: string): string[] {
+  const lines = prompt.split(/\r?\n/)
+  const clauses: string[] = []
+  let current = ''
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      if (current.trim()) { clauses.push(current.trim()); current = '' }
+      continue
+    }
+    const isBullet = /^(\d+[.)]\s+|[-*•]\s+)/.test(trimmed)
+    if (isBullet) {
+      if (current.trim()) { clauses.push(current.trim()); current = '' }
+      current = trimmed
+    } else {
+      current += (current ? ' ' : '') + trimmed
+    }
+  }
+  if (current.trim()) clauses.push(current.trim())
+  return clauses.filter(c => c.length > 0)
+}
+
 export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string): Promise<VibeConfig> {
   const hasGateway = Boolean(env.AI_GATEWAY_ID && env.CLOUDFLARE_ACCOUNT_ID)
 

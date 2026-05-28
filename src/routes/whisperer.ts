@@ -4,11 +4,12 @@ import { json, ok, err, parseBody } from '../lib/http'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
-  parseGuardProbeRequest, parseConsistencyRequest,
+  parseGuardProbeRequest, parseConsistencyRequest, parseAblationRequest,
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
   generatePromptVariants, runCoTProbe, estimateEntropy, reverseEngineerPrompts, think,
+  cosineSimilarity, parsePromptClauses,
 } from '../lib/ai'
 import { executePipeline } from '../lib/pipeline'
 import { scanVerbose, PATTERN_DESCRIPTIONS } from '../lib/guard'
@@ -125,6 +126,39 @@ const thinkHandler: Handler = async (req: Request, env: Env) => {
   }
 }
 
+const ablation: Handler = async (req: Request, env: Env) => {
+  const p = await parseBody(req, parseAblationRequest)
+  if (!p.ok) return p.response
+  const { prompt, model, systemPrompt, temperature, maxTokens } = p.data
+  try {
+    const clauses = parsePromptClauses(prompt)
+    if (clauses.length < 2) return json(err('Prompt must contain at least 2 clauses for ablation', ''), 400)
+    const limited = clauses.slice(0, 12) // MAX_ABLATION_CLAUSES
+    const baseOpts = { model, prompt, systemPrompt, temperature, maxTokens }
+    const baseResponse = await complete(env.AI, env, baseOpts)
+    // For each clause, run completion with that clause removed
+    const ablatedResponses = await Promise.all(
+      limited.map((_, i) => {
+        const ablated = limited.filter((__, j) => j !== i).join('\n')
+        return complete(env.AI, env, { ...baseOpts, prompt: ablated })
+      }),
+    )
+    // Embed base + all ablated responses together
+    const allResponses = [baseResponse, ...ablatedResponses]
+    const embeddings = await embed(env.AI, allResponses)
+    const baseEmbed = embeddings[0]
+    const results = limited.map((clause, i) => ({
+      clause,
+      ablatedResponse: ablatedResponses[i],
+      impact: 1 - cosineSimilarity(baseEmbed, embeddings[i + 1]),
+    }))
+    results.sort((a, b) => b.impact - a.impact)
+    return json(ok({ baseResponse, clauses: results }))
+  } catch (e) {
+    return json(err('Ablation analysis failed', String(e)), 500)
+  }
+}
+
 const consistency: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseConsistencyRequest)
   if (!p.ok) return p.response
@@ -176,6 +210,7 @@ export const whispererRoutes: Array<[string, string, Handler]> = [
   ['POST', '/api/ai/entropy',      entropy],
   ['POST', '/api/ai/archaeology',  archaeology],
   ['POST', '/api/ai/pipeline',     pipeline],
+  ['POST', '/api/ai/ablation',     ablation],
   ['POST', '/api/ai/consistency',  consistency],
   ['POST', '/api/ai/guard-probe',  guardLab],
 ]
