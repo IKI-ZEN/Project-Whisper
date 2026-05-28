@@ -6,7 +6,7 @@ import {
   MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN, MAX_BUILD_DESCRIPTION_LEN,
   MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
-  MAX_DRIFT_TURNS,
+  MAX_DRIFT_TURNS, MAX_STRESS_LEVELS,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -645,6 +645,37 @@ export function parseDriftRequest(body: unknown): DriftRequest {
     systemPrompt: body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
     temperature:  body.temperature  !== undefined ? num(body.temperature,  'temperature',  DEFAULT_TEMPERATURE, 0, 2) : undefined,
     maxTokens:    body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
+  }
+}
+
+// ── Context Stress Test ───────────────────────────────────────────────────────
+
+export interface ContextStressRequest {
+  prompt: string
+  systemPrompt?: string
+  model?: string
+  paddingLevels?: number[]
+  maxTokens?: number
+}
+
+export function parseContextStressRequest(body: unknown): ContextStressRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const defaults = [0, 100, 500, 1000, 2000, 4000]
+  let paddingLevels = defaults
+  if (body.paddingLevels !== undefined) {
+    if (!Array.isArray(body.paddingLevels)) throw new Error('paddingLevels must be an array')
+    if (body.paddingLevels.length > MAX_STRESS_LEVELS) throw new Error(`paddingLevels must have at most ${MAX_STRESS_LEVELS} entries`)
+    paddingLevels = body.paddingLevels.map((v: unknown, i: number) => {
+      if (typeof v !== 'number' || !isFinite(v) || v < 0) throw new Error(`paddingLevels[${i}] must be a non-negative number`)
+      return Math.floor(v)
+    })
+  }
+  return {
+    prompt:        str(body.prompt, 'prompt'),
+    systemPrompt:  body.systemPrompt !== undefined ? str(body.systemPrompt, 'systemPrompt') : undefined,
+    model:         body.model        !== undefined ? str(body.model,        'model')        : undefined,
+    maxTokens:     body.maxTokens    !== undefined ? num(body.maxTokens,    'maxTokens',    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
+    paddingLevels,
   }
 }
 

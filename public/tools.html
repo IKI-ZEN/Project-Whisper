@@ -137,6 +137,7 @@ hr{border:none;border-top:1px solid var(--border)}
     <button class="tool-nav-btn" data-tool="archaeology" onclick="switchTool('archaeology',this)">Archaeology</button>
     <button class="tool-nav-btn" data-tool="pipeline" onclick="switchTool('pipeline',this)">Pipeline</button>
     <button class="tool-nav-btn" data-tool="think" onclick="switchTool('think',this)">Think</button>
+    <button class="tool-nav-btn" data-tool="context-stress" onclick="switchTool('context-stress',this)">Context Stress</button>
     <button class="tool-nav-btn" data-tool="drift" onclick="switchTool('drift',this)">Drift</button>
     <button class="tool-nav-btn" data-tool="ablation" onclick="switchTool('ablation',this)">Ablation</button>
     <button class="tool-nav-btn" data-tool="guard-lab" onclick="switchTool('guard-lab',this)">Guard Lab</button>
@@ -425,6 +426,24 @@ hr{border:none;border-top:1px solid var(--border)}
       <div class="hist-panel" id="hist-panel-think"></div>
     </div>
 
+    <!-- Context Stress Test -->
+    <div id="pane-context-stress" class="tool-pane">
+      <h3 style="margin:0">Context Stress Test</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Measure how response quality degrades as context length grows. A neutral padding phrase is prepended to approximate each token count; response similarity against the baseline reveals the effective context limit.</p>
+      <div class="field"><label>Prompt</label><textarea id="cst-prompt" rows="3" placeholder="Enter the question or task to evaluate…"></textarea></div>
+      <div class="field"><label>System Prompt (optional)</label><input id="cst-sys" type="text" placeholder="You are a helpful assistant."/></div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Model <input id="cst-model" list="whisperer-models-list" placeholder="default" style="width:220px"/></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px">Max Tokens <input type="number" id="cst-tokens" value="512" min="1" max="8192" style="width:72px"/></label>
+        <button id="btn-context-stress">Run Stress Test</button>
+      </div>
+      <div class="field">
+        <label>Padding levels (tokens, comma-separated)</label>
+        <input id="cst-levels" type="text" value="0, 100, 500, 1000, 2000, 4000" placeholder="0, 100, 500, 1000, 2000, 4000"/>
+      </div>
+      <div id="cst-results"></div>
+    </div>
+
     <!-- Multi-Turn Drift -->
     <div id="pane-drift" class="tool-pane">
       <h3 style="margin:0">Multi-Turn Drift Analysis</h3>
@@ -667,7 +686,7 @@ const TOOL_PANES = {
   compare:'pane-compare', sweep:'pane-sweep', sensitivity:'pane-sensitivity',
   cluster:'pane-cluster', cot:'pane-cot', entropy:'pane-entropy',
   archaeology:'pane-archaeology', pipeline:'pane-pipeline', think:'pane-think',
-  drift:'pane-drift', ablation:'pane-ablation', 'guard-lab':'pane-guard-lab',
+  'context-stress':'pane-context-stress', drift:'pane-drift', ablation:'pane-ablation', 'guard-lab':'pane-guard-lab',
   monitor:'pane-monitor', vault:'pane-vault', replay:'pane-replay',
   assertions:'pane-assertions', atlas:'pane-atlas', probes:'pane-probes',
 }
@@ -1405,6 +1424,75 @@ function feedArchaeologyToThink() {
   document.getElementById('wth-prompt').focus()
 }
 
+// ── Context Stress Test ───────────────────────────────────────────────────────
+async function runContextStress() {
+  const prompt  = document.getElementById('cst-prompt').value.trim()
+  const sys     = document.getElementById('cst-sys').value.trim() || undefined
+  const model   = document.getElementById('cst-model').value.trim() || undefined
+  const maxTok  = parseInt(document.getElementById('cst-tokens').value, 10) || undefined
+  const rawLvls = document.getElementById('cst-levels').value
+  const out     = document.getElementById('cst-results')
+  const btn     = document.getElementById('btn-context-stress')
+  if (!prompt) { out.innerHTML = '<span style="color:var(--red)">Enter a prompt.</span>'; return }
+  const paddingLevels = rawLvls.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 0)
+  if (!paddingLevels.length || paddingLevels.length > 8) { out.innerHTML = '<span style="color:var(--red)">Enter 1–8 comma-separated token counts.</span>'; return }
+  setLoading(btn, 'Running…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Running stress levels…'
+  try {
+    const res = await fetch('/api/ai/context-stress', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt, systemPrompt: sys, model, paddingLevels, maxTokens: maxTok }),
+    })
+    const j = await res.json()
+    if (!j.ok) throw new Error(j.error || 'Context stress failed')
+    const d = j.data
+    // Dual SVG chart: similarity + latency
+    const n = d.levels.length
+    const simMax = 1, latMax = Math.max(...d.levels.map(l => l.latencyMs), 1)
+    const w = 460, h = 150, padL = 36, padB = 28, padT = 14, padR = 16
+    const cw = w - padL - padR, ch = h - padT - padB
+    function ptX(i) { return padL + (n > 1 ? i / (n - 1) : 0.5) * cw }
+    function ptY(v, mx) { return padT + ch - (v / mx) * ch }
+    function line2(field, color, mx) {
+      const pts = d.levels.map((l, i) => ({ x: ptX(i), y: ptY(l[field], mx) }))
+      if (pts.length < 2) return ''
+      const pathD = pts.map((p, i) => `${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+      return `<path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${color}" stroke="var(--bg)" stroke-width="2"/>`).join('')}`
+    }
+    const xLabels = d.levels.map((l, i) => `<text x="${ptX(i).toFixed(1)}" y="${padT+ch+18}" text-anchor="middle" font-size="10" fill="#4d6480">${l.tokens >= 1000 ? (l.tokens/1000)+'k' : l.tokens}</text>`).join('')
+    const svgChart = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+ch}" stroke="#1c2a40" stroke-width="1"/>
+      <line x1="${padL}" y1="${padT+ch}" x2="${padL+cw}" y2="${padT+ch}" stroke="#1c2a40" stroke-width="1"/>
+      <text x="${padL-4}" y="${padT+4}" text-anchor="end" font-size="9" fill="#4d6480">100%</text>
+      <text x="${padL-4}" y="${padT+ch+4}" text-anchor="end" font-size="9" fill="#4d6480">0%</text>
+      ${line2('similarity', '#6366f1', 1)}
+      ${xLabels}
+    </svg>`
+    const levelCards = d.levels.map((l, i) => {
+      const simPct = Math.round(l.similarity * 100)
+      const simColor = simPct >= 90 ? 'var(--green)' : simPct >= 70 ? '#f59e0b' : 'var(--red)'
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:11px;font-family:var(--mono);color:var(--muted);flex-shrink:0">${l.tokens >= 1000 ? (l.tokens/1000)+'k' : l.tokens} tok${i === 0 ? ' (baseline)' : ''}</span>
+          <span style="font-size:11px;color:${simColor};flex-shrink:0">similarity: ${simPct}%</span>
+          <span style="font-size:11px;opacity:.5;flex-shrink:0">${l.latencyMs}ms</span>
+        </div>
+        <div style="font-size:12px;white-space:pre-wrap;opacity:.85">${escHtml(l.response)}</div>
+      </div>`
+    }).join('')
+    out.innerHTML = `
+      <div style="margin:12px 0 4px;font-size:11px;opacity:.5">
+        <span style="color:#6366f1">■ Similarity to baseline</span>
+        <span style="margin-left:12px">x-axis: padding tokens added</span>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;overflow-x:auto">${svgChart}</div>
+      <div style="margin-top:16px">${levelCards}</div>`
+    lastResult['context-stress'] = d
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Run Stress Test') }
+}
+
 // ── Multi-Turn Drift ──────────────────────────────────────────────────────────
 async function runDrift() {
   const sys    = document.getElementById('dft-sys').value.trim() || undefined
@@ -1560,8 +1648,8 @@ function feedAblationToSensitivity() {
 const SB_SS_KEY = 'whisper:activeSandbox'
 let activeSandboxCfg = null
 
-const SB_MODEL_FIELDS = ['bc-model','bs-model','ws-model','wsn-model','wct-model','wen-model','war-model','wth-model','rpl-model','prb-model','abl-model','dft-model']
-const SB_SYS_FIELDS   = ['bc-sys','bs-sys','wc-sys','ws-sys','wsn-sys','wct-sys','wen-sys','wth-sys','rpl-sys','dft-sys']
+const SB_MODEL_FIELDS = ['bc-model','bs-model','ws-model','wsn-model','wct-model','wen-model','war-model','wth-model','rpl-model','prb-model','abl-model','dft-model','cst-model']
+const SB_SYS_FIELDS   = ['bc-sys','bs-sys','wc-sys','ws-sys','wsn-sys','wct-sys','wen-sys','wth-sys','rpl-sys','dft-sys','cst-sys']
 const SB_SYSPROMPT_FIELDS = ['abl-prompt'] // fields that receive the system prompt as content (not system prompt override)
 
 function applySandboxToFields(cfg) {
@@ -1711,6 +1799,7 @@ document.getElementById('btn-entropy').onclick = runEntropy
 document.getElementById('btn-archaeology').onclick = runArchaeology
 document.getElementById('btn-pipeline').onclick = runPipeline
 document.getElementById('btn-think').onclick = runThink
+document.getElementById('btn-context-stress').onclick = runContextStress
 document.getElementById('btn-drift').onclick = runDrift
 document.getElementById('btn-ablation').onclick = runAblation
 document.getElementById('btn-guard-lab').onclick = runGuardLab

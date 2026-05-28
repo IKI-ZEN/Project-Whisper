@@ -5,6 +5,7 @@ import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
   parseGuardProbeRequest, parseConsistencyRequest, parseAblationRequest, parseDriftRequest,
+  parseContextStressRequest,
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
@@ -126,6 +127,40 @@ const thinkHandler: Handler = async (req: Request, env: Env) => {
   }
 }
 
+const STRESS_PADDING_PHRASE = 'The following is background context provided for reference purposes only. '
+
+const contextStress: Handler = async (req: Request, env: Env) => {
+  const p = await parseBody(req, parseContextStressRequest)
+  if (!p.ok) return p.response
+  const { prompt, systemPrompt, model, paddingLevels, maxTokens } = p.data
+  const levels = paddingLevels ?? [0, 100, 500, 1000, 2000, 4000]
+  try {
+    // Run baseline + each padded variant sequentially to avoid rate-limiting
+    const results: Array<{ tokens: number; response: string; latencyMs: number }> = []
+    for (const tokens of levels) {
+      const paddingChars = tokens * 4  // STRESS_CHARS_PER_TOKEN
+      const padding = paddingChars > 0
+        ? STRESS_PADDING_PHRASE.repeat(Math.ceil(paddingChars / STRESS_PADDING_PHRASE.length)).slice(0, paddingChars)
+        : ''
+      const paddedPrompt = padding ? `${padding}\n\n${prompt}` : prompt
+      const t0 = Date.now()
+      const response = await complete(env.AI, env, { model, prompt: paddedPrompt, systemPrompt, maxTokens })
+      results.push({ tokens, response, latencyMs: Date.now() - t0 })
+    }
+    // Embed all responses and compute cosine similarity against baseline (level 0)
+    const responses = results.map(r => r.response)
+    const embeddings = await embed(env.AI, responses)
+    const baseEmbed = embeddings[0]
+    const levels2 = results.map((r, i) => ({
+      ...r,
+      similarity: cosineSimilarity(baseEmbed, embeddings[i]),
+    }))
+    return json(ok({ levels: levels2 }))
+  } catch (e) {
+    return json(err('Context stress test failed', String(e)), 500)
+  }
+}
+
 const drift: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseDriftRequest)
   if (!p.ok) return p.response
@@ -241,6 +276,7 @@ export const whispererRoutes: Array<[string, string, Handler]> = [
   ['POST', '/api/ai/entropy',      entropy],
   ['POST', '/api/ai/archaeology',  archaeology],
   ['POST', '/api/ai/pipeline',     pipeline],
+  ['POST', '/api/ai/context-stress', contextStress],
   ['POST', '/api/ai/drift',        drift],
   ['POST', '/api/ai/ablation',     ablation],
   ['POST', '/api/ai/consistency',  consistency],
