@@ -1,4 +1,4 @@
-name = "project-aether-lite"
+name = "project-whisper"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
@@ -57,41 +57,41 @@ id = "00000000000000000000000000000003"
 preview_id = "00000000000000000000000000000004"
 
 # ── D1 Database ───────────────────────────────────────────────────────────────
-# Run: wrangler d1 create aether-lite
+# Run: wrangler d1 create whisper
 # Then replace the placeholder database_id below
 [[d1_databases]]
 binding = "DB"
-database_name = "aether-lite"
+database_name = "whisper"
 database_id = "00000000-0000-0000-0000-000000000001"
 
 # ── R2 Bucket ─────────────────────────────────────────────────────────────────
-# Run: wrangler r2 bucket create aether-lite-files
+# Run: wrangler r2 bucket create whisper-files
 [[r2_buckets]]
 binding = "FILES"
-bucket_name = "aether-lite-files"
+bucket_name = "whisper-files"
 
 # ── Queues ────────────────────────────────────────────────────────────────────
-# Run: wrangler queues create aether-lite-jobs
+# Run: wrangler queues create whisper-jobs
 [[queues.producers]]
 binding = "JOB_QUEUE"
-queue = "aether-lite-jobs"
+queue = "whisper-jobs"
 
 [[queues.consumers]]
-queue = "aether-lite-jobs"
+queue = "whisper-jobs"
 max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 3
 
 # ── Vectorize ─────────────────────────────────────────────────────────────────
-# Run: wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
+# Run: wrangler vectorize create whisper-vectors --dimensions=768 --metric=cosine
 [[vectorize]]
 binding = "VECTORS"
-index_name = "aether-lite-vectors"
+index_name = "whisper-vectors"
 
 # ── Analytics Engine ──────────────────────────────────────────────────────────
 [[analytics_engine_datasets]]
 binding = "ANALYTICS"
-dataset = "aether_lite_events"
+dataset = "whisper_events"
 
 # ── Cron Triggers ─────────────────────────────────────────────────────────────
 # Runs the scheduled probe handler: hourly, daily, and weekly probes

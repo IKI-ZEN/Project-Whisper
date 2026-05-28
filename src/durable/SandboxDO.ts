@@ -286,7 +286,7 @@ export class SandboxDO extends DurableObject<Env> {
 
   private async handleInit(req: Request): Promise<Response> {
     const config   = await req.json() as SandboxConfig
-    const identity = req.headers.get('X-Aether-Identity') ?? null
+    const identity = req.headers.get('X-Whisper-Identity') ?? null
 
     const guard = this.guardedScan(config.systemPrompt ?? '', config.guardMode)
     if (guard) {
@@ -315,7 +315,7 @@ export class SandboxDO extends DurableObject<Env> {
   private async handlePatchConfig(req: Request): Promise<Response> {
     const patch    = await req.json() as Partial<SandboxConfig>
     const config   = await this.load()
-    const identity = req.headers.get('X-Aether-Identity') ?? null
+    const identity = req.headers.get('X-Whisper-Identity') ?? null
 
     if (patch.systemPrompt !== undefined) {
       const effectiveMode = patch.guardMode ?? config.guardMode ?? 'strict'
@@ -344,7 +344,7 @@ export class SandboxDO extends DurableObject<Env> {
 
     const body     = await req.json() as { message: string; sessionId?: string }
     const { message, sessionId } = body
-    const identity = req.headers.get('X-Aether-Identity') ?? null
+    const identity = req.headers.get('X-Whisper-Identity') ?? null
     const config   = await this.load()
     const gMode    = config.guardMode ?? 'strict'
 
@@ -398,7 +398,7 @@ export class SandboxDO extends DurableObject<Env> {
 
     const body     = await req.json() as { message: string; sessionId?: string }
     const { message } = body
-    const identity = req.headers.get('X-Aether-Identity') ?? null
+    const identity = req.headers.get('X-Whisper-Identity') ?? null
     const config   = await this.load()
     const gMode    = config.guardMode ?? 'strict'
 

@@ -571,7 +571,7 @@ export async function embed(ai: Ai, text: string | string[], model?: string): Pr
   if (totalLen > MAX_EMBED_CHARS) throw new Error(`Embedding input exceeds ${MAX_EMBED_CHARS} characters`)
 
   // Cache embeddings — deterministic, expensive, safe to cache for 24h
-  const cacheKey = new Request(`https://aether-cache/embed/${await sha256(JSON.stringify([model ?? MODELS.embed, texts]))}`)
+  const cacheKey = new Request(`https://whisper-cache/embed/${await sha256(JSON.stringify([model ?? MODELS.embed, texts]))}`)
   const cached = await caches.default.match(cacheKey)
   if (cached) return cached.json() as Promise<number[][]>
 

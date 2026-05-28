@@ -1,4 +1,4 @@
-# Project Aether-Lite
+# Project Whisper
 
 A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packages are imported at runtime — all routing, streaming, and serialisation use native Web Platform APIs.
 
@@ -12,7 +12,7 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 - **Image storage** — R2-backed image upload and serving at `/api/app/:id/images`
 - **Email** — send email from generated apps via Cloudflare Email Routing (`POST /api/app/:id/email`, 5/min rate limit per app)
 - **Pages deploy** — deploy any generated app to `{project}.pages.dev` via the Cloudflare Pages Direct Upload API (`POST /api/v2/build/:id/deploy`)
-- **Aether-Lite SDK** — a zero-dep browser ES module (`/vibe-sdk.js`) and `<aether-lite-chat>` web component for embedding any sandbox anywhere (alias `VibeClient` kept for backwards compat)
+- **Whisper SDK** — a zero-dep browser ES module (`/vibe-sdk.js`) and `<whisper-chat>` web component for embedding any sandbox anywhere (alias `VibeClient` kept for backwards compat)
 - **Apps platform** — each sandbox gets a shareable `/app/:id` page, a stable short API at `/s/:id/run`, and appears in the `/apps` gallery
 - **Prompt injection guard** — per-sandbox `guardMode` (`strict` / `audit` / `off`); pattern-based scanner with Unicode normalisation and base64 decode-and-rescan
 - **Integrity verification** — SHA-256 fingerprint of every sandbox config stored in the Durable Object; `tampered: true` signals out-of-band modification
@@ -196,13 +196,13 @@ Every response from the router carries `X-Request-ID: <uuid>` for per-request tr
 
 ---
 
-## Aether-Lite SDK
+## Whisper SDK
 
 ```html
 <script type="module">
-  import { AetherLiteClient } from '/vibe-sdk.js'
-  // VibeClient is a backwards-compat alias for AetherLiteClient
-  const client = new AetherLiteClient()   // '' = same origin; pass URL for cross-origin
+  import { WhisperClient } from '/vibe-sdk.js'
+  // VibeClient is a backwards-compat alias for WhisperClient
+  const client = new WhisperClient()   // '' = same origin; pass URL for cross-origin
 
   // Create a quick AI assistant from a description
   const vibe = await client.vibes.create('A friendly cooking assistant')
@@ -253,9 +253,9 @@ Every response from the router carries `X-Request-ID: <uuid>` for per-request tr
 
 <!-- Drop-in chat widget (Shadow DOM) — three registered aliases -->
 <script type="module" src="/vibe-sdk.js"></script>
-<aether-lite-chat sandbox-id="abc123"></aether-lite-chat>
-<aether-lite-chat sandbox-id="xyz" theme="dark" placeholder="Ask me anything…"></aether-lite-chat>
-<!-- backwards-compat aliases also work: <aether-chat>, <vibe-chat> -->
+<whisper-chat sandbox-id="abc123"></whisper-chat>
+<whisper-chat sandbox-id="xyz" theme="dark" placeholder="Ask me anything…"></whisper-chat>
+<!-- backwards-compat aliases also work: <whisper-chat>, <vibe-chat> -->
 ```
 
 ### Chart helper (available in generated apps)
@@ -282,26 +282,26 @@ See [SETUP.md](SETUP.md) for the full step-by-step guide including wrangler.toml
 Quick start:
 
 ```bash
-git clone https://github.com/iki-zen/project-aether-lite.git
-cd project-aether-lite
+git clone https://github.com/iki-zen/project-whisper.git
+cd project-whisper
 npm install
 cp .dev.vars.example .dev.vars
 
 # Create Cloudflare resources once (see SETUP.md for details)
 wrangler kv:namespace create SANDBOX_REGISTRY
-wrangler d1 create aether-lite
-wrangler r2 bucket create aether-lite-files
-wrangler queues create aether-lite-jobs
-wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
+wrangler d1 create whisper
+wrangler r2 bucket create whisper-files
+wrangler queues create whisper-jobs
+wrangler vectorize create whisper-vectors --dimensions=768 --metric=cosine
 
 # Paste returned IDs into wrangler.toml, then run all migrations:
-wrangler d1 execute aether-lite --file=./migrations/0001_init.sql
-wrangler d1 execute aether-lite --file=./migrations/0002_request_id.sql
-wrangler d1 execute aether-lite --file=./migrations/0003_identity.sql
-wrangler d1 execute aether-lite --file=./migrations/0004_probes.sql
-wrangler d1 execute aether-lite --file=./migrations/0005_vault.sql
-wrangler d1 execute aether-lite --file=./migrations/0006_assertions.sql
-wrangler d1 execute aether-lite --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --file=./migrations/0001_init.sql
+wrangler d1 execute whisper --file=./migrations/0002_request_id.sql
+wrangler d1 execute whisper --file=./migrations/0003_identity.sql
+wrangler d1 execute whisper --file=./migrations/0004_probes.sql
+wrangler d1 execute whisper --file=./migrations/0005_vault.sql
+wrangler d1 execute whisper --file=./migrations/0006_assertions.sql
+wrangler d1 execute whisper --file=./migrations/0007_atlas.sql
 
 # Local dev (uses remote Workers AI — requires wrangler login)
 npm run dev

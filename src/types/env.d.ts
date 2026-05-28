@@ -1,4 +1,4 @@
-export interface AetherLiteJob {
+export interface WhisperJob {
   type: 'ai_completion' | 'embedding_batch' | 'file_process' | 'replay'
   sandboxId: string
   payload: unknown
@@ -47,7 +47,7 @@ export interface Env {
   FILES: R2Bucket
 
   // Queues — async AI jobs
-  JOB_QUEUE: Queue<AetherLiteJob>
+  JOB_QUEUE: Queue<WhisperJob>
 
   // Vectorize — per-sandbox RAG embeddings
   VECTORS: VectorizeIndex

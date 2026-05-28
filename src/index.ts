@@ -1,4 +1,4 @@
-import type { Env, AetherLiteJob } from './types/env'
+import type { Env, WhisperJob } from './types/env'
 import { Router, json, ok } from './lib/http'
 import { aiRoutes }              from './routes/ai'
 import { sandboxRoutes, runHandler, streamHandler } from './routes/sandbox'
@@ -31,7 +31,7 @@ router.get('/api/health', (_req, _env) => Promise.resolve(json(ok({ status: 'ok'
 
 // Discovery (JSON)
 router.get('/api', (_req, _env) => Promise.resolve(json(ok({
-  name:    'Project Aether-Lite',
+  name:    'Project Whisper',
   version: '0.2.0',
   status:  'operational',
   api: {
@@ -87,7 +87,7 @@ export default {
     }
   },
 
-  async queue(batch: MessageBatch<AetherLiteJob>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<WhisperJob>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
       try {
         if (msg.body.type === 'file_process')    await processFile(msg.body, env)

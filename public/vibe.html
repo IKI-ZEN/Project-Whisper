@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vibe — Aether-Lite</title>
+  <title>Vibe — Whisper</title>
   <style>
     :root {
       --bg: #0c0c0f;
@@ -446,7 +446,7 @@
 <body>
 
   <nav class="topnav" role="navigation" aria-label="Main">
-    <a href="/" class="brand">Aether-Lite</a>
+    <a href="/" class="brand">Whisper</a>
     <a href="/" class="navlink">Chat</a>
     <a href="/vibe.html" class="navlink active" aria-current="page">Vibe</a>
     <a href="/apps" class="navlink">Apps</a>
@@ -629,9 +629,9 @@
   </div>
 
   <script type="module">
-    import { AetherLiteClient } from '/vibe-sdk.js'
+    import { WhisperClient } from '/vibe-sdk.js'
 
-    const client = new AetherLiteClient()
+    const client = new WhisperClient()
     let vibeResult = null
     let vibeMode = 'quick'
     let buildFileContent = {}
@@ -858,7 +858,7 @@
     // ── Open in Chat ──
     function gotoChatFromVibe() {
       if (!vibeResult) return
-      localStorage.setItem('aether:sandboxId', vibeResult.sandboxId)
+      localStorage.setItem('whisper:sandboxId', vibeResult.sandboxId)
       window.location.href = '/'
     }
 
@@ -963,7 +963,7 @@
       try {
         const config = JSON.parse(raw)
         const sandbox = await client.sandbox.import(config)
-        localStorage.setItem('aether:sandboxId', sandbox.id)
+        localStorage.setItem('whisper:sandboxId', sandbox.id)
         document.getElementById('import-json').value = ''
         statusEl.style.display = 'block'
         statusEl.style.background = '#34d39922'

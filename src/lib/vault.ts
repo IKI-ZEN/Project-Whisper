@@ -19,7 +19,7 @@ function fromB64url(s: string): Uint8Array {
 
 const ENC  = new TextEncoder()
 const DEC  = new TextDecoder()
-const INFO = ENC.encode('aether-lite-system-prompt-v1')
+const INFO = ENC.encode('whisper-system-prompt-v1')
 
 async function deriveAesKey(secret: string, sandboxId: string): Promise<CryptoKey> {
   const rawKey = await crypto.subtle.importKey('raw', ENC.encode(secret), 'HKDF', false, ['deriveKey'])

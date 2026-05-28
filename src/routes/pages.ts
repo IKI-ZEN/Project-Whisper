@@ -76,7 +76,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </head>
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="brand">Whisper</a>
   <a href="/" class="navlink">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink active" aria-current="page">Apps</a>
@@ -280,7 +280,7 @@ function appsGalleryHtml(nonce: string): string { return `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aether-Lite — Apps</title>
+<title>Whisper — Apps</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
@@ -321,7 +321,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 </head>
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="brand">Whisper</a>
   <a href="/" class="navlink">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink active" aria-current="page">Apps</a>
@@ -440,7 +440,7 @@ function chatPageHtml(nonce: string): string { return `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aether-Lite — Chat</title>
+<title>Whisper — Chat</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
@@ -545,7 +545,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </head>
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="brand">Whisper</a>
   <a href="/" class="navlink active" aria-current="page">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink">Apps</a>
@@ -611,7 +611,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <div id="messages" role="log" aria-live="polite" aria-label="Conversation">
       <div class="chat-empty" id="empty-chat">
         <div class="ce-icon">✦</div>
-        <h3>Aether-Lite Chat</h3>
+        <h3>Whisper Chat</h3>
         <p>Ask anything. Adjust model and temperature in the sidebar, then press Enter.</p>
       </div>
     </div>
@@ -651,10 +651,10 @@ function _renderMd(text){
   return out.join('\\n')
 }
 
-const LS_SID='aether:sandboxId'
-const LS_SESS='aether:sessions'
-const LS_ACTIVE='aether:activeSession'
-const LS_TOKENS='aether:tokens'
+const LS_SID='whisper:sandboxId'
+const LS_SESS='whisper:sessions'
+const LS_ACTIVE='whisper:activeSession'
+const LS_TOKENS='whisper:tokens'
 let sandboxId=localStorage.getItem(LS_SID)
 let sessions=JSON.parse(localStorage.getItem(LS_SESS)||'[]')
 let activeSession=localStorage.getItem(LS_ACTIVE)||'default'
@@ -1074,7 +1074,7 @@ function dashboardHtml(nonce: string): string { return `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aether-Lite — Dashboard</title>
+<title>Whisper — Dashboard</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0c0c0f;--surface:#141418;--border:#252530;--muted:#4a4a60;--text:#d8d8e8;--accent:#7c3aed;--accent2:#a78bfa;--radius:8px;--mono:"JetBrains Mono",ui-monospace,monospace}
@@ -1114,7 +1114,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 </head>
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand">Aether-Lite</a>
+  <a href="/" class="brand">Whisper</a>
   <a href="/" class="navlink">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink">Apps</a>

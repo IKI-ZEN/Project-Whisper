@@ -115,7 +115,7 @@ export const deployBuildHandler: Handler = async (_req, env, params) => {
   if (statusData.data.status !== 'complete') return json(err(`Build not complete (status: ${statusData.data.status})`), 409)
 
   const buildFiles  = statusData.data.files
-  const projectName = `aether-lite-app-${id.slice(0, 8)}`
+  const projectName = `whisper-app-${id.slice(0, 8)}`
   const apiBase     = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}`
   const authHeaders = { 'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}` }
 

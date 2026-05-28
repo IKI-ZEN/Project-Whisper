@@ -38,8 +38,8 @@ export async function doFetch(
 }
 
 export function identityHeader(req: Request): Record<string, string> {
-  const id = req.headers.get('X-Aether-Identity')
-  return id ? { 'X-Aether-Identity': id } : {}
+  const id = req.headers.get('X-Whisper-Identity')
+  return id ? { 'X-Whisper-Identity': id } : {}
 }
 
 // Validate session token when SIGNING_SECRET is set and a token is supplied.
@@ -93,7 +93,7 @@ const create: Handler = async (req, env) => {
 
   const id = newId()
   const ts = now()
-  const identity = req.headers.get('X-Aether-Identity')
+  const identity = req.headers.get('X-Whisper-Identity')
 
   const config: SandboxConfig = { ...parsed, id, memory: [], createdAt: ts, updatedAt: ts }
 
@@ -233,7 +233,7 @@ const history: Handler = async (req, env, params: Params) => {
 const del: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
-  const identity = req.headers.get('X-Aether-Identity')
+  const identity = req.headers.get('X-Whisper-Identity')
   await doFetch(stub(env, id), '/', 'DELETE')
   await env.SANDBOX_REGISTRY.delete(`${SANDBOX_KEY_PREFIX}${id}`)
   await env.DB.prepare(
@@ -289,7 +289,7 @@ const importConfig: Handler = async (req, env) => {
   const ts = now()
   const config: SandboxConfig = { ...p.data, id, memory: [], createdAt: ts, updatedAt: ts }
 
-  const identity = req.headers.get('X-Aether-Identity')
+  const identity = req.headers.get('X-Whisper-Identity')
   await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))
   await registerSandbox(env, {
     id,

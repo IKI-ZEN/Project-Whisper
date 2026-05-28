@@ -1,5 +1,5 @@
 /**
- * Aether-Lite chart.js — zero-dep SVG chart generator
+ * Whisper chart.js — zero-dep SVG chart generator
  *
  * Usage:
  *   import { chart } from '/chart.js'

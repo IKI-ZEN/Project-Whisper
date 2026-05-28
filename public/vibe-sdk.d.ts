@@ -1,6 +1,6 @@
 /**
- * Aether-Lite SDK TypeScript declarations
- * Project Aether-Lite
+ * Whisper SDK TypeScript declarations
+ * Project Whisper
  */
 
 // ── Shared types ──────────────────────────────────────────────────────────────
@@ -478,7 +478,7 @@ export class AppSession {
 // ── AppBuilder ────────────────────────────────────────────────────────────────
 
 /**
- * Client for the Aether-Lite App Builder — generates multi-file web apps
+ * Client for the Whisper App Builder — generates multi-file web apps
  * from natural language descriptions, stored in R2 and served at /build/:id.
  * Inspired by Cloudflare VibeSDK's PhasicClient.
  */
@@ -494,16 +494,16 @@ export class AppBuilder {
   delete(buildId: string): Promise<void>
 }
 
-// ── AetherLiteClient ──────────────────────────────────────────────────────────
+// ── WhisperClient ──────────────────────────────────────────────────────────
 
 /**
- * Main entry point for the Aether-Lite SDK.
+ * Main entry point for the Whisper SDK.
  * Provides access to AI inference, sandbox management, quick vibe creation,
  * and the full multi-file App Builder.
  */
-export class AetherLiteClient {
+export class WhisperClient {
   /**
-   * @param baseUrl Base URL of the Aether-Lite Worker. Defaults to same origin ('').
+   * @param baseUrl Base URL of the Whisper Worker. Defaults to same origin ('').
    */
   constructor(baseUrl?: string)
   readonly ai: AiClient
@@ -512,12 +512,12 @@ export class AetherLiteClient {
   readonly builder: AppBuilder
 }
 
-/** @deprecated Use AetherLiteClient */
-export const VibeClient: typeof AetherLiteClient
+/** @deprecated Use WhisperClient */
+export const VibeClient: typeof WhisperClient
 
 // ── Web components ────────────────────────────────────────────────────────────
 
-export interface AetherLiteChatAttributes {
+export interface WhisperChatAttributes {
   /** Required. ID of the sandbox to connect to. */
   'sandbox-id': string
   /** Base URL of the Worker. Defaults to same origin. */
@@ -528,16 +528,12 @@ export interface AetherLiteChatAttributes {
   theme?: 'light' | 'dark'
 }
 
-/** @deprecated Use AetherLiteChatAttributes */
-export interface AetherChatAttributes extends AetherLiteChatAttributes {}
-
-/** @deprecated Use AetherLiteChatAttributes */
-export interface VibeChatAttributes extends AetherLiteChatAttributes {}
+/** @deprecated Use WhisperChatAttributes */
+export interface VibeChatAttributes extends WhisperChatAttributes {}
 
 declare global {
   interface HTMLElementTagNameMap {
-    'aether-lite-chat': HTMLElement & AetherLiteChatAttributes
-    'aether-chat':      HTMLElement & AetherChatAttributes
-    'vibe-chat':        HTMLElement & VibeChatAttributes
+    'whisper-chat': HTMLElement & WhisperChatAttributes
+    'vibe-chat':    HTMLElement & VibeChatAttributes
   }
 }

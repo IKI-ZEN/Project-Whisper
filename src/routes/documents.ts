@@ -1,4 +1,4 @@
-import type { Env, AetherLiteJob } from '../types/env'
+import type { Env, WhisperJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, checkRateLimit, parseBodyOptional } from '../lib/http'
 import { scan } from '../lib/guard'
@@ -156,7 +156,7 @@ const reindex: Handler = async (req, env, params: Params) => {
   if (!p.ok) return p.response
   const { docIds } = p.data
 
-  const job: AetherLiteJob = {
+  const job: WhisperJob = {
     type: 'embedding_batch',
     sandboxId,
     payload: docIds ? { docIds } : {},

@@ -62,5 +62,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Per-request nonce CSP headers with violation reporting to D1
 - Three-layer rate limiting: per-IP on AI routes, per-sandbox on run/stream, per-app on email sends
 - `GET /api/v2/build` build list endpoint with KV-backed metadata index
-- Aether-Lite browser SDK (`public/vibe-sdk.js`): `AetherLiteClient`, `AppBuilder`, `AppHandle`, `AppStateHandle`, `SandboxConnection`, and `<aether-lite-chat>` web component
+- Whisper browser SDK (`public/vibe-sdk.js`): `WhisperClient`, `AppBuilder`, `AppHandle`, `AppStateHandle`, `SandboxConnection`, and `<whisper-chat>` web component
 - GitHub Actions type-check workflow (`.github/workflows/typecheck.yml`)

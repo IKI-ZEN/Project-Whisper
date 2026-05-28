@@ -1,4 +1,4 @@
-# Architecture — Project Aether-Lite
+# Architecture — Project Whisper
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@
 
 ## 1. Design Philosophy
 
-Project Aether-Lite is built around three immovable constraints:
+Project Whisper is built around three immovable constraints:
 
 **Zero runtime npm dependencies.** Nothing is imported from npm at runtime. HTTP routing, streaming, request parsing, cryptography, and serialisation all use native Web Platform APIs — `URLPattern`, `ReadableStream`, `DecompressionStream`, `crypto.subtle`, `TextEncoder`, `Intl.*`. This eliminates supply-chain risk, keeps cold-start times minimal, and ensures the entire runtime fits inside a single Cloudflare Worker bundle.
 
@@ -607,7 +607,7 @@ Zero-dependency browser SDK. ES module — no bundler required. Designed for dir
 Class hierarchy:
 
 ```
-AetherLiteClient
+WhisperClient
   ├─ .ai        → AiClient          complete/stream/embed/image/transcribe
   │              + compare/sweep/sensitivity/cluster/cot/entropy/archaeology
   │              + pipeline/think
@@ -623,11 +623,11 @@ AetherLiteClient
                           └─ .state → AppStateHandle  get/set/list/delete/clear
 ```
 
-**Backward-compatibility aliases:** `VibeClient` → `AetherLiteClient`, `VibeResult` → `VibeBuilderResult`.
+**Backward-compatibility aliases:** `VibeClient` → `WhisperClient`, `VibeResult` → `VibeBuilderResult`.
 
 **Web components** — three Shadow DOM custom elements are registered, all sharing `VibeChatElement` as the base class:
-- `<aether-lite-chat>` — primary name
-- `<aether-chat>` — alias
+- `<whisper-chat>` — primary name
+- `<whisper-chat>` — alias
 - `<vibe-chat>` — legacy alias
 
 The chat element streams AI tokens, accumulates them in a buffer, and renders the final output as Markdown using the inlined `_renderMd()` function.

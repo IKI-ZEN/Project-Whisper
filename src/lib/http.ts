@@ -166,14 +166,14 @@ export class Router {
     }
 
     // Cloudflare Access: gate state-mutation endpoints when CF_ACCESS_AUD is set.
-    // Identity is forwarded on the request as X-Aether-Identity for D1 audit trail.
+    // Identity is forwarded on the request as X-Whisper-Identity for D1 audit trail.
     let dispatchReq = req
     if (isProtectedRequest(req.method, url.pathname)) {
       const { deny: authRes, identity } = await requireAccess(req, env)
       if (authRes) return this.addHeaders(authRes, cors, requestId)
       if (identity?.email) {
         const headers = new Headers(req.headers)
-        headers.set('X-Aether-Identity', identity.email)
+        headers.set('X-Whisper-Identity', identity.email)
         dispatchReq = new Request(req, { headers })
       }
     }

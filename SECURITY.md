@@ -6,7 +6,7 @@ Only the latest commit on the `main` branch is supported. There are no versioned
 
 ## Reporting a Vulnerability
 
-Open a [GitHub Security Advisory](https://github.com/iki-zen/project-aether-lite/security/advisories/new) or contact the maintainers privately with the subject line:
+Open a [GitHub Security Advisory](https://github.com/iki-zen/project-whisper/security/advisories/new) or contact the maintainers privately with the subject line:
 
 ```
 SECURITY: [brief description]
@@ -41,7 +41,7 @@ Include as much detail as you can: steps to reproduce, affected endpoint or comp
 
 ## Security Features
 
-Project Aether-Lite includes a layered security subsystem:
+Project Whisper includes a layered security subsystem:
 
 - **Inbound guard pipeline** — every AI call passes through Unicode normalisation (NFKC + zero-width stripping), pattern matching against blocked/suspicious/secrets tables, and base64 decode-and-rescan to catch encoded evasion attempts
 - **Integrity hashing** — SHA-256 fingerprint over sandbox config fields; tamper detection on every `GET /api/sandbox/:id`

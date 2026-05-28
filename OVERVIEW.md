@@ -1,8 +1,8 @@
-# Project Aether-Lite — Overview
+# Project Whisper — Overview
 
 ## What is it?
 
-Aether-Lite is a platform for building and deploying AI-powered apps without writing backend code. You describe what you want your app to do in plain English, and the platform designs, configures, and launches it in seconds.
+Whisper is a platform for building and deploying AI-powered apps without writing backend code. You describe what you want your app to do in plain English, and the platform designs, configures, and launches it in seconds.
 
 Every app you create lives on Cloudflare's global network — no servers to provision, no infrastructure to manage. The platform has zero npm runtime dependencies; every HTTP request, streaming response, and data store interaction uses native Web Platform APIs.
 
@@ -96,7 +96,7 @@ Once all files are written, the app is live at `/build/:id` — no deploy step, 
 
 ## Choosing an AI model
 
-Aether-Lite supports several AI models out of the box:
+Whisper supports several AI models out of the box:
 
 | Model | Best for |
 |-------|---------|
@@ -114,7 +114,7 @@ The Vibe Builder picks the most suitable model automatically based on your descr
 
 ## Sharing apps between instances
 
-Any sandbox can be exported as a portable JSON config and imported into a completely separate deployment of Aether-Lite. This creates an independent copy with a new ID — the two sandboxes are unlinked after the import.
+Any sandbox can be exported as a portable JSON config and imported into a completely separate deployment of Whisper. This creates an independent copy with a new ID — the two sandboxes are unlinked after the import.
 
 **To share a sandbox:**
 - From the standalone app page (`/app/:id`), click **Share config** — the JSON is copied to your clipboard
@@ -130,10 +130,10 @@ The export includes the name, description, system prompt, model, temperature, an
 
 ## Embedding apps anywhere
 
-The `<aether-lite-chat>` widget lets you embed any sandbox as a chat box on any webpage — no backend changes needed, just a single line of HTML:
+The `<whisper-chat>` widget lets you embed any sandbox as a chat box on any webpage — no backend changes needed, just a single line of HTML:
 
 ```html
-<aether-lite-chat sandbox-id="your-sandbox-id"></aether-lite-chat>
+<whisper-chat sandbox-id="your-sandbox-id"></whisper-chat>
 ```
 
 The widget streams AI responses and renders them as formatted Markdown — headings, bold text, code blocks, lists, and links all display correctly. It works in light or dark mode and is fully self-contained — it won't interfere with the rest of your page.
@@ -145,8 +145,8 @@ The widget streams AI responses and renders them as formatted Markdown — headi
 If you want to integrate a sandbox or built app into your own application, the **vibe-sdk** (`/vibe-sdk.js`) is a JavaScript library that wraps the entire platform in a clean, fluent API:
 
 ```javascript
-import { AetherLiteClient } from '/vibe-sdk.js'
-const client = new AetherLiteClient()
+import { WhisperClient } from '/vibe-sdk.js'
+const client = new WhisperClient()
 
 // Create a new AI app from a description
 const app = await client.vibes.create('A friendly cooking assistant')
@@ -202,7 +202,7 @@ The SDK handles authentication, streaming, error handling, and retry logic autom
 
 ## For AI Whisperers
 
-Aether-Lite is designed to get out of the way when you need to study how models actually behave. The following features are built specifically for researchers who probe attractor basins, test entropy, and explore activation patterns.
+Whisper is designed to get out of the way when you need to study how models actually behave. The following features are built specifically for researchers who probe attractor basins, test entropy, and explore activation patterns.
 
 ### Guard mode
 
@@ -317,7 +317,7 @@ const { thinking, response } = await client.ai.think('Solve this step by step: �
 
 ### Markdown rendering in the chat widget
 
-The `<aether-lite-chat>` web component renders AI responses as formatted Markdown — useful when probing a model's structured output or comparing formatting consistency across models and temperatures.
+The `<whisper-chat>` web component renders AI responses as formatted Markdown — useful when probing a model's structured output or comparing formatting consistency across models and temperatures.
 
 ### Integrity verification
 
@@ -331,7 +331,7 @@ When `SIGNING_SECRET` is configured on the server, exported configs carry an HMA
 
 ## What it runs on
 
-Aether-Lite is built entirely on Cloudflare's global network. This means:
+Whisper is built entirely on Cloudflare's global network. This means:
 
 - **Fast everywhere** — apps run at the edge, close to your users worldwide
 - **No servers to manage** — the infrastructure scales automatically

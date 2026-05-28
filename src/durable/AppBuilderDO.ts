@@ -119,7 +119,7 @@ function generateBuildThumbnail(state: BuildState): string {
   <text x="28" y="60" font-family="monospace" font-size="10" fill="${color}">${escSvg(stack)}</text>
   <text x="20" y="96" font-family="-apple-system,sans-serif" font-size="9" letter-spacing="0.06em" fill="#4a4a60">FILES</text>
   ${fileLines}
-  <text x="20" y="192" font-family="-apple-system,sans-serif" font-size="9" fill="#252530">Aether-Lite · ${n} file${n !== 1 ? 's' : ''}</text>
+  <text x="20" y="192" font-family="-apple-system,sans-serif" font-size="9" fill="#252530">Whisper · ${n} file${n !== 1 ? 's' : ''}</text>
 </svg>`
 }
 
@@ -274,7 +274,7 @@ Output exactly this JSON structure (no other text):
 {"name":"string","techStack":"vanilla|alpine|react|vue|worker","cdnDependencies":["url"],"files":[{"filename":"index.html","description":"what it does","role":"entry"}],"sandboxIntegration":false}`
 
     const userContent = (initialState.sandboxId
-      ? '[This app integrates with an Aether-Lite AI sandbox backend. Set sandboxIntegration:true]\n'
+      ? '[This app integrates with an Whisper AI sandbox backend. Set sandboxIntegration:true]\n'
       : '') + initialState.description
 
     const blueprintMessages: Message[] = [{ role: 'user', content: userContent, timestamp: Date.now() }]
@@ -331,8 +331,8 @@ Output exactly this JSON structure (no other text):
     const fileListDesc  = blueprint.files.map((f, i) => `${i + 1}. ${f.filename} — ${f.description}`).join('\n')
     const cdnList       = blueprint.cdnDependencies.length > 0 ? blueprint.cdnDependencies.join(', ') : 'none'
     const sandboxNote   = blueprint.sandboxIntegration && initialState.sandboxId
-      ? `\nThis app integrates with an Aether-Lite AI sandbox (ID: "${initialState.sandboxId}"). ` +
-        `Import AetherLiteClient from /vibe-sdk.js and use client.sandbox.get('${initialState.sandboxId}').run(msg) for AI responses.`
+      ? `\nThis app integrates with an Whisper AI sandbox (ID: "${initialState.sandboxId}"). ` +
+        `Import WhisperClient from /vibe-sdk.js and use client.sandbox.get('${initialState.sandboxId}').run(msg) for AI responses.`
       : ''
 
     const generatedFiles: string[] = []

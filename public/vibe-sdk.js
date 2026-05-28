@@ -1,13 +1,13 @@
 /**
- * Aether-Lite SDK — zero-dependency client for Project Aether-Lite
+ * Whisper SDK — zero-dependency client for Project Whisper
  *
  * Usage (ES module):
- *   import { AetherLiteClient } from '/vibe-sdk.js'
- *   const client = new AetherLiteClient()
+ *   import { WhisperClient } from '/vibe-sdk.js'
+ *   const client = new WhisperClient()
  *
  * Usage (web component):
  *   <script type="module" src="/vibe-sdk.js"></script>
- *   <aether-lite-chat sandbox-id="abc123"></aether-lite-chat>
+ *   <whisper-chat sandbox-id="abc123"></whisper-chat>
  *
  * @module vibe-sdk
  */
@@ -493,7 +493,7 @@ export class SandboxHandle {
 
   /**
    * Export this sandbox's configuration as a portable object that can be
-   * imported into any Aether-Lite instance via SandboxClient.import().
+   * imported into any Whisper instance via SandboxClient.import().
    * @returns {Promise<{ version: 1, name: string, description: string, systemPrompt: string, tools: object[], model: string, temperature: number, maxTokens: number }>}
    */
   async export() {
@@ -914,7 +914,7 @@ export class AppSession {
 // ── AppBuilder ────────────────────────────────────────────────────────────────
 
 /**
- * Client for the Aether-Lite App Builder — generates multi-file web apps
+ * Client for the Whisper App Builder — generates multi-file web apps
  * from natural language descriptions, stored in R2 and served at /build/:id.
  *
  * Inspired by Cloudflare VibeSDK's PhasicClient.
@@ -961,16 +961,16 @@ export class AppBuilder {
   }
 }
 
-// ── AetherLiteClient ──────────────────────────────────────────────────────────
+// ── WhisperClient ──────────────────────────────────────────────────────────
 
 /**
- * Main entry point for the Aether-Lite SDK.
+ * Main entry point for the Whisper SDK.
  * Provides access to AI inference, sandbox management, quick vibe creation,
  * and the full multi-file App Builder.
  */
-export class AetherLiteClient {
+export class WhisperClient {
   /**
-   * @param {string} [baseUrl] - Base URL of the Aether-Lite Worker. Defaults to same origin ('').
+   * @param {string} [baseUrl] - Base URL of the Whisper Worker. Defaults to same origin ('').
    */
   constructor(baseUrl = '') {
     /** @type {AiClient} */      this.ai      = new AiClient(baseUrl)
@@ -981,7 +981,7 @@ export class AetherLiteClient {
 }
 
 // Backwards-compatibility alias — existing code using VibeClient continues to work.
-export const VibeClient = AetherLiteClient
+export const VibeClient = WhisperClient
 
 // ── <vibe-chat> Web Component ─────────────────────────────────────────────────
 
@@ -1192,7 +1192,7 @@ class VibeChatElement extends HTMLElement {
     const baseUrl = this.getAttribute('base-url') ?? ''
     if (!id) return
     try {
-      this._handle = await new AetherLiteClient(baseUrl).sandbox.get(id)
+      this._handle = await new WhisperClient(baseUrl).sandbox.get(id)
     } catch (e) {
       this._msg('error', `Could not load sandbox: ${e.message}`)
     }
@@ -1253,10 +1253,6 @@ class VibeChatElement extends HTMLElement {
 
 customElements.define('vibe-chat', VibeChatElement)
 
-// <aether-lite-chat> — canonical name for the Aether-Lite web component
-class AetherLiteChatElement extends VibeChatElement {}
-customElements.define('aether-lite-chat', AetherLiteChatElement)
-
-// <aether-chat> — backwards-compat alias
-class AetherChatElement extends VibeChatElement {}
-customElements.define('aether-chat', AetherChatElement)
+// <whisper-chat> — canonical name for the Whisper web component
+class WhisperChatElement extends VibeChatElement {}
+customElements.define('whisper-chat', WhisperChatElement)

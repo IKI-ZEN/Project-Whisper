@@ -1,6 +1,6 @@
-# Contributing to Project Aether-Lite
+# Contributing to Project Whisper
 
-Aether-Lite is a zero-runtime-dependency AI harness running entirely on Cloudflare infrastructure. Everything is native Web Platform APIs — no npm packages are imported at runtime.
+Whisper is a zero-runtime-dependency AI harness running entirely on Cloudflare infrastructure. Everything is native Web Platform APIs — no npm packages are imported at runtime.
 
 ---
 
@@ -20,7 +20,7 @@ Aether-Lite is a zero-runtime-dependency AI harness running entirely on Cloudfla
 1. Clone the repository and install dev dependencies:
    ```bash
    git clone <repo-url>
-   cd project-aether-lite
+   cd project-whisper
    npm install
    ```
 
@@ -44,19 +44,19 @@ These commands provision the cloud resources that bindings in `wrangler.toml` po
 ```bash
 wrangler kv:namespace create SANDBOX_REGISTRY
 wrangler kv:namespace create RATE_LIMITS
-wrangler d1 create aether-lite
-wrangler r2 bucket create aether-lite-files
-wrangler queues create aether-lite-jobs
-wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
+wrangler d1 create whisper
+wrangler r2 bucket create whisper-files
+wrangler queues create whisper-jobs
+wrangler vectorize create whisper-vectors --dimensions=768 --metric=cosine
 
 # Apply D1 schema migrations (run all in order)
-wrangler d1 execute aether-lite --file=./migrations/0001_init.sql
-wrangler d1 execute aether-lite --file=./migrations/0002_request_id.sql
-wrangler d1 execute aether-lite --file=./migrations/0003_identity.sql
-wrangler d1 execute aether-lite --file=./migrations/0004_probes.sql
-wrangler d1 execute aether-lite --file=./migrations/0005_vault.sql
-wrangler d1 execute aether-lite --file=./migrations/0006_assertions.sql
-wrangler d1 execute aether-lite --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --file=./migrations/0001_init.sql
+wrangler d1 execute whisper --file=./migrations/0002_request_id.sql
+wrangler d1 execute whisper --file=./migrations/0003_identity.sql
+wrangler d1 execute whisper --file=./migrations/0004_probes.sql
+wrangler d1 execute whisper --file=./migrations/0005_vault.sql
+wrangler d1 execute whisper --file=./migrations/0006_assertions.sql
+wrangler d1 execute whisper --file=./migrations/0007_atlas.sql
 ```
 
 After running the above, paste the returned `id` / `preview_id` values into the placeholder entries in `wrangler.toml`.

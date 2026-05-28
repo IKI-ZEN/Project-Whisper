@@ -1,4 +1,4 @@
-import type { Env, AetherLiteJob } from '../types/env'
+import type { Env, WhisperJob } from '../types/env'
 import { embed } from '../lib/ai'
 import { scan } from '../lib/guard'
 import { MAX_PDF_INFLATED } from '../lib/constants'
@@ -161,7 +161,7 @@ function chunkText(text: string, size = 512, overlap = 64): string[] {
 
 // ── Job handlers ──────────────────────────────────────────────────────────────
 
-export async function processFile(job: AetherLiteJob, env: Env): Promise<void> {
+export async function processFile(job: WhisperJob, env: Env): Promise<void> {
   const { docId, key, mimeType } = job.payload as FileProcessPayload
   const { sandboxId } = job
 
@@ -217,7 +217,7 @@ interface EmbeddingBatchPayload {
   docIds?: string[]
 }
 
-export async function processEmbeddingBatch(job: AetherLiteJob, env: Env): Promise<void> {
+export async function processEmbeddingBatch(job: WhisperJob, env: Env): Promise<void> {
   const { sandboxId } = job
   const { docIds } = (job.payload ?? {}) as EmbeddingBatchPayload
 

@@ -36,7 +36,7 @@ const createVibe: Handler = async (req, env) => {
 
   const id       = newId()
   const ts       = now()
-  const identity = req.headers.get('X-Aether-Identity')
+  const identity = req.headers.get('X-Whisper-Identity')
   const config: SandboxConfig = { ...vibeConfig, id, memory: [], createdAt: ts, updatedAt: ts }
 
   await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))

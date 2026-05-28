@@ -1,6 +1,6 @@
 # Setup Guide
 
-This guide walks through everything required to run Project Aether-Lite locally and deploy it to Cloudflare Workers.
+This guide walks through everything required to run Project Whisper locally and deploy it to Cloudflare Workers.
 
 ---
 
@@ -19,8 +19,8 @@ All infrastructure is Cloudflare-native. No Docker, no database server, nothing 
 ## 1. Clone and install
 
 ```bash
-git clone https://github.com/iki-zen/project-aether-lite.git
-cd project-aether-lite
+git clone https://github.com/iki-zen/project-whisper.git
+cd project-whisper
 npm install
 ```
 
@@ -36,17 +36,17 @@ wrangler kv:namespace create SANDBOX_REGISTRY
 wrangler kv:namespace create RATE_LIMITS
 
 # D1 database (SQLite)
-wrangler d1 create aether-lite
+wrangler d1 create whisper
 
 # R2 bucket (file storage)
-wrangler r2 bucket create aether-lite-files
+wrangler r2 bucket create whisper-files
 
 # Queues (background jobs)
-wrangler queues create aether-lite-jobs
+wrangler queues create whisper-jobs
 
 # Vectorize index (RAG embeddings — 768-dim cosine, matched to @cf/baai/bge-base-en-v1.5)
 # If you swap the embedding model, update --dimensions to match its output size.
-wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
+wrangler vectorize create whisper-vectors --dimensions=768 --metric=cosine
 ```
 
 > **Note:** Vectorize and Queues require a Cloudflare Workers Paid plan ($5/month). All other resources are free.
@@ -76,8 +76,8 @@ preview_id = "<preview_id from the same output>"
 ```toml
 [[d1_databases]]
 binding = "DB"
-database_name = "aether-lite"
-database_id = "<database_id from: wrangler d1 create aether-lite>"
+database_name = "whisper"
+database_id = "<database_id from: wrangler d1 create whisper>"
 ```
 
 No changes are needed for R2, Queues, Vectorize, or Analytics Engine — their names are used as-is.
@@ -88,22 +88,22 @@ No changes are needed for R2, Queues, Vectorize, or Analytics Engine — their n
 
 ```bash
 # Remote (production) database
-wrangler d1 execute aether-lite --remote --file=./migrations/0001_init.sql
-wrangler d1 execute aether-lite --remote --file=./migrations/0002_request_id.sql
-wrangler d1 execute aether-lite --remote --file=./migrations/0003_identity.sql
-wrangler d1 execute aether-lite --remote --file=./migrations/0004_probes.sql
-wrangler d1 execute aether-lite --remote --file=./migrations/0005_vault.sql
-wrangler d1 execute aether-lite --remote --file=./migrations/0006_assertions.sql
-wrangler d1 execute aether-lite --remote --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --remote --file=./migrations/0001_init.sql
+wrangler d1 execute whisper --remote --file=./migrations/0002_request_id.sql
+wrangler d1 execute whisper --remote --file=./migrations/0003_identity.sql
+wrangler d1 execute whisper --remote --file=./migrations/0004_probes.sql
+wrangler d1 execute whisper --remote --file=./migrations/0005_vault.sql
+wrangler d1 execute whisper --remote --file=./migrations/0006_assertions.sql
+wrangler d1 execute whisper --remote --file=./migrations/0007_atlas.sql
 
 # Local dev database (for `npm run dev:local`)
-wrangler d1 execute aether-lite --local --file=./migrations/0001_init.sql
-wrangler d1 execute aether-lite --local --file=./migrations/0002_request_id.sql
-wrangler d1 execute aether-lite --local --file=./migrations/0003_identity.sql
-wrangler d1 execute aether-lite --local --file=./migrations/0004_probes.sql
-wrangler d1 execute aether-lite --local --file=./migrations/0005_vault.sql
-wrangler d1 execute aether-lite --local --file=./migrations/0006_assertions.sql
-wrangler d1 execute aether-lite --local --file=./migrations/0007_atlas.sql
+wrangler d1 execute whisper --local --file=./migrations/0001_init.sql
+wrangler d1 execute whisper --local --file=./migrations/0002_request_id.sql
+wrangler d1 execute whisper --local --file=./migrations/0003_identity.sql
+wrangler d1 execute whisper --local --file=./migrations/0004_probes.sql
+wrangler d1 execute whisper --local --file=./migrations/0005_vault.sql
+wrangler d1 execute whisper --local --file=./migrations/0006_assertions.sql
+wrangler d1 execute whisper --local --file=./migrations/0007_atlas.sql
 ```
 
 Run all seven migrations in order. They are idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` with `IF NOT EXISTS` equivalents).
