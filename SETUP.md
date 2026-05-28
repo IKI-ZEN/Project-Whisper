@@ -44,7 +44,8 @@ wrangler r2 bucket create aether-lite-files
 # Queues (background jobs)
 wrangler queues create aether-lite-jobs
 
-# Vectorize index (RAG embeddings — 768-dim, cosine)
+# Vectorize index (RAG embeddings — 768-dim cosine, matched to @cf/baai/bge-base-en-v1.5)
+# If you swap the embedding model, update --dimensions to match its output size.
 wrangler vectorize create aether-lite-vectors --dimensions=768 --metric=cosine
 ```
 
@@ -138,6 +139,8 @@ ENVIRONMENT=development
 
 Everything else is optional.
 
+> **Warning — open AI proxy without Cloudflare Access.** Without `CF_ACCESS_AUD` set, every API endpoint (including all AI inference routes) is publicly accessible to anyone who can reach the Worker URL. This means your Workers AI quota and any third-party API keys are exposed. Before deploying to a public URL, either set `CF_ACCESS_AUD` / `CF_ACCESS_TEAM_DOMAIN` (see [Optional: Cloudflare Access](#optional-cloudflare-access-zero-trust) below) or restrict access at the network level.
+
 ---
 
 ## 6. Local development
@@ -167,7 +170,7 @@ The dev server starts at `http://localhost:8787`.
 npm run type-check   # npx tsc --noEmit
 ```
 
-This is the primary correctness gate — there are no automated tests. Run it before every commit.
+This is the primary correctness gate — there are no automated behavioural tests. The type-checker catches type and logic errors; feature correctness is verified manually. Run it before every commit.
 
 ---
 

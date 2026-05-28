@@ -5,6 +5,7 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { scan } from '../lib/guard'
+import { newId } from '../lib/utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -259,7 +260,7 @@ const createSuite: Handler = async (req, env) => {
 
   try {
     const { name, description, cases } = p.data
-    const id = crypto.randomUUID()
+    const id = newId()
     const now = Date.now()
 
     await env.DB.prepare(
@@ -401,7 +402,7 @@ const runSuite: Handler = async (_req, env, params) => {
     const totalCases = runResults.length
     const passed = runResults.filter(r => r.passed).length
     const failed = totalCases - passed
-    const runId = crypto.randomUUID()
+    const runId = newId()
 
     await env.DB.prepare(
       'INSERT INTO assertion_runs (id, suite_id, ran_at, total_cases, passed, failed, results) VALUES (?, ?, ?, ?, ?, ?, ?)',

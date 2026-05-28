@@ -29,7 +29,10 @@ export { AppStateDO }    from './durable/AppStateDO'
 
 const router = new Router()
 
-// Health / discovery (JSON)
+// Health check
+router.get('/api/health', (_req, _env) => Promise.resolve(json(ok({ status: 'ok' }))))
+
+// Discovery (JSON)
 router.get('/api', (_req, _env) => Promise.resolve(json(ok({
   name:    'Project Aether-Lite',
   version: '0.2.0',
