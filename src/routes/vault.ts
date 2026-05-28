@@ -1,10 +1,13 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
-import { newId } from '../lib/utils'
+import { newId, isUUID } from '../lib/utils'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { parseVaultAnalyzeRequest } from '../lib/schema'
-import { VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW } from '../lib/constants'
+import {
+  VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW,
+  VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW,
+} from '../lib/constants'
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
@@ -73,6 +76,9 @@ function parseRow(row: Record<string, unknown>) {
 
 // POST /api/vault
 const create: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:vault-write:${ip}`, VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseVaultRecord)
   if (!p.ok) return p.response
   const { prompt, response, model, temperature, system_prompt, tool, metadata, tags } = p.data
@@ -141,6 +147,7 @@ const list: Handler = async (req: Request, env: Env) => {
 const remove: Handler = async (req: Request, env: Env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     const result = await env.DB.prepare('DELETE FROM vault_records WHERE id = ?').bind(id).run()
     if ((result.meta?.changes ?? 0) === 0) return json(err('Record not found'), 404)
@@ -154,6 +161,7 @@ const remove: Handler = async (req: Request, env: Env, params: Params) => {
 const updateTags: Handler = async (req: Request, env: Env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   const p = await parseBody(req, parseTagsBody)
   if (!p.ok) return p.response
   const { tags } = p.data

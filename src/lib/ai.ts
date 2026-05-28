@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Message, SandboxConfig, Tool } from './schema'
 import { sseEvent } from './http'
-import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS } from './constants'
+import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS } from './constants'
 import { sha256 } from './utils'
 import { estimateCost, type CallType } from './pricing'
 
@@ -276,6 +276,7 @@ async function completeOpenAI(env: Env, model: string, opts: CompletionOpts): Pr
       ...metaHeaders,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`OpenAI gateway error ${res.status}: ${await res.text()}`)
   type OAIResp = { choices: Array<{ finish_reason: string; message: { content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }> }
@@ -325,6 +326,7 @@ async function completeAnthropic(env: Env, model: string, opts: CompletionOpts):
     method: 'POST',
     headers: anthHeaders,
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`Anthropic gateway error ${res.status}: ${await res.text()}`)
   type AnthResp = {
@@ -377,6 +379,7 @@ async function completeGoogle(env: Env, model: string, opts: CompletionOpts): Pr
       method: 'POST',
       headers: googleHeaders,
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
   )
   if (!res.ok) throw new Error(`Google gateway error ${res.status}: ${await res.text()}`)
@@ -454,6 +457,7 @@ function streamOpenAI(env: Env, model: string, opts: CompletionOpts): ReadableSt
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY ?? ''}` },
       body: JSON.stringify({ model, messages: buildMessages(opts), temperature: opts.temperature ?? DEFAULT_TEMPERATURE, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, stream: true }),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
     (c: unknown) => (c as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content,
   ))
@@ -467,6 +471,7 @@ function streamAnthropic(env: Env, model: string, opts: CompletionOpts): Readabl
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY ?? '', 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model, messages, ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}), max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, temperature: opts.temperature ?? DEFAULT_TEMPERATURE, stream: true }),
+      signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
     (c: unknown) => { const ch = c as { type?: string; delta?: { text?: string } }; return ch.type === 'content_block_delta' ? ch.delta?.text : undefined },
   ))
@@ -485,7 +490,7 @@ function streamGoogle(env: Env, model: string, opts: CompletionOpts): ReadableSt
   }
   return toReadableStream(() => streamSSEFetch(
     `${gatewayBase(env)}/google-ai-studio/v1/models/${model}:streamGenerateContent?alt=sse&key=${env.GOOGLE_AI_KEY ?? ''}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS) },
     (c: unknown) => (c as { candidates?: { content?: { parts?: { text?: string }[] } }[] }).candidates?.[0]?.content?.parts?.[0]?.text,
   ))
 }

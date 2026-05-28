@@ -868,11 +868,19 @@ export function parseVaultAnalyzeRequest(body: unknown): VaultAnalyzeRequest {
 
 // ── Probe Webhook ─────────────────────────────────────────────────────────────
 
+const BLOCKED_WEBHOOK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
+
 export function parseWebhookUrl(v: unknown): string | undefined {
   if (v === undefined || v === null) return undefined
   if (typeof v !== 'string') throw new Error('webhookUrl must be a string')
   if (v.length === 0) return undefined
   if (!v.startsWith('https://')) throw new Error('webhookUrl must start with https://')
   if (v.length > MAX_WEBHOOK_URL_LEN) throw new Error(`webhookUrl must be <= ${MAX_WEBHOOK_URL_LEN} characters`)
+  let parsed: URL
+  try { parsed = new URL(v) } catch { throw new Error('webhookUrl must be a valid URL') }
+  const host = parsed.hostname.toLowerCase()
+  if (BLOCKED_WEBHOOK_HOSTNAMES.has(host)) throw new Error('webhookUrl must not target localhost')
+  if (host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.localhost'))
+    throw new Error('webhookUrl must not target internal hostnames')
   return v
 }

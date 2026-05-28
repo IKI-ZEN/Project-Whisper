@@ -1,10 +1,11 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
-import { newId } from '../lib/utils'
+import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { newId, isUUID } from '../lib/utils'
 import type { PipelineNode } from '../lib/schema'
 import { parseCreatePipeline, parsePatchPipeline, parsePipelineRunRequest } from '../lib/schema'
 import { executePipeline } from '../lib/pipeline'
+import { PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW } from '../lib/constants'
 
 // ── D1 row type ───────────────────────────────────────────────────────────────
 
@@ -36,6 +37,9 @@ function shapeRow(row: PipelineRow) {
 
 // POST /api/pipelines
 const createPipeline: Handler = async (req, env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:pipeline-write:${ip}`, PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseCreatePipeline)
   if (!p.ok) return p.response
   const { name, description, nodes, entryId } = p.data
@@ -71,6 +75,7 @@ const listPipelines: Handler = async (req, env) => {
 const getPipeline: Handler = async (_req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     const row = await env.DB.prepare('SELECT * FROM pipelines WHERE id = ?').bind(id).first<PipelineRow>()
     if (!row) return json(err('Pipeline not found'), 404)
@@ -84,6 +89,7 @@ const getPipeline: Handler = async (_req, env, params: Params) => {
 const patchPipelineHandler: Handler = async (req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   const p = await parseBody(req, parsePatchPipeline)
   if (!p.ok) return p.response
   const patch = p.data
@@ -115,6 +121,7 @@ const patchPipelineHandler: Handler = async (req, env, params: Params) => {
 const deletePipeline: Handler = async (_req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     const result = await env.DB.prepare('DELETE FROM pipelines WHERE id = ?').bind(id).run()
     if ((result.meta?.changes ?? 0) === 0) return json(err('Pipeline not found'), 404)
@@ -128,6 +135,7 @@ const deletePipeline: Handler = async (_req, env, params: Params) => {
 const runPipelineHandler: Handler = async (req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   const p = await parseBody(req, parsePipelineRunRequest)
   if (!p.ok) return p.response
 

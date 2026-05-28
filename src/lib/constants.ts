@@ -129,3 +129,12 @@ export const MAX_WEBHOOK_URL_LEN         = 512
 // Vault cluster analysis
 export const VAULT_ANALYZE_RATE_LIMIT_MAX    = 3       // max per window
 export const VAULT_ANALYZE_RATE_LIMIT_WINDOW = 300_000 // 5 minutes
+
+// AI gateway outbound call timeout
+export const AI_GATEWAY_TIMEOUT_MS           = 120_000 // 2 minutes
+
+// Pipeline and vault write rate limits (per IP, for unauthenticated deployments)
+export const PIPELINE_WRITE_RATE_LIMIT_MAX    = 30
+export const PIPELINE_WRITE_RATE_LIMIT_WINDOW = 60_000
+export const VAULT_WRITE_RATE_LIMIT_MAX       = 30
+export const VAULT_WRITE_RATE_LIMIT_WINDOW    = 60_000

@@ -375,6 +375,7 @@ const listProbes: Handler = async (req: Request, env: Env) => {
 const getProbe: Handler = async (_req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     const probe = await env.DB.prepare('SELECT * FROM probes WHERE id = ?').bind(id).first<ProbeRow>()
     if (!probe) return json(err('Probe not found'), 404)
@@ -396,6 +397,7 @@ const getProbe: Handler = async (_req: Request, env: Env, params) => {
 const patchProbe: Handler = async (req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
 
   const p = await parseBody(req, parsePatchProbe)
   if (!p.ok) return p.response
@@ -434,6 +436,7 @@ const patchProbe: Handler = async (req: Request, env: Env, params) => {
 const deleteProbe: Handler = async (_req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     await env.DB.prepare('DELETE FROM probe_runs WHERE probe_id = ?').bind(id).run()
     await env.DB.prepare('DELETE FROM probes WHERE id = ?').bind(id).run()
@@ -449,6 +452,7 @@ const runProbe: Handler = async (req: Request, env: Env, params) => {
   if (rl) return rl
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     const probe = await env.DB.prepare('SELECT * FROM probes WHERE id = ?').bind(id).first<ProbeRow>()
     if (!probe) return json(err('Probe not found'), 404)
@@ -492,6 +496,7 @@ const runProbe: Handler = async (req: Request, env: Env, params) => {
 const getProbeHistory: Handler = async (req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
 
   const url = new URL(req.url)
   const limit = Math.min(
