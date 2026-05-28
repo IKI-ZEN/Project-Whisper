@@ -326,9 +326,9 @@ const issueSession: Handler = async (req, env, params: Params) => {
     const body = await req.json() as { sessionId?: string }
     sessionId = (typeof body.sessionId === 'string' && body.sessionId.length > 0)
       ? body.sessionId
-      : crypto.randomUUID()
+      : newId()
   } catch {
-    sessionId = crypto.randomUUID()
+    sessionId = newId()
   }
 
   const token = env.SIGNING_SECRET ? await signPayload(`${id}:${sessionId}`, env.SIGNING_SECRET) : null

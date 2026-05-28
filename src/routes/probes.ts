@@ -4,6 +4,7 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
+import { newId } from '../lib/utils'
 import {
   complete, embed, estimateEntropy, runCoTProbe,
   generatePromptVariants, computeSimilarityMatrix,
@@ -308,7 +309,7 @@ const createProbe: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseCreateProbe)
   if (!p.ok) return p.response
   const { name, description, prompt, tool, params, model, schedule, threshold } = p.data
-  const id = crypto.randomUUID()
+  const id = newId()
   const created_at = Date.now()
   try {
     await env.DB.prepare(
@@ -421,7 +422,7 @@ const runProbe: Handler = async (_req: Request, env: Env, params) => {
     )
 
     const metricValue = extractMetricValue(probe.tool, result)
-    const runId = crypto.randomUUID()
+    const runId = newId()
     const now = Date.now()
 
     await env.DB.prepare(
@@ -481,7 +482,7 @@ export async function runProbeById(id: string, env: Env): Promise<void> {
   })()
   const result = await runProbeTool(probe.tool, probe.prompt, probe.model || undefined, probeParams, env)
   const metricValue = extractMetricValue(probe.tool, result)
-  const runId = crypto.randomUUID()
+  const runId = newId()
   const now = Date.now()
   await env.DB.prepare(
     'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, run_at) VALUES (?, ?, ?, ?, ?, ?)',

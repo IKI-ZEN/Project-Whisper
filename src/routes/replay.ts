@@ -4,6 +4,7 @@
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
+import { newId } from '../lib/utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ const postReplay: Handler = async (req, env) => {
   if (!p.ok) return p.response
 
   const { messages, targetConfig, batchConfigs } = p.data
-  const replayId = crypto.randomUUID()
+  const replayId = newId()
 
   try {
     if (batchConfigs && batchConfigs.length > 0) {
@@ -171,7 +172,7 @@ const postReplay: Handler = async (req, env) => {
         allConfigs.map(async (config) => {
           const { turns, latencyMs } = await runReplay(env, messages, config)
           const result: ReplayResult = {
-            replayId: crypto.randomUUID(),
+            replayId: newId(),
             targetConfig: config,
             turns,
             latencyMs,

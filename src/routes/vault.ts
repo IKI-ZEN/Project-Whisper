@@ -4,6 +4,7 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
+import { newId } from '../lib/utils'
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ const create: Handler = async (req: Request, env: Env) => {
   if (!p.ok) return p.response
   const { prompt, response, model, temperature, system_prompt, tool, metadata, tags } = p.data
   try {
-    const id         = crypto.randomUUID()
+    const id         = newId()
     const created_at = Date.now()
     await env.DB.prepare(
       `INSERT INTO vault_records (id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, created_at)

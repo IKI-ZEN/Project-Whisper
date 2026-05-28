@@ -5,6 +5,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody } from '../lib/http'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
+import { newId } from '../lib/utils'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -137,7 +138,7 @@ const addPrompt: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseAddPrompt)
   if (!p.ok) return p.response
   const { text, label, tags } = p.data
-  const id = crypto.randomUUID()
+  const id = newId()
   const created_at = Date.now()
   try {
     await env.DB.prepare(
