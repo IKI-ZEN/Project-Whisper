@@ -6,6 +6,7 @@ import { newId, now, isUUID } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
+import { saveToVault } from '../lib/analysis'
 
 // ── KV metadata shape (stored with each sandbox key) ─────────────────────────
 
@@ -147,11 +148,28 @@ const patchConfig: Handler = async (req, env, params: Params) => {
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   let body: unknown
   try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
+
+  // Auto-version: if systemPrompt is changing, save the old value to vault before patching
+  const patch = body as Partial<{ name: string; description: string; model: string; systemPrompt: string }>
+  if (patch.systemPrompt !== undefined) {
+    const cfgRes = await doFetch(stub(env, id), 'config', 'GET')
+    const cfgBody = await cfgRes.json() as { ok: boolean; data?: { systemPrompt?: string; model?: string } }
+    if (cfgBody.ok && cfgBody.data?.systemPrompt && cfgBody.data.systemPrompt !== patch.systemPrompt) {
+      void saveToVault(env, {
+        prompt:    cfgBody.data.systemPrompt,
+        response:  patch.systemPrompt,
+        model:     cfgBody.data.model ?? '',
+        tool:      'system-prompt-version',
+        sandboxId: id,
+        tags:      ['system-prompt-version'],
+      })
+    }
+  }
+
   const res = await doFetch(stub(env, id), 'config', 'PATCH', body, identityHeader(req))
 
   // Keep KV listing metadata in sync when display fields change
   if (res.ok) {
-    const patch = body as Partial<{ name: string; description: string; model: string }>
     if (patch.name !== undefined || patch.description !== undefined || patch.model !== undefined) {
       const existing = await env.SANDBOX_REGISTRY.getWithMetadata<SandboxMeta>(`${SANDBOX_KEY_PREFIX}${id}`)
       if (existing.metadata) {
@@ -330,6 +348,40 @@ const importConfig: Handler = async (req, env) => {
   }), 201)
 }
 
+// ── Sandbox fork ──────────────────────────────────────────────────────────────
+
+const fork: Handler = async (req, env, params: Params) => {
+  const sourceId = params.id ?? ''
+  if (!await sandboxExists(env, sourceId)) return json(err('Sandbox not found'), 404)
+
+  const cfgRes  = await doFetch(stub(env, sourceId), 'config', 'GET')
+  const cfgBody = await cfgRes.json() as { ok: boolean; data?: SandboxConfig }
+  if (!cfgBody.ok || !cfgBody.data) return json(err('Failed to load source config'), 500)
+
+  const src = cfgBody.data
+  const id  = newId()
+  const ts  = now()
+  const identity = req.headers.get('X-Whisper-Identity')
+
+  const config: SandboxConfig = {
+    ...src,
+    id,
+    name:      `${src.name} (copy)`,
+    memory:    [],
+    createdAt: ts,
+    updatedAt: ts,
+    integrityHash: undefined,
+  }
+
+  await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))
+  await registerSandbox(env, { id, name: config.name, description: config.description, model: config.model, createdAt: ts })
+  await env.DB.prepare(
+    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).bind(id, 'created', JSON.stringify({ name: config.name, forkedFrom: sourceId }), identity, ts).run()
+
+  return json(ok({ id, name: config.name, appUrl: `/app/${id}`, shortLink: `/s/${id}`, api: { run: `/s/${id}/run`, stream: `/s/${id}/stream` } }), 201)
+}
+
 // ── Session token issuance (Signal B) ─────────────────────────────────────────
 
 const issueSession: Handler = async (req, env, params: Params) => {
@@ -380,4 +432,5 @@ export const sandboxRoutes: Array<[string, string, Handler]> = [
   ['GET',    '/api/sandbox/:id/history',            history],
   ['DELETE', '/api/sandbox/:id',                    del],
   ['POST',   '/api/sandbox/:id/session',            issueSession],
+  ['POST',   '/api/sandbox/:id/fork',               fork],
 ]

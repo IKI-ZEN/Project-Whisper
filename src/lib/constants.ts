@@ -121,3 +121,11 @@ export const MAX_ASSERTION_REGEX_INPUT   = 50_000
 // App tokens — short-lived HMAC-signed credentials injected at page-serve time
 export const APP_TOKEN_TTL_MS            = 3_600_000   // 1 hour
 export const APP_TOKEN_STATE_RATE_LIMIT_MAX = 200      // state mutations per minute per app via token
+
+// Probe webhook delivery
+export const PROBE_WEBHOOK_TIMEOUT_MS    = 5_000       // 5 s hard timeout for webhook POST
+export const MAX_WEBHOOK_URL_LEN         = 512
+
+// Vault cluster analysis
+export const VAULT_ANALYZE_RATE_LIMIT_MAX    = 3       // max per window
+export const VAULT_ANALYZE_RATE_LIMIT_WINDOW = 300_000 // 5 minutes

@@ -7,6 +7,7 @@ import {
   MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
   MAX_DRIFT_TURNS, MAX_STRESS_LEVELS, MAX_RUBRIC_CRITERIA, MAX_RUBRIC_SAMPLES,
+  MAX_WEBHOOK_URL_LEN,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -782,4 +783,96 @@ export function parseUsageQuery(params: URLSearchParams): UsageQuery {
   const limit    = limitStr !== null ? Math.min(Math.max(1, parseInt(limitStr, 10) || 100), 1000) : 100
 
   return { sandboxId, model, provider, from, to, groupBy, limit }
+}
+
+// ── Saved Pipelines ───────────────────────────────────────────────────────────
+
+export interface CreatePipelineRequest {
+  name:        string
+  description: string
+  nodes:       PipelineNode[]
+  entryId:     string
+}
+
+export interface PatchPipelineRequest {
+  name?:        string
+  description?: string
+  nodes?:       PipelineNode[]
+  entryId?:     string
+}
+
+export interface PipelineRunRequest { input: string }
+
+export function parseCreatePipeline(body: unknown): CreatePipelineRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const name = str(body.name, 'name')
+  if (name.length > MAX_NAME_LEN) throw new Error(`name must be <= ${MAX_NAME_LEN} characters`)
+  const description = body.description !== undefined ? str(body.description, 'description', '') : ''
+  if (description.length > MAX_DESCRIPTION_LEN) throw new Error(`description must be <= ${MAX_DESCRIPTION_LEN} characters`)
+  // Reuse parsePipelineRequest for node validation; inject a dummy input so it satisfies the schema
+  const { nodes, entryId } = parsePipelineRequest({ ...body, input: body.input ?? '' })
+  return { name, description, nodes, entryId }
+}
+
+export function parsePatchPipeline(body: unknown): PatchPipelineRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const out: PatchPipelineRequest = {}
+  if (body.name !== undefined) {
+    const name = str(body.name, 'name')
+    if (name.length > MAX_NAME_LEN) throw new Error(`name must be <= ${MAX_NAME_LEN} characters`)
+    out.name = name
+  }
+  if (body.description !== undefined) {
+    out.description = str(body.description, 'description', '')
+    if (out.description.length > MAX_DESCRIPTION_LEN)
+      throw new Error(`description must be <= ${MAX_DESCRIPTION_LEN} characters`)
+  }
+  if (body.nodes !== undefined || body.entryId !== undefined) {
+    if (body.nodes === undefined || body.entryId === undefined)
+      throw new Error('nodes and entryId must be provided together')
+    const { nodes, entryId } = parsePipelineRequest({ nodes: body.nodes, entryId: body.entryId, input: '' })
+    out.nodes   = nodes
+    out.entryId = entryId
+  }
+  return out
+}
+
+export function parsePipelineRunRequest(body: unknown): PipelineRunRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  return { input: str(body.input, 'input') }
+}
+
+// ── Vault Cluster Analysis ────────────────────────────────────────────────────
+
+export interface VaultAnalyzeRequest {
+  k:      number
+  limit:  number
+  tool?:  string
+  since?: number
+}
+
+export function parseVaultAnalyzeRequest(body: unknown): VaultAnalyzeRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const since = body.since !== undefined
+    ? (typeof body.since === 'number' && isFinite(body.since)
+        ? body.since
+        : (() => { throw new Error('since must be a number (unix ms)') })())
+    : undefined
+  return {
+    k:     body.k     !== undefined ? num(body.k,     'k',     5,   2,  20)  : 5,
+    limit: body.limit !== undefined ? num(body.limit, 'limit', 200, 10, 500) : 200,
+    tool:  body.tool  !== undefined ? str(body.tool,  'tool')                : undefined,
+    since,
+  }
+}
+
+// ── Probe Webhook ─────────────────────────────────────────────────────────────
+
+export function parseWebhookUrl(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined
+  if (typeof v !== 'string') throw new Error('webhookUrl must be a string')
+  if (v.length === 0) return undefined
+  if (!v.startsWith('https://')) throw new Error('webhookUrl must start with https://')
+  if (v.length > MAX_WEBHOOK_URL_LEN) throw new Error(`webhookUrl must be <= ${MAX_WEBHOOK_URL_LEN} characters`)
+  return v
 }

@@ -1164,6 +1164,7 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
     <div class="stat-card"><div class="stat-label">Avg Latency</div><div class="stat-value sk" id="stat-lat" style="height:32px;width:72px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Vault Records</div><div class="stat-value sk" id="stat-vault" style="height:32px;width:48px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">~ Est. Cost (30d)</div><div class="stat-value sk" id="stat-cost" style="height:32px;width:80px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Pipelines</div><div class="stat-value sk" id="stat-pipelines" style="height:32px;width:48px">&nbsp;</div></div>
   </div>
   <div class="section" style="margin-bottom:16px">
     <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -1202,11 +1203,12 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
 <script nonce="${nonce}" type="module" src="/chart.js"></script>
 <script nonce="${nonce}">
 async function load(){
-  const [sandboxRes,probeRes,assertRes,vaultRes]=await Promise.allSettled([
+  const [sandboxRes,probeRes,assertRes,vaultRes,pipelineRes]=await Promise.allSettled([
     fetch('/api/sandbox').then(function(r){return r.json()}),
     fetch('/api/probes').then(function(r){return r.json()}),
     fetch('/api/assertions').then(function(r){return r.json()}),
     fetch('/api/vault?limit=5').then(function(r){return r.json()}),
+    fetch('/api/pipelines?limit=1').then(function(r){return r.json()}),
   ])
 
   try{
@@ -1285,7 +1287,7 @@ async function load(){
       wrap.innerHTML='<table class="tbl"><thead><tr><th>Name</th><th>Model</th><th>Created</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
     }
   }catch(e){
-    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat','stat-cost'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
+    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat','stat-cost','stat-pipelines'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
     document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
     document.getElementById('health-wrap').innerHTML='<div class="empty-note">Unable to load.</div>'
   }
@@ -1297,9 +1299,10 @@ async function load(){
     if(!probes.length){wrap.innerHTML='<div class="empty-note">No probes yet. <a href="/tools.html" style="color:var(--accent2)">Create one →</a></div>'}
     else{wrap.innerHTML='<ul class="item-list">'+probes.map(function(p){
       const runs=p.run_count||0
+      const webhook=p.webhook_url?'<span class="item-meta" title="Webhook configured" style="color:var(--accent2)">⚡</span>':''
       return '<li class="item-row"><span class="item-name">'+esc(p.name||'Probe')+'</span>'
         +'<span class="item-meta" style="color:var(--teal)">'+runs+' run'+(runs!==1?'s':'')+'</span>'
-        +'<span class="item-meta">'+esc(p.schedule||'manual')+'</span></li>'
+        +'<span class="item-meta">'+esc(p.schedule||'manual')+'</span>'+webhook+'</li>'
     }).join('')+'</ul>'}
   }catch(e){document.getElementById('probes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'}
 
@@ -1366,6 +1369,16 @@ async function load(){
   }catch(e){
     document.getElementById('stat-cost').textContent='—';document.getElementById('stat-cost').className='stat-value'
     document.getElementById('cost-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
+  }
+
+  try{
+    const d=pipelineRes.status==='fulfilled'?pipelineRes.value:null
+    const el=document.getElementById('stat-pipelines')
+    el.textContent=d&&d.ok?String(d.data.total||0):'—'
+    el.className='stat-value'
+  }catch(e){
+    const el=document.getElementById('stat-pipelines')
+    el.textContent='—';el.className='stat-value'
   }
 }
 

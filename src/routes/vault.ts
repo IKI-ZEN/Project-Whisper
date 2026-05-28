@@ -1,7 +1,10 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { newId } from '../lib/utils'
+import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
+import { parseVaultAnalyzeRequest } from '../lib/schema'
+import { VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW } from '../lib/constants'
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
@@ -236,10 +239,81 @@ const exportJsonl: Handler = async (req: Request, env: Env) => {
   }
 }
 
+// POST /api/vault/analyze — cluster vault records by prompt embedding similarity
+const analyze: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:vault-analyze:${ip}`, VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
+
+  const p = await parseBody(req, parseVaultAnalyzeRequest)
+  if (!p.ok) return p.response
+  const { k, limit, tool, since } = p.data
+
+  try {
+    const conditions: string[] = []
+    const params: unknown[] = []
+    if (tool)  { conditions.push('tool = ?');           params.push(tool) }
+    if (since) { conditions.push('created_at >= ?');    params.push(since) }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const rows = await env.DB.prepare(
+      `SELECT id, prompt, tool, model FROM vault_records ${where} ORDER BY created_at DESC LIMIT ?`,
+    ).bind(...params, limit).all<{ id: string; prompt: string; tool: string; model: string }>()
+
+    const records = rows.results ?? []
+    if (records.length < 2) {
+      return json(ok({ clusters: [], totalAnalysed: records.length, message: 'Not enough records to cluster (need at least 2)' }))
+    }
+
+    const prompts    = records.map(r => r.prompt)
+    const embeddings = await embed(env.AI, prompts, undefined, env)
+
+    // k-means: cap k to number of records
+    const effectiveK = Math.min(k, records.length)
+    const { labels } = kMeansClusters(embeddings, effectiveK)
+
+    // Group records by cluster label
+    const clusterMap = new Map<number, Array<{ id: string; prompt: string; tool: string; embedding: Float32Array }>>()
+    for (let i = 0; i < records.length; i++) {
+      const label = labels[i]
+      if (!clusterMap.has(label)) clusterMap.set(label, [])
+      clusterMap.get(label)!.push({ id: records[i].id, prompt: records[i].prompt, tool: records[i].tool, embedding: embeddings[i] })
+    }
+
+    const clusters = Array.from(clusterMap.entries()).map(([label, members]) => {
+      // Find representative: highest average cosine similarity to all other members
+      let bestIdx = 0
+      let bestScore = -Infinity
+      for (let i = 0; i < members.length; i++) {
+        if (members.length === 1) { bestIdx = 0; break }
+        let score = 0
+        for (let j = 0; j < members.length; j++) {
+          if (i !== j) score += cosineSimilarity(members[i].embedding, members[j].embedding)
+        }
+        score /= (members.length - 1)
+        if (score > bestScore) { bestScore = score; bestIdx = i }
+      }
+      const tools = [...new Set(members.map(m => m.tool).filter(Boolean))]
+      return {
+        label,
+        size:            members.length,
+        representative:  members[bestIdx].prompt,
+        tools,
+        sampleIds:       members.slice(0, 3).map(m => m.id),
+      }
+    }).sort((a, b) => b.size - a.size)
+
+    return json(ok({ clusters, totalAnalysed: records.length }))
+  } catch (e) {
+    return json(err('Vault analysis failed', String(e)), 500)
+  }
+}
+
 export const vaultRoutes: Array<[string, string, Handler]> = [
-  ['POST',   '/api/vault',             create],
-  ['GET',    '/api/vault/export.jsonl', exportJsonl],  // must come before /api/vault/:id
-  ['GET',    '/api/vault',             list],
+  ['POST',   '/api/vault',              create],
+  ['POST',   '/api/vault/analyze',      analyze],          // must come before /api/vault/:id
+  ['GET',    '/api/vault/export.jsonl', exportJsonl],      // must come before /api/vault/:id
+  ['GET',    '/api/vault',              list],
   ['DELETE', '/api/vault/:id',         remove],
   ['POST',   '/api/vault/:id/tags',    updateTags],
 ]

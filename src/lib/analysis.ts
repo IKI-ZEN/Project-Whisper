@@ -149,5 +149,18 @@ export function extractMetrics(tool: string, result: unknown): Record<string, nu
     }
   }
 
+  if (tool === 'pipeline') {
+    const metrics: Record<string, number> = {}
+    if (Array.isArray(r.trace)) metrics.traceLength = (r.trace as unknown[]).length
+    const latencies = Array.isArray(r.trace)
+      ? (r.trace as Record<string, unknown>[]).map(t => typeof t.latencyMs === 'number' ? t.latencyMs : 0)
+      : []
+    if (latencies.length > 0) {
+      metrics.totalLatencyMs = latencies.reduce((a, b) => a + b, 0)
+      metrics.avgNodeLatencyMs = metrics.totalLatencyMs / latencies.length
+    }
+    return metrics
+  }
+
   return {}
 }

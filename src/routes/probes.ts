@@ -2,26 +2,35 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { newId, isUUID } from '../lib/utils'
-import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX } from '../lib/constants'
+import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS } from '../lib/constants'
 import {
   complete, embed, estimateEntropy, runCoTProbe,
   generatePromptVariants, computeSimilarityMatrix,
 } from '../lib/ai'
 import { MODELS } from '../lib/ai'
 import { resolveAnalysisContext, extractMetrics } from '../lib/analysis'
+import { executePipeline } from '../lib/pipeline'
+import { parseWebhookUrl } from '../lib/schema'
+import type { PipelineNode } from '../lib/schema'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_NAME_LEN        = 128
 const MAX_DESC_LEN        = 512
 const MAX_PROMPT_LEN      = 10_000
-const VALID_TOOLS         = ['entropy', 'sweep', 'sensitivity', 'cot'] as const
+const VALID_TOOLS         = ['entropy', 'sweep', 'sensitivity', 'cot', 'pipeline'] as const
 const VALID_SCHEDULES     = ['hourly', 'daily', 'weekly'] as const
 const DEFAULT_HISTORY_LIMIT = 50
 const MAX_HISTORY_LIMIT   = 200
 
 type ProbeTool     = typeof VALID_TOOLS[number]
 type ProbeSchedule = typeof VALID_SCHEDULES[number]
+
+interface PipelineRow {
+  id:       string
+  nodes:    string
+  entry_id: string
+}
 
 // ── D1 row types ──────────────────────────────────────────────────────────────
 
@@ -38,6 +47,7 @@ interface ProbeRow {
   sandbox_id:  string | null
   created_at:  number
   last_run_at: number | null
+  webhook_url: string | null
 }
 
 interface ProbeRunRow {
@@ -62,6 +72,7 @@ function parseCreateProbe(body: unknown): {
   schedule: ProbeSchedule
   threshold: Record<string, unknown>
   sandboxId: string | null
+  webhookUrl: string | undefined
 } {
   if (typeof body !== 'object' || body === null) throw new Error('Body must be an object')
   const b = body as Record<string, unknown>
@@ -100,6 +111,8 @@ function parseCreateProbe(body: unknown): {
     ? b.sandboxId
     : null
 
+  const webhookUrl = parseWebhookUrl(b.webhookUrl)
+
   return {
     name,
     description,
@@ -110,6 +123,7 @@ function parseCreateProbe(body: unknown): {
     schedule: schedule as ProbeSchedule,
     threshold,
     sandboxId,
+    webhookUrl,
   }
 }
 
@@ -123,6 +137,7 @@ function parsePatchProbe(body: unknown): Partial<{
   schedule: ProbeSchedule
   threshold: Record<string, unknown>
   sandboxId: string | null
+  webhookUrl: string | undefined
 }> {
   if (typeof body !== 'object' || body === null) throw new Error('Body must be an object')
   const b = body as Record<string, unknown>
@@ -174,6 +189,9 @@ function parsePatchProbe(body: unknown): Partial<{
     out.sandboxId = typeof b.sandboxId === 'string' && isUUID(b.sandboxId)
       ? b.sandboxId
       : null
+  }
+  if (b.webhookUrl !== undefined) {
+    out.webhookUrl = parseWebhookUrl(b.webhookUrl)
   }
   return out
 }
@@ -259,7 +277,45 @@ async function runProbeTool(
     return runCoTProbe(env.AI, env, { prompt, model: effectiveModel, systemPrompt, temperature, maxTokens }, samples)
   }
 
+  if (tool === 'pipeline') {
+    const pipelineId = typeof params.pipelineId === 'string' ? params.pipelineId : ''
+    if (!pipelineId) throw new Error('pipeline tool requires params.pipelineId')
+    const row = await env.DB.prepare('SELECT id, nodes, entry_id FROM pipelines WHERE id = ?')
+      .bind(pipelineId).first<PipelineRow>()
+    if (!row) throw new Error(`Pipeline "${pipelineId}" not found`)
+    const nodes = JSON.parse(row.nodes) as PipelineNode[]
+    return executePipeline(env.AI, env, prompt, nodes, row.entry_id)
+  }
+
   throw new Error(`Unknown tool: ${String(tool)}`)
+}
+
+// ── Threshold evaluation + webhook dispatch ────────────────────────────────────
+
+function isThresholdBreached(threshold: Record<string, unknown>, metrics: Record<string, number>): boolean {
+  const metric = typeof threshold.metric === 'string' ? threshold.metric : null
+  const op     = typeof threshold.op     === 'string' ? threshold.op     : null
+  const limit  = typeof threshold.value  === 'number' ? threshold.value  : null
+  if (!metric || !op || limit === null) return false
+  const actual = metrics[metric]
+  if (typeof actual !== 'number') return false
+  if (op === '>')  return actual >  limit
+  if (op === '<')  return actual <  limit
+  if (op === '>=') return actual >= limit
+  if (op === '<=') return actual <= limit
+  return false
+}
+
+function dispatchWebhook(
+  webhookUrl: string,
+  payload: { probeId: string; probeName: string; metricValue: number | null; metrics: Record<string, number>; breachedAt: number },
+): void {
+  void fetch(webhookUrl, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(payload),
+    signal:  AbortSignal.timeout(PROBE_WEBHOOK_TIMEOUT_MS),
+  }).catch(() => { /* fire-and-forget — failure must not affect probe result */ })
 }
 
 // ── Shape a probe row for API responses ────────────────────────────────────────
@@ -275,7 +331,8 @@ function shapeProbe(row: ProbeRow & { run_count?: number }): Record<string, unkn
     model:       row.model,
     schedule:    row.schedule,
     threshold:   (() => { try { return JSON.parse(row.threshold) as Record<string, unknown> } catch { return {} } })(),
-    sandbox_id:  row.sandbox_id ?? null,
+    sandbox_id:  row.sandbox_id  ?? null,
+    webhook_url: row.webhook_url ?? null,
     created_at:  row.created_at,
     last_run_at: row.last_run_at ?? null,
     ...(row.run_count !== undefined ? { run_count: row.run_count } : {}),
@@ -287,14 +344,14 @@ function shapeProbe(row: ProbeRow & { run_count?: number }): Record<string, unkn
 const createProbe: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseCreateProbe)
   if (!p.ok) return p.response
-  const { name, description, prompt, tool, params, model, schedule, threshold, sandboxId } = p.data
+  const { name, description, prompt, tool, params, model, schedule, threshold, sandboxId, webhookUrl } = p.data
   const id = newId()
   const created_at = Date.now()
   try {
     await env.DB.prepare(
-      'INSERT INTO probes (id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, name, description, prompt, tool, JSON.stringify(params), model, schedule, JSON.stringify(threshold), sandboxId ?? null, created_at).run()
-    return json(ok({ id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id: sandboxId ?? null, created_at, last_run_at: null }))
+      'INSERT INTO probes (id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, name, description, prompt, tool, JSON.stringify(params), model, schedule, JSON.stringify(threshold), sandboxId ?? null, webhookUrl ?? null, created_at).run()
+    return json(ok({ id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id: sandboxId ?? null, webhook_url: webhookUrl ?? null, created_at, last_run_at: null }))
   } catch (e) {
     return json(err('Failed to create probe', String(e)), 500)
   }
@@ -362,6 +419,7 @@ const patchProbe: Handler = async (req: Request, env: Env, params) => {
     if (patch.schedule !== undefined)    { setClauses.push('schedule = ?');    bindings.push(patch.schedule) }
     if (patch.threshold !== undefined)   { setClauses.push('threshold = ?');   bindings.push(JSON.stringify(patch.threshold)) }
     if (patch.sandboxId !== undefined)   { setClauses.push('sandbox_id = ?');  bindings.push(patch.sandboxId) }
+    if (patch.webhookUrl !== undefined)  { setClauses.push('webhook_url = ?'); bindings.push(patch.webhookUrl ?? null) }
 
     bindings.push(id)
     await env.DB.prepare(`UPDATE probes SET ${setClauses.join(', ')} WHERE id = ?`).bind(...bindings).run()
@@ -419,6 +477,11 @@ const runProbe: Handler = async (req: Request, env: Env, params) => {
     ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), now).run()
 
     await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(now, probe.id).run()
+
+    const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
+    if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
+      dispatchWebhook(probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: now })
+    }
 
     return json(ok({ runId, metricValue, metrics: metricsJson, result }))
   } catch (e) {
@@ -486,11 +549,16 @@ export async function runProbeById(id: string, env: Env): Promise<void> {
   const metricValue = extractMetricValue(probe.tool, result)
   const metricsJson = extractMetrics(probe.tool, result)
   const runId = newId()
-  const now = Date.now()
+  const ts = Date.now()
   await env.DB.prepare(
     'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, metrics_json, run_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-  ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), now).run()
-  await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(now, probe.id).run()
+  ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), ts).run()
+  await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(ts, probe.id).run()
+
+  const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
+  if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
+    dispatchWebhook(probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
+  }
 }
 
 // ── Route table ───────────────────────────────────────────────────────────────
