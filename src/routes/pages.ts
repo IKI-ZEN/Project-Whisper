@@ -1083,39 +1083,40 @@ function dashboardHtml(nonce: string): string { return `<!DOCTYPE html>
 <title>Whisper — Dashboard</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
+:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--green:#10b981;--red:#f87171;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
-.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;overflow-x:auto}
 .brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
 .navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
 .navlink:hover{color:var(--text)}
 .navlink.active{background:var(--accent);color:#fff}
-main{max-width:1100px;margin:0 auto;padding:32px 24px}
-h2{font-size:22px;font-weight:700;margin-bottom:6px}
-.sub{color:var(--muted);font-size:13px;margin-bottom:28px}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:28px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
-.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px}
-.stat-value{font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono);line-height:1}
-.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
-.section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}
-.section-title{font-size:13px;font-weight:600;color:var(--accent2);margin-bottom:16px}
+main{max-width:1200px;margin:0 auto;padding:32px 24px}
+h2{font-size:20px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.stat-value{font-size:26px;font-weight:700;color:var(--text);font-family:var(--mono);line-height:1}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+.section-title{font-size:11px;font-weight:600;color:var(--accent2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px}
 .chart-wrap{overflow-x:auto}
-.sandboxes-table{width:100%;border-collapse:collapse;font-size:12px}
-.sandboxes-table th{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.sandboxes-table td{padding:8px 10px;border-bottom:1px solid #ffffff08;color:var(--text)}
-.sandboxes-table tr:last-child td{border-bottom:none}
-.sandboxes-table tr:hover td{background:#ffffff04}
-.badge-model{font-size:10px;padding:2px 7px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono)}
-.guard-badge{font-size:10px;padding:2px 7px;border-radius:99px}
-.guard-badge.strict{background:var(--accent);color:#fff}
-.guard-badge.audit{background:#f59e0b22;color:#f59e0b}
-.guard-badge.off{background:#f8717122;color:#f87171}
-.empty-note{color:var(--muted);font-size:12px;font-style:italic;padding:12px 0}
+.item-list{list-style:none}
+.item-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #ffffff08;font-size:12px}
+.item-row:last-child{border-bottom:none}
+.item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item-meta{font-size:10px;color:var(--muted);flex-shrink:0;font-family:var(--mono)}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.tbl td{padding:7px 8px;border-bottom:1px solid #ffffff08}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#ffffff04}
+.badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono)}
+.empty-note{color:var(--muted);font-size:12px;font-style:italic;padding:8px 0}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
 .sk{background:var(--border);border-radius:4px;animation:pulse 1.4s ease-in-out infinite}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
-@media(max-width:600px){.stats-grid{grid-template-columns:1fr 1fr}main{padding:20px 16px}}
+@media(max-width:760px){.two-col{grid-template-columns:1fr}.stats-grid{grid-template-columns:1fr 1fr}main{padding:16px}}
 </style>
 </head>
 <body>
@@ -1128,95 +1129,146 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
   <a href="/dashboard" class="navlink active" aria-current="page">Dashboard</a>
 </nav>
 <main>
-  <h2>Dashboard</h2>
-  <p class="sub">Aggregate usage metrics across all sandboxes.</p>
-  <div id="stats-grid" class="stats-grid">
-    <div class="stat-card"><div class="stat-label">Total Sandboxes</div><div class="stat-value sk" id="stat-sandboxes" style="height:36px;width:60px">&nbsp;</div></div>
-    <div class="stat-card"><div class="stat-label">Total Runs</div><div class="stat-value sk" id="stat-runs" style="height:36px;width:60px">&nbsp;</div></div>
-    <div class="stat-card"><div class="stat-label">Tokens In</div><div class="stat-value sk" id="stat-tin" style="height:36px;width:80px">&nbsp;</div></div>
-    <div class="stat-card"><div class="stat-label">Tokens Out</div><div class="stat-value sk" id="stat-tout" style="height:36px;width:80px">&nbsp;</div></div>
-    <div class="stat-card"><div class="stat-label">Avg Latency</div><div class="stat-value sk" id="stat-lat" style="height:36px;width:80px">&nbsp;</div></div>
+  <h2>Whisperer Command Centre</h2>
+  <p class="sub">Research activity and application health at a glance.</p>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Apps</div><div class="stat-value sk" id="stat-sandboxes" style="height:32px;width:48px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Total Runs</div><div class="stat-value sk" id="stat-runs" style="height:32px;width:64px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Tokens In</div><div class="stat-value sk" id="stat-tin" style="height:32px;width:64px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Tokens Out</div><div class="stat-value sk" id="stat-tout" style="height:32px;width:64px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Avg Latency</div><div class="stat-value sk" id="stat-lat" style="height:32px;width:72px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Vault Records</div><div class="stat-value sk" id="stat-vault" style="height:32px;width:48px">&nbsp;</div></div>
   </div>
-  <div class="section">
-    <div class="section-title">Model Breakdown</div>
-    <div id="model-chart" class="chart-wrap"><div class="empty-note">Loading…</div></div>
-  </div>
-  <div class="section">
-    <div class="section-title">Recent Sandboxes</div>
-    <div id="sandboxes-wrap"><div class="empty-note">Loading…</div></div>
+  <div class="two-col">
+    <div>
+      <div class="section">
+        <div class="section-title">Recent Probe Runs</div>
+        <div id="probes-wrap"><div class="empty-note">Loading…</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">Assertion Suites</div>
+        <div id="assertions-wrap"><div class="empty-note">Loading…</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">Evidence Vault — Recent</div>
+        <div id="vault-wrap"><div class="empty-note">Loading…</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="section">
+        <div class="section-title">Model Breakdown</div>
+        <div id="model-chart" class="chart-wrap"><div class="empty-note">Loading…</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">Recent Apps</div>
+        <div id="sandboxes-wrap"><div class="empty-note">Loading…</div></div>
+      </div>
+    </div>
   </div>
 </main>
 <script nonce="${nonce}" type="module" src="/chart.js"></script>
 <script nonce="${nonce}">
 async function load(){
+  const [sandboxRes,probeRes,assertRes,vaultRes]=await Promise.allSettled([
+    fetch('/api/sandbox').then(function(r){return r.json()}),
+    fetch('/api/probes').then(function(r){return r.json()}),
+    fetch('/api/assertions').then(function(r){return r.json()}),
+    fetch('/api/vault?limit=5').then(function(r){return r.json()}),
+  ])
+
   try{
-    const r=await fetch('/api/sandbox')
-    const d=await r.json()
-    if(!d.ok)return
+    const d=sandboxRes.status==='fulfilled'?sandboxRes.value:null
+    if(!d||!d.ok)throw new Error('unavailable')
     const apps=d.data.apps||[]
     document.getElementById('stat-sandboxes').textContent=apps.length
     document.getElementById('stat-sandboxes').className='stat-value'
-
-    // Aggregate metrics across all sandboxes
     let totalRuns=0,totalTin=0,totalTout=0,latencies=[],modelMap={}
-    await Promise.all(apps.map(async function(app){
+    await Promise.all(apps.slice(0,20).map(async function(app){
       try{
         const mr=await fetch('/api/sandbox/'+app.id+'/metrics')
         const md=await mr.json()
         if(!md.ok)return
         const m=md.data
-        totalRuns+=m.totalRuns||0
-        totalTin+=m.totalTokensIn||0
-        totalTout+=m.totalTokensOut||0
+        totalRuns+=m.totalRuns||0;totalTin+=m.totalTokensIn||0;totalTout+=m.totalTokensOut||0
         if(m.avgLatencyMs)latencies.push(m.avgLatencyMs)
-        ;(m.modelBreakdown||[]).forEach(function(b){
-          const k=b.model||'unknown'
-          modelMap[k]=(modelMap[k]||0)+(b.count||0)
-        })
+        ;(m.modelBreakdown||[]).forEach(function(b){const k=b.model||'unknown';modelMap[k]=(modelMap[k]||0)+(b.count||0)})
       }catch{}
     }))
-
-    document.getElementById('stat-runs').textContent=totalRuns.toLocaleString()
-    document.getElementById('stat-runs').className='stat-value'
-    document.getElementById('stat-tin').textContent=fmtTokens(totalTin)
-    document.getElementById('stat-tin').className='stat-value'
-    document.getElementById('stat-tout').textContent=fmtTokens(totalTout)
-    document.getElementById('stat-tout').className='stat-value'
+    document.getElementById('stat-runs').textContent=totalRuns.toLocaleString();document.getElementById('stat-runs').className='stat-value'
+    document.getElementById('stat-tin').textContent=fmtTok(totalTin);document.getElementById('stat-tin').className='stat-value'
+    document.getElementById('stat-tout').textContent=fmtTok(totalTout);document.getElementById('stat-tout').className='stat-value'
     const avgLat=latencies.length?Math.round(latencies.reduce(function(a,b){return a+b},0)/latencies.length):0
-    document.getElementById('stat-lat').textContent=avgLat?avgLat+'ms':'—'
-    document.getElementById('stat-lat').className='stat-value'
-
-    // Model chart
+    document.getElementById('stat-lat').textContent=avgLat?avgLat+'ms':'—';document.getElementById('stat-lat').className='stat-value'
     const chartEl=document.getElementById('model-chart')
     const modelEntries=Object.entries(modelMap).map(function(e){return{label:e[0].split('/').pop()||e[0],value:e[1]}}).sort(function(a,b){return b.value-a.value}).slice(0,8)
-    if(modelEntries.length&&window.chart){
-      chartEl.innerHTML=window.chart(modelEntries,{type:'bar',width:600,height:180,label:'Runs'})
-    }else{
-      chartEl.innerHTML='<div class="empty-note">'+(totalRuns?'Chart unavailable':'No runs yet')+'</div>'
-    }
-
-    // Sandboxes table
+    if(modelEntries.length&&window.chart){chartEl.innerHTML=window.chart(modelEntries,{type:'bar',width:480,height:160,label:'Runs by model'})}
+    else{chartEl.innerHTML='<div class="empty-note">'+(totalRuns?'Chart unavailable':'No runs yet')+'</div>'}
     const wrap=document.getElementById('sandboxes-wrap')
-    if(!apps.length){wrap.innerHTML='<div class="empty-note">No sandboxes yet.</div>';return}
-    const rows=apps.map(function(app){
-      const date=new Date(app.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
-      const model=(app.model||'').split('/').pop()||app.model||'—'
-      return '<tr><td><a href="/app/'+esc(app.id)+'" style="color:var(--accent2);text-decoration:none">'+esc(app.name)+'</a></td><td><span class="badge-model">'+esc(model)+'</span></td><td>'+esc(date)+'</td></tr>'
-    }).join('')
-    wrap.innerHTML='<table class="sandboxes-table"><thead><tr><th>Name</th><th>Model</th><th>Created</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    if(!apps.length){wrap.innerHTML='<div class="empty-note">No apps yet. <a href="/vibe.html" style="color:var(--accent2)">Build one →</a></div>'}
+    else{
+      const rows=apps.slice(0,8).map(function(app){
+        const date=new Date(app.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})
+        const model=(app.model||'').split('/').pop()||app.model||'—'
+        return '<tr><td><a href="/app/'+esc(app.id)+'" style="color:var(--accent2);text-decoration:none">'+esc(app.name)+'</a></td>'
+          +'<td><span class="badge">'+esc(model)+'</span></td>'
+          +'<td style="color:var(--muted)">'+esc(date)+'</td>'
+          +'<td><a href="/tools.html?sandbox='+esc(app.id)+'" style="font-size:10px;color:var(--teal);text-decoration:none">Probe →</a></td></tr>'
+      }).join('')
+      wrap.innerHTML='<table class="tbl"><thead><tr><th>Name</th><th>Model</th><th>Created</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
+    }
   }catch(e){
-    document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">Failed to load: '+esc(String(e))+'</div>'
+    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
+    document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
+  }
+
+  try{
+    const d=probeRes.status==='fulfilled'?probeRes.value:null
+    const probes=(d&&d.ok?d.data:[]).slice(0,6)
+    const wrap=document.getElementById('probes-wrap')
+    if(!probes.length){wrap.innerHTML='<div class="empty-note">No probes yet. <a href="/tools.html" style="color:var(--accent2)">Create one →</a></div>'}
+    else{wrap.innerHTML='<ul class="item-list">'+probes.map(function(p){
+      const runs=p.run_count||0
+      return '<li class="item-row"><span class="item-name">'+esc(p.name||'Probe')+'</span>'
+        +'<span class="item-meta" style="color:var(--teal)">'+runs+' run'+(runs!==1?'s':'')+'</span>'
+        +'<span class="item-meta">'+esc(p.schedule||'manual')+'</span></li>'
+    }).join('')+'</ul>'}
+  }catch(e){document.getElementById('probes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'}
+
+  try{
+    const d=assertRes.status==='fulfilled'?assertRes.value:null
+    const suites=(d&&d.ok?d.data:[]).slice(0,6)
+    const wrap=document.getElementById('assertions-wrap')
+    if(!suites.length){wrap.innerHTML='<div class="empty-note">No assertion suites yet. <a href="/tools.html" style="color:var(--accent2)">Create one →</a></div>'}
+    else{wrap.innerHTML='<ul class="item-list">'+suites.map(function(s){
+      const cases=s.case_count||0
+      return '<li class="item-row"><span class="item-name">'+esc(s.name||'Suite')+'</span>'
+        +'<span class="item-meta">'+cases+' case'+(cases!==1?'s':'')+'</span></li>'
+    }).join('')+'</ul>'}
+  }catch(e){document.getElementById('assertions-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'}
+
+  try{
+    const d=vaultRes.status==='fulfilled'?vaultRes.value:null
+    const entries=(d&&d.ok?d.data.entries||d.data:[]).slice(0,5)
+    const total=d&&d.ok&&d.data.total!=null?d.data.total:entries.length
+    document.getElementById('stat-vault').textContent=fmtTok(total)||String(entries.length)
+    document.getElementById('stat-vault').className='stat-value'
+    const wrap=document.getElementById('vault-wrap')
+    if(!entries.length){wrap.innerHTML='<div class="empty-note">No vault entries yet.</div>'}
+    else{wrap.innerHTML='<ul class="item-list">'+entries.map(function(e){
+      const tool=e.tool||'—'
+      const date=e.createdAt?new Date(e.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'—'
+      return '<li class="item-row"><span class="item-name" title="'+esc(e.note||e.prompt||'')+'">'+esc((e.note||e.prompt||'Entry').slice(0,50))+'</span>'
+        +'<span class="item-meta" style="color:var(--accent2)">'+esc(tool)+'</span>'
+        +'<span class="item-meta">'+esc(date)+'</span></li>'
+    }).join('')+'</ul>'}
+  }catch(e){
+    document.getElementById('stat-vault').textContent='—';document.getElementById('stat-vault').className='stat-value'
+    document.getElementById('vault-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
   }
 }
 
-function fmtTokens(n){
-  if(n>=1000000)return(n/1000000).toFixed(1)+'M'
-  if(n>=1000)return(n/1000).toFixed(1)+'k'
-  return String(n||'—')
-}
+function fmtTok(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'k';return String(n||'—')}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-
-// chart.js is a module — wait for it to be parsed
 window.addEventListener('load',load)
 </script>
 </body>
