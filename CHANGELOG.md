@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-28
+
+### Added
+
+- Threat Monitor — live SSE stream of guard flag events from `sandbox_events` with pattern frequency analytics (`GET /api/monitor/stream`, `/audit`, `/patterns`)
+- Evidence Vault — prompt/response dataset builder with tags, filters, and streaming JSONL export in OpenAI fine-tuning format (`/api/vault`)
+- Replay Engine — replay a conversation session against a different model or system prompt with per-turn cosine similarity scoring (`POST /api/replay`)
+- Model Assertions — behaviour contract testing with 7 assertion types (`contains`, `not-contains`, `matches`, `similarity-gte`, `judge`, `latency-lte`, `guard-clean`) and pass/fail history (`/api/assertions`)
+- Semantic Map (Atlas) — prompt library with embedding, k-means clustering, PCA-2D scatter plot, and nearest-prompt search (`/api/atlas`)
+- Cron Whisper (Probes) — scheduled whisperer tool runs (entropy, sensitivity, CoT, sweep) on hourly/daily/weekly cron triggers with time-series results (`/api/probes`)
+- D1 migrations 0004–0007 for probes, vault, assertion suites/runs, and prompt library tables
+- GPL v3 `LICENSE` file and SPDX headers on all source files
+
+### Fixed
+
+- `POST /api/app/:id/email` now returns 503 when `EMAIL_FROM_ADDRESS` is not configured instead of silently attempting an unverified address
+- `GET /api/assertions/:id/history` and `GET /api/assertions` guard `.results` with `?? []` to prevent TypeError on empty tables
+- Atlas embedding cache writes batched via `env.DB.batch()` instead of individual sequential UPDATEs
+
 ## [0.1.0] — 2026-05-26
 
 ### Added
