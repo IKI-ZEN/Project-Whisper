@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 IKI-ZEN
+
 import type { Env, AetherLiteJob } from './types/env'
 import { Router, json, ok } from './lib/http'
 import { aiRoutes }              from './routes/ai'
@@ -10,6 +13,12 @@ import { buildRoutes }           from './routes/build'
 import { securityRoutes }        from './routes/security'
 import { appstateRoutes }        from './routes/appstate'
 import { processFile, processEmbeddingBatch } from './jobs/fileProcess'
+import { monitorRoutes }    from './routes/monitor'
+import { vaultRoutes }      from './routes/vault'
+import { replayRoutes }     from './routes/replay'
+import { assertionRoutes }  from './routes/assertions'
+import { atlasRoutes }      from './routes/atlas'
+import { probesRoutes, runProbeById } from './routes/probes'
 
 // Required: Wrangler binds DO classes via exports from this entry file.
 export { SandboxDO }     from './durable/SandboxDO'
@@ -41,7 +50,7 @@ router.post('/s/:id/run',    runHandler)
 router.post('/s/:id/stream', streamHandler)
 
 // Mount route groups
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes, ...appstateRoutes]) {
+for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes, ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes, ...assertionRoutes, ...atlasRoutes, ...probesRoutes]) {
   router.on(method, path, handler)
 }
 
@@ -58,6 +67,24 @@ export default {
       if (builderWs) return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(builderWs[1])).fetch(req)
     }
     return router.handle(req, env)
+  },
+
+  async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const schedule = event.cron === '0 * * * *' ? 'hourly'
+      : event.cron === '0 9 * * 1' ? 'weekly'
+      : 'daily'
+    try {
+      const { results } = await env.DB.prepare(
+        'SELECT id FROM probes WHERE schedule = ?',
+      ).bind(schedule).all<{ id: string }>()
+      for (const row of results ?? []) {
+        await runProbeById(row.id, env).catch(e =>
+          console.error(`[scheduled] probe ${row.id} failed:`, e)
+        )
+      }
+    } catch (e) {
+      console.error('[scheduled] cron handler failed:', e)
+    }
   },
 
   async queue(batch: MessageBatch<AetherLiteJob>, env: Env): Promise<void> {

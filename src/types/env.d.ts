@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 IKI-ZEN
+
 export interface AetherLiteJob {
-  type: 'ai_completion' | 'embedding_batch' | 'file_process'
+  type: 'ai_completion' | 'embedding_batch' | 'file_process' | 'replay'
   sandboxId: string
   payload: unknown
   createdAt: number

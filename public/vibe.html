@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 IKI-ZEN -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -42,6 +44,8 @@
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .brand {
@@ -425,11 +429,19 @@
       button, .navlink, textarea, input, select { transition: none; }
     }
 
-    /* ── Responsive: narrow sidebar ── */
+    /* ── Responsive ── */
     @media (max-width: 680px) {
-      .vibe-left { width: 100%; max-width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
       .vibe-layout { flex-direction: column; }
-      .vibe-left { max-height: 50dvh; }
+      .vibe-left { width: 100%; max-width: 100%; max-height: 50dvh; border-right: none; border-bottom: 1px solid var(--border); }
+    }
+
+    @media (max-width: 480px) {
+      .sidebar-inner { padding: 12px; gap: 10px; }
+      .panel-inner { padding: 12px; }
+      #quick-preview-frame { height: 220px; }
+      #build-preview-frame { height: 200px; }
+      .action-row { flex-direction: column; align-items: stretch; }
+      .action-row a, .action-row button { width: 100%; justify-content: center; }
     }
   </style>
 </head>

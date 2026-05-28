@@ -294,9 +294,9 @@ export class AiClient {
   image(prompt: string, opts?: ImageOpts): Promise<string>
   transcribe(audio: File | Blob, model?: string): Promise<string>
   /** Run the same prompt across multiple models in parallel. Returns results with latency. */
-  compare(models: string[], prompt: string, opts?: CompareOpts): Promise<{ ok: boolean; data: { results: CompareResult[] } }>
+  compare(models: string[], prompt: string, opts?: CompareOpts): Promise<{ results: CompareResult[] }>
   /** Run the same prompt at multiple temperatures to map attractor basin behavior. */
-  sweep(prompt: string, temperatures: number[], opts?: SweepOpts): Promise<{ ok: boolean; data: { results: SweepResult[]; model: string } }>
+  sweep(prompt: string, temperatures: number[], opts?: SweepOpts): Promise<{ results: SweepResult[]; model: string }>
   /** Prompt sensitivity analysis — generate paraphrases and measure response variance. */
   sensitivity(prompt: string, opts?: SensitivityOpts): Promise<SensitivityResult>
   /** Semantic clustering — embed texts and k-means cluster by cosine similarity. */

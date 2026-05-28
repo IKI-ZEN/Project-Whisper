@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 IKI-ZEN
+
 /**
  * Aether-Lite SDK — zero-dependency client for Project Aether-Lite
  *
@@ -173,12 +176,9 @@ export class AiClient {
    * @param {{ systemPrompt?: string, temperature?: number, maxTokens?: number }} [opts]
    */
   async compare(models, prompt, opts = {}) {
-    const res = await fetch(`${this._base}/api/ai/compare`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ models, prompt, ...opts }),
-    })
-    return res.json()
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/compare', 'POST', { models, prompt, ...opts })
+    )
   }
 
   /**
@@ -188,12 +188,9 @@ export class AiClient {
    * @param {{ model?: string, systemPrompt?: string, maxTokens?: number, samples?: number }} [opts]
    */
   async sweep(prompt, temperatures, opts = {}) {
-    const res = await fetch(`${this._base}/api/ai/sweep`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, temperatures, ...opts }),
-    })
-    return res.json()
+    return /** @type {any} */ (
+      await apiRequest(this._base, '/api/ai/sweep', 'POST', { prompt, temperatures, ...opts })
+    )
   }
 
   /**
