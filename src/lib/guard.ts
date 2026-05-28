@@ -5,6 +5,16 @@ export interface ScanResult {
   patterns: string[]
 }
 
+export interface ScanLayer {
+  name: 'raw' | 'stripped' | 'normalised' | 'base64_1' | 'base64_2' | 'base64_3'
+  preview: string   // first 500 chars of the text at this processing stage
+  matched: string[] // all pattern names that fired at this layer
+}
+
+export interface VerboseScanResult extends ScanResult {
+  layers: ScanLayer[]
+}
+
 // ── Pattern tables ─────────────────────────────────────────────────────────────
 
 const BLOCKED_PATTERNS: Array<{ name: string; re: RegExp }> = [
@@ -39,6 +49,26 @@ const BASE64_RE = /[A-Za-z0-9+/\-_]{40,}={0,2}/g
 // split words across normalization boundaries to evade regex patterns.
 const INVISIBLE_RE = /[​-‏‪-‮⁠-⁤﻿]/g
 
+// Human-readable descriptions for use by the Guard Laboratory UI
+export const PATTERN_DESCRIPTIONS: Record<string, string> = {
+  ignore_instructions: 'Attempts to override prior system instructions',
+  new_instructions:    'Tries to inject replacement instructions mid-conversation',
+  jailbreak_dan:       '"Do Anything Now" jailbreak pattern',
+  prompt_override:     'Square-bracket override/jailbreak directive',
+  forget_training:     'Asks the model to ignore its training or programming',
+  role_switch:         'Persona injection — "you are now" role takeover',
+  act_as:              'Role-play injection — asks model to act as another entity',
+  reveal_prompt:       'Tries to extract or echo the system prompt',
+  role_delimiter:      'LLM chat-format role delimiter (e.g. [INST], [SYSTEM])',
+  llm_tag:             'Model control token (e.g. <|system|>, <|im_start|>)',
+  jinja_template:      'Template expression — could evaluate injected code',
+  prompt_leak:         'Asks what the original instructions or system prompt were',
+  openai_key:          'Possible OpenAI API key detected',
+  aws_key:             'Possible AWS access key detected',
+  github_token:        'Possible GitHub personal access token detected',
+  anthropic_key:       'Possible Anthropic API key detected',
+}
+
 // ── Scanner ────────────────────────────────────────────────────────────────────
 
 function stripInvisible(text: string): string {
@@ -59,6 +89,81 @@ function decodeBase64Layer(text: string): string {
   return result
 }
 
+const PREVIEW_LEN = 500
+
+/**
+ * Verbose scan: runs the full guard pipeline and records findings at each
+ * processing stage. Use this when you need to explain *why* text was flagged.
+ * The final riskLevel and patterns are identical to what scan() would return.
+ */
+export function scanVerbose(text: string): VerboseScanResult {
+  const layers: ScanLayer[] = []
+
+  // Layer 1: raw text — no processing applied
+  const rawMatched = [
+    ...matchPatterns(text, BLOCKED_PATTERNS),
+    ...matchPatterns(text, SUSPICIOUS_PATTERNS),
+    ...matchPatterns(text, SECRET_PATTERNS),
+  ]
+  layers.push({ name: 'raw', preview: text.slice(0, PREVIEW_LEN), matched: rawMatched })
+
+  // Layer 2: invisible chars stripped
+  const stripped = stripInvisible(text)
+  const strippedMatched = [
+    ...matchPatterns(stripped, BLOCKED_PATTERNS),
+    ...matchPatterns(stripped, SUSPICIOUS_PATTERNS),
+    ...matchPatterns(stripped, SECRET_PATTERNS),
+  ]
+  layers.push({ name: 'stripped', preview: stripped.slice(0, PREVIEW_LEN), matched: strippedMatched })
+
+  // Layer 3: NFKC normalised — the primary detection surface
+  const normalised = stripped.normalize('NFKC')
+  const normBlocked    = matchPatterns(normalised, BLOCKED_PATTERNS)
+  const normSuspicious = [
+    ...matchPatterns(normalised, SUSPICIOUS_PATTERNS),
+    ...matchPatterns(normalised, SECRET_PATTERNS),
+  ]
+  layers.push({ name: 'normalised', preview: normalised.slice(0, PREVIEW_LEN), matched: [...normBlocked, ...normSuspicious] })
+
+  // Layers 4–6: recursive base64 decode (up to 3 levels)
+  const base64Matched: string[] = []
+  let layer = normalised
+  const b64Names = ['base64_1', 'base64_2', 'base64_3'] as const
+  for (let depth = 0; depth < 3; depth++) {
+    const decoded = decodeBase64Layer(layer)
+    if (!decoded || decoded === layer) break
+    layer = decoded
+    const norm         = layer.normalize('NFKC')
+    const decodedBlocked    = matchPatterns(norm, BLOCKED_PATTERNS)
+    const decodedSuspicious = [
+      ...matchPatterns(norm, SUSPICIOUS_PATTERNS),
+      ...matchPatterns(norm, SECRET_PATTERNS),
+    ]
+    const taggedBlocked = decodedBlocked.map(p =>
+      depth === 0 ? `base64:${p}` : `base64x${depth + 1}:${p}`,
+    )
+    for (const t of taggedBlocked) {
+      if (!base64Matched.includes(t)) base64Matched.push(t)
+    }
+    layers.push({
+      name: b64Names[depth],
+      preview: norm.slice(0, PREVIEW_LEN),
+      matched: [...taggedBlocked, ...decodedSuspicious],
+    })
+    if (decodedBlocked.length) break
+  }
+
+  // Final result — same precedence logic as scan()
+  const blocked = [...normBlocked, ...base64Matched]
+  if (blocked.length > 0) {
+    return { riskLevel: 'blocked', patterns: blocked, layers }
+  }
+  if (normSuspicious.length > 0) {
+    return { riskLevel: 'suspicious', patterns: normSuspicious, layers }
+  }
+  return { riskLevel: 'clean', patterns: [], layers }
+}
+
 /**
  * Scan arbitrary text for adversarial prompt injection, jailbreak attempts,
  * and leaked API secrets. Safe to call with any string — user messages,
@@ -68,41 +173,6 @@ function decodeBase64Layer(text: string): string {
  * applied to catch homoglyph substitutions before pattern matching.
  */
 export function scan(text: string): ScanResult {
-  const normalised = stripInvisible(text).normalize('NFKC')
-  const matched: string[] = []
-
-  // Check blocked patterns on normalised text
-  const blocked = matchPatterns(normalised, BLOCKED_PATTERNS)
-  matched.push(...blocked)
-
-  // Recursive base64 decode — up to 3 layers to catch double/triple-encoded payloads
-  let layer = normalised
-  for (let depth = 0; depth < 3; depth++) {
-    const decoded = decodeBase64Layer(layer)
-    if (!decoded || decoded === layer) break
-    layer = decoded
-    const norm = layer.normalize('NFKC')
-    const decodedBlocked = matchPatterns(norm, BLOCKED_PATTERNS)
-    for (const p of decodedBlocked) {
-      const tag = depth === 0 ? `base64:${p}` : `base64x${depth + 1}:${p}`
-      if (!matched.includes(tag)) matched.push(tag)
-    }
-    if (decodedBlocked.length) break  // stop digging once we found something
-  }
-
-  if (matched.length > 0) {
-    return { riskLevel: 'blocked', patterns: matched }
-  }
-
-  // Check suspicious + secret patterns
-  const suspicious = [
-    ...matchPatterns(normalised, SUSPICIOUS_PATTERNS),
-    ...matchPatterns(normalised, SECRET_PATTERNS),
-  ]
-
-  if (suspicious.length > 0) {
-    return { riskLevel: 'suspicious', patterns: suspicious }
-  }
-
-  return { riskLevel: 'clean', patterns: [] }
+  const { riskLevel, patterns } = scanVerbose(text)
+  return { riskLevel, patterns }
 }

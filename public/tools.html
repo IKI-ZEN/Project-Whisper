@@ -117,6 +117,7 @@ hr{border:none;border-top:1px solid var(--border)}
     <button class="tool-nav-btn" data-tool="archaeology" onclick="switchTool('archaeology',this)">Archaeology</button>
     <button class="tool-nav-btn" data-tool="pipeline" onclick="switchTool('pipeline',this)">Pipeline</button>
     <button class="tool-nav-btn" data-tool="think" onclick="switchTool('think',this)">Think</button>
+    <button class="tool-nav-btn" data-tool="guard-lab" onclick="switchTool('guard-lab',this)">Guard Lab</button>
     <span class="sidebar-section">New Directions</span>
     <button class="tool-nav-btn" data-tool="monitor" onclick="switchTool('monitor',this)">Monitor</button>
     <button class="tool-nav-btn" data-tool="vault" onclick="switchTool('vault',this)">Evidence Vault</button>
@@ -398,6 +399,15 @@ hr{border:none;border-top:1px solid var(--border)}
       <div class="hist-panel" id="hist-panel-think"></div>
     </div>
 
+    <!-- Guard Laboratory -->
+    <div id="pane-guard-lab" class="tool-pane">
+      <h3 style="margin:0">Guard Laboratory</h3>
+      <p style="margin:0;opacity:.6;font-size:12px">Inspect why text was flagged. The scanner strips invisible Unicode, NFKC-normalises, then recursively decodes up to three base64 layers — each stage is shown below.</p>
+      <div class="field"><label>Text to scan</label><textarea id="gl-text" rows="6" placeholder="Paste a prompt, system message, or any text to analyse…"></textarea></div>
+      <button id="btn-guard-lab">Scan</button>
+      <div id="gl-results"></div>
+    </div>
+
     <!-- Threat Monitor -->
     <div id="pane-monitor" class="tool-pane">
       <h2 style="font-size:14px;font-weight:600;color:var(--text)">Threat Monitor <span id="mon-status" style="font-size:11px;color:var(--muted)">idle</span></h2>
@@ -598,6 +608,7 @@ const TOOL_PANES = {
   compare:'pane-compare', sweep:'pane-sweep', sensitivity:'pane-sensitivity',
   cluster:'pane-cluster', cot:'pane-cot', entropy:'pane-entropy',
   archaeology:'pane-archaeology', pipeline:'pane-pipeline', think:'pane-think',
+  'guard-lab':'pane-guard-lab',
   monitor:'pane-monitor', vault:'pane-vault', replay:'pane-replay',
   assertions:'pane-assertions', atlas:'pane-atlas', probes:'pane-probes',
 }
@@ -1296,6 +1307,80 @@ function feedArchaeologyToThink() {
   document.getElementById('wth-prompt').focus()
 }
 
+// ── Guard Laboratory ──────────────────────────────────────────────────────────
+const GUARD_PATTERN_DESCRIPTIONS = {
+  ignore_instructions: 'Attempts to override prior system instructions',
+  new_instructions:    'Tries to inject replacement instructions mid-conversation',
+  jailbreak_dan:       '"Do Anything Now" jailbreak pattern',
+  prompt_override:     'Square-bracket override/jailbreak directive',
+  forget_training:     'Asks the model to ignore its training or programming',
+  role_switch:         'Persona injection — "you are now" role takeover',
+  act_as:              'Role-play injection — asks model to act as another entity',
+  reveal_prompt:       'Tries to extract or echo the system prompt',
+  role_delimiter:      'LLM chat-format role delimiter (e.g. [INST], [SYSTEM])',
+  llm_tag:             'Model control token (e.g. <|system|>, <|im_start|>)',
+  jinja_template:      'Template expression — could evaluate injected code',
+  prompt_leak:         'Asks what the original instructions or system prompt were',
+  openai_key:          'Possible OpenAI API key detected',
+  aws_key:             'Possible AWS access key detected',
+  github_token:        'Possible GitHub personal access token detected',
+  anthropic_key:       'Possible Anthropic API key detected',
+}
+
+async function runGuardLab() {
+  const text = document.getElementById('gl-text').value
+  const out  = document.getElementById('gl-results')
+  const btn  = document.getElementById('btn-guard-lab')
+  if (!text.trim()) { out.innerHTML = '<span style="color:var(--red)">Enter some text to scan.</span>'; return }
+  setLoading(btn, 'Scanning…')
+  out.innerHTML = '<span class="spinner" aria-hidden="true"></span> Scanning…'
+  try {
+    const res = await fetch('/api/ai/guard-probe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    const json = await res.json()
+    if (!json.ok) throw new Error(json.error || 'Scan failed')
+    const d = json.data
+    const levelColor = d.riskLevel === 'blocked' ? 'var(--red)' : d.riskLevel === 'suspicious' ? '#f59e0b' : 'var(--green)'
+    const levelIcon  = d.riskLevel === 'blocked' ? '✕' : d.riskLevel === 'suspicious' ? '⚠' : '✓'
+    const layerName  = { raw:'Raw text', stripped:'Invisible chars stripped', normalised:'NFKC-normalised', base64_1:'Base64 decode (depth 1)', base64_2:'Base64 decode (depth 2)', base64_3:'Base64 decode (depth 3)' }
+    const layerCards = d.layers.map(layer => {
+      const fired = layer.matched.length
+        ? layer.matched.map(m => {
+            const base = m.replace(/^base64x?\d*:/, '')
+            const desc = GUARD_PATTERN_DESCRIPTIONS[base] ?? 'Pattern detected'
+            const tag  = m !== base ? `<span style="font-size:9px;opacity:.6">(${m.replace(':'+base,'')})</span>` : ''
+            return `<div style="padding:4px 0;border-bottom:1px solid var(--border)"><code style="color:var(--accent2);font-size:11px">${escHtml(base)}</code> ${tag}<br><span style="font-size:11px;opacity:.7">${escHtml(desc)}</span></div>`
+          }).join('')
+        : '<span style="font-size:11px;opacity:.5">No patterns matched at this stage</span>'
+      return `<details style="margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden">
+        <summary style="padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center">
+          ${escHtml(layerName[layer.name] ?? layer.name)}
+          <span style="font-size:11px;font-weight:400;opacity:.6">${fired ? `${layer.matched.length} match${layer.matched.length > 1 ? 'es' : ''}` : 'clean'}</span>
+        </summary>
+        <div style="padding:8px 12px;border-top:1px solid var(--border)">
+          <pre style="font-size:11px;font-family:var(--mono);white-space:pre-wrap;overflow:auto;max-height:120px;opacity:.7;margin:0 0 8px">${escHtml(layer.preview)}${layer.preview.length >= 500 ? '\n…(truncated)' : ''}</pre>
+          ${fired}
+        </div>
+      </details>`
+    }).join('')
+    out.innerHTML = `
+      <div style="margin-top:16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:22px;font-weight:700;color:${levelColor}">${levelIcon}</span>
+        <span style="font-size:15px;font-weight:600;color:${levelColor};text-transform:capitalize">${d.riskLevel}</span>
+        ${d.patterns.length ? `<span style="font-size:12px;opacity:.6">${d.patterns.length} pattern${d.patterns.length > 1 ? 's' : ''} matched</span>` : ''}
+      </div>
+      ${d.annotated.length ? `<div style="margin-top:12px;background:var(--surface);border:1px solid ${levelColor}44;border-radius:6px;padding:10px 12px">${
+        d.annotated.map(a => `<div style="padding:4px 0;border-bottom:1px solid var(--border)"><code style="color:var(--accent2);font-size:11px">${escHtml(a.name)}</code><br><span style="font-size:11px;opacity:.7">${escHtml(a.description)}</span></div>`).join('')
+      }</div>` : ''}
+      <div style="margin-top:16px;font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.05em">Detection layers</div>
+      ${layerCards}`
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${escHtml(String(e))}</span>` }
+  finally { clearLoading(btn, 'Scan') }
+}
+
 document.getElementById('btn-complete').onclick = doComplete
 document.getElementById('btn-stream').onclick = doStream
 document.getElementById('btn-embed').onclick = doEmbed
@@ -1310,6 +1395,7 @@ document.getElementById('btn-entropy').onclick = runEntropy
 document.getElementById('btn-archaeology').onclick = runArchaeology
 document.getElementById('btn-pipeline').onclick = runPipeline
 document.getElementById('btn-think').onclick = runThink
+document.getElementById('btn-guard-lab').onclick = runGuardLab
 
 // ── Monitor ───────────────────────────────────────────────────────────────────
 let monitorES = null

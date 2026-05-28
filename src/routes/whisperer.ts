@@ -4,12 +4,14 @@ import { json, ok, err, parseBody } from '../lib/http'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
+  parseGuardProbeRequest,
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
   generatePromptVariants, runCoTProbe, estimateEntropy, reverseEngineerPrompts, think,
 } from '../lib/ai'
 import { executePipeline } from '../lib/pipeline'
+import { scanVerbose, PATTERN_DESCRIPTIONS } from '../lib/guard'
 
 const sensitivity: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseSensitivityRequest)
@@ -123,12 +125,29 @@ const thinkHandler: Handler = async (req: Request, env: Env) => {
   }
 }
 
+const guardLab: Handler = async (req: Request, _env: Env) => {
+  const p = await parseBody(req, parseGuardProbeRequest)
+  if (!p.ok) return p.response
+  try {
+    const result = scanVerbose(p.data.text)
+    // Attach plain-English descriptions to each matched pattern
+    const annotated = result.patterns.map(name => ({
+      name,
+      description: PATTERN_DESCRIPTIONS[name.replace(/^base64x?\d*:/, '')] ?? 'Pattern detected',
+    }))
+    return json(ok({ ...result, annotated }))
+  } catch (e) {
+    return json(err('Guard scan failed', String(e)), 500)
+  }
+}
+
 export const whispererRoutes: Array<[string, string, Handler]> = [
-  ['POST', '/api/ai/think',       thinkHandler],
-  ['POST', '/api/ai/sensitivity', sensitivity],
-  ['POST', '/api/ai/cluster',     cluster],
-  ['POST', '/api/ai/cot',         cot],
-  ['POST', '/api/ai/entropy',     entropy],
-  ['POST', '/api/ai/archaeology', archaeology],
-  ['POST', '/api/ai/pipeline',    pipeline],
+  ['POST', '/api/ai/think',        thinkHandler],
+  ['POST', '/api/ai/sensitivity',  sensitivity],
+  ['POST', '/api/ai/cluster',      cluster],
+  ['POST', '/api/ai/cot',          cot],
+  ['POST', '/api/ai/entropy',      entropy],
+  ['POST', '/api/ai/archaeology',  archaeology],
+  ['POST', '/api/ai/pipeline',     pipeline],
+  ['POST', '/api/ai/guard-probe',  guardLab],
 ]

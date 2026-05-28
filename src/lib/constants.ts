@@ -83,6 +83,9 @@ export const IMAGE_RATE_LIMIT_MAX        = 20  // 20 uploads/min per app
 export const BUILD_KEY_PREFIX            = 'build:'
 export const BUILD_TTL                   = 604800  // 7 days
 
+// Guard Laboratory
+export const MAX_GUARD_PROBE_CHARS       = 50_000  // max chars for guard-probe endpoint
+
 // Document route limits
 export const GUARD_SCAN_SLICE_BYTES      = 8192    // max bytes fed to guard scan on upload
 export const MAX_VECTOR_CHUNKS           = 500     // chunk IDs deleted on document delete

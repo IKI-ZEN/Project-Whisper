@@ -5,7 +5,7 @@ import {
   MAX_CLUSTER_TEXTS, MAX_PIPELINE_NODES, MAX_PIPELINE_DEPTH,
   MAX_SESSION_ID_LEN, MAX_APP_HTML_LEN, MAX_BUILD_DESCRIPTION_LEN,
   MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEY_LEN, APP_STATE_KEY_RE,
-  MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN,
+  MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -580,4 +580,15 @@ export function parseSessionBody(body: unknown): SessionBody {
   if (typeof body.sessionId !== 'string') throw new Error('sessionId must be a string')
   if (body.sessionId.length > MAX_SESSION_ID_LEN) throw new Error(`sessionId must be <= ${MAX_SESSION_ID_LEN} characters`)
   return { sessionId: body.sessionId || undefined }
+}
+
+// ── Guard Laboratory ──────────────────────────────────────────────────────────
+
+export interface GuardProbeRequest { text: string }
+
+export function parseGuardProbeRequest(body: unknown): GuardProbeRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  if (typeof body.text !== 'string' || !body.text.trim()) throw new Error('text is required')
+  if (body.text.length > MAX_GUARD_PROBE_CHARS) throw new Error(`text exceeds ${MAX_GUARD_PROBE_CHARS} character limit`)
+  return { text: body.text }
 }

@@ -551,6 +551,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <a href="/apps" class="navlink">Apps</a>
   <a href="/tools.html" class="navlink">Tools</a>
   <a href="/dashboard" class="navlink">Dashboard</a>
+  <a id="nav-whisper-this" href="/tools.html" class="navlink" style="margin-left:auto;color:var(--accent2)">Whisper this →</a>
 </nav>
 <div class="layout">
   <aside class="sidebar" aria-label="Sidebar">
@@ -656,6 +657,8 @@ const LS_SESS='whisper:sessions'
 const LS_ACTIVE='whisper:activeSession'
 const LS_TOKENS='whisper:tokens'
 let sandboxId=localStorage.getItem(LS_SID)
+function updateWhisperLink(){const el=document.getElementById('nav-whisper-this');if(el&&sandboxId)el.href='/tools.html?sandbox='+encodeURIComponent(sandboxId)}
+updateWhisperLink()
 let sessions=JSON.parse(localStorage.getItem(LS_SESS)||'[]')
 let activeSession=localStorage.getItem(LS_ACTIVE)||'default'
 let sessionTokens=JSON.parse(localStorage.getItem(LS_TOKENS)||'{}')
@@ -826,7 +829,7 @@ async function init(){
         body:JSON.stringify({name:'Chat',description:'',model:'@cf/meta/llama-3.1-8b-instruct',temperature:0.7})
       })
       const d=await r.json()
-      if(d.ok){sandboxId=d.data.id;localStorage.setItem(LS_SID,sandboxId)}
+      if(d.ok){sandboxId=d.data.id;localStorage.setItem(LS_SID,sandboxId);updateWhisperLink()}
     }catch{}
   }
   if(sandboxId&&!sessionTokens[activeSession]){
