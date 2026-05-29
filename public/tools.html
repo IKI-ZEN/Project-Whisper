@@ -182,6 +182,14 @@ hr{border:none;border-top:1px solid var(--border)}
             <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px;margin-top:18px"><input type="checkbox" id="bc-grounding" style="width:auto"/> Google Search grounding</label></div>
           </div>
           <div class="field"><label>Tools (JSON array)</label><textarea id="bc-tools" rows="3" class="mono" placeholder='[{"name":"get_weather","description":"…","parameters":{…}}]' style="font-size:11px;resize:vertical"></textarea><div id="bc-tools-err" style="display:none;color:var(--red);font-size:11px;margin-top:2px"></div></div>
+          <div class="row">
+            <div class="field"><label>Fallback model <span style="font-size:9px;opacity:.5">tried once if primary fails</span></label><input id="bc-fallback" list="whisperer-models-list" placeholder="e.g. openai:gpt-4o-mini"/></div>
+            <div class="field"><label>BYOK alias <span style="font-size:9px;opacity:.5">cf-aig-byok-alias</span></label><input id="bc-byok" placeholder="secrets-store alias"/></div>
+          </div>
+          <div class="row" style="align-items:center;gap:20px;flex-wrap:wrap;padding-top:2px">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px"><input type="checkbox" id="bc-zdr" style="width:auto"/> Zero Data Retention</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;letter-spacing:normal;font-size:12px"><input type="checkbox" id="bc-collect-log" style="width:auto" checked/> Collect log payload</label>
+          </div>
         </div>
       </details>
       <button class="full" id="btn-complete">Run</button>
@@ -549,13 +557,29 @@ hr{border:none;border-top:1px solid var(--border)}
     <div id="pane-vault" class="tool-pane">
       <h2 style="font-size:14px;font-weight:600;color:var(--text)">Evidence Vault</h2>
       <p style="font-size:12px;color:var(--muted)">Save prompt/response pairs from any tool and export as JSONL for fine-tuning.</p>
-      <div class="row">
+      <div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Search mode</label>
+        <select id="vault-mode" onchange="onVaultModeChange()" style="font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);width:auto">
+          <option value="keyword">Keyword</option>
+          <option value="semantic">Semantic (AI Search)</option>
+        </select>
+        <span id="vault-semantic-note" style="display:none;font-size:11px;color:var(--muted)">Hybrid vector + BM25 — requires AI Search binding</span>
+      </div>
+      <div class="row" id="vault-keyword-filters">
         <div class="field"><label>Filter by tag</label><input id="vault-tag-filter" placeholder="tag name…"/></div>
         <div class="field"><label>Filter by tool</label>
           <select id="vault-tool-filter"><option value="">All tools</option><option value="compare">Compare</option><option value="sweep">Sweep</option><option value="sensitivity">Sensitivity</option><option value="entropy">Entropy</option><option value="cot">CoT</option><option value="archaeology">Archaeology</option><option value="think">Think</option><option value="ablation">Ablation</option><option value="drift">Drift</option><option value="evaluate">Rubric Eval</option><option value="consistency">Consistency</option><option value="context-stress">Context Stress</option></select>
         </div>
-        <div class="field"><label>Search</label><input id="vault-q" placeholder="search prompts…"/></div>
+        <div class="field"><label>Query</label><input id="vault-q" placeholder="search prompts…"/></div>
         <button onclick="loadVault()" style="flex:0 0 auto">Load</button>
+      </div>
+      <div class="row" id="vault-semantic-filters" style="display:none">
+        <div class="field" style="flex:1"><label>Natural language query</label><input id="vault-sq" placeholder="e.g. JSON extraction examples…"/></div>
+        <div class="field" style="flex:0 0 140px"><label>Filter by tool</label>
+          <select id="vault-stool-filter"><option value="">All tools</option><option value="compare">Compare</option><option value="sweep">Sweep</option><option value="sensitivity">Sensitivity</option><option value="entropy">Entropy</option><option value="cot">CoT</option><option value="archaeology">Archaeology</option><option value="think">Think</option><option value="ablation">Ablation</option><option value="drift">Drift</option><option value="evaluate">Rubric Eval</option><option value="context-stress">Context Stress</option></select>
+        </div>
+        <div class="field" style="flex:0 0 80px"><label>Limit</label><input id="vault-slimit" type="number" value="20" min="1" max="50"/></div>
+        <button onclick="loadVaultSemantic()" style="flex:0 0 auto">Search</button>
       </div>
       <div class="row">
         <button class="outline" onclick="exportVaultJSONL()">Export JSONL</button>
@@ -781,6 +805,10 @@ async function doComplete() {
   const reasoning = document.getElementById('bc-reasoning').value || undefined
   const format = document.getElementById('bc-format').value || undefined
   const grounding = document.getElementById('bc-grounding').checked
+  const fallbackModel = document.getElementById('bc-fallback').value.trim() || undefined
+  const byokAlias = document.getElementById('bc-byok').value.trim() || undefined
+  const zdr = document.getElementById('bc-zdr').checked || undefined
+  const collectLogPayload = document.getElementById('bc-collect-log').checked ? undefined : false
   try {
     out.textContent = await client.ai.complete({
       prompt: document.getElementById('bc-prompt').value,
@@ -790,6 +818,7 @@ async function doComplete() {
       maxTokens: parseInt(document.getElementById('bc-tokens').value),
       tools, responseFormat: format, reasoningEffort: reasoning, thinking,
       groundingEnabled: grounding || undefined,
+      fallbackModel, byokAlias, zdr, collectLogPayload,
     })
   } catch (e) { out.textContent = String(e) }
   finally { clearLoading(btn, 'Run') }
@@ -2089,6 +2118,13 @@ async function loadAuditLog() {
 }
 
 // ── Evidence Vault ────────────────────────────────────────────────────────────
+function onVaultModeChange() {
+  const mode = document.getElementById('vault-mode').value
+  const isSemantic = mode === 'semantic'
+  document.getElementById('vault-keyword-filters').style.display  = isSemantic ? 'none' : ''
+  document.getElementById('vault-semantic-filters').style.display = isSemantic ? '' : 'none'
+  document.getElementById('vault-semantic-note').style.display    = isSemantic ? '' : 'none'
+}
 async function loadVault() {
   const out = document.getElementById('vault-list')
   const tag  = document.getElementById('vault-tag-filter').value.trim()
@@ -2104,18 +2140,42 @@ async function loadVault() {
     const { data } = await res.json()
     document.getElementById('vault-count').textContent = `${data.total} records`
     if (!data.records.length) { out.innerHTML = '<span class="out-placeholder">No records found.</span>'; return }
-    out.innerHTML = data.records.map(r =>
-      `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px">
-        <div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.prompt)}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap">
-          <span>${escHtml(r.model||'—')}</span><span>${escHtml(r.tool||'—')}</span>
-          <span>${new Date(r.created_at).toLocaleDateString()}</span>
-          ${(r.tags||[]).map(t=>`<span style="background:var(--surface);padding:1px 5px;border-radius:99px">${escHtml(t)}</span>`).join('')}
-        </div>
-        <button class="outline" style="font-size:10px;padding:2px 8px;margin-top:6px" onclick="deleteVaultRecord('${r.id}',this)">Delete</button>
-      </div>`
-    ).join('')
+    out.innerHTML = data.records.map(r => renderVaultRecord(r)).join('')
   } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+async function loadVaultSemantic() {
+  const out = document.getElementById('vault-list')
+  const q     = document.getElementById('vault-sq').value.trim()
+  const tool  = document.getElementById('vault-stool-filter').value
+  const limit = document.getElementById('vault-slimit').value || '20'
+  if (!q) { out.innerHTML = '<span style="color:var(--red)">Enter a query to search.</span>'; return }
+  const params = new URLSearchParams({ q, limit })
+  if (tool) params.set('tool', tool)
+  out.innerHTML = '<span class="out-placeholder">Searching…</span>'
+  document.getElementById('vault-count').textContent = ''
+  try {
+    const res = await fetch(`/api/vault/search?${params}`)
+    const body = await res.json()
+    if (!body.ok) {
+      out.innerHTML = `<span style="color:var(--red)">${escHtml(body.error || 'Search unavailable')}</span>`
+      return
+    }
+    const results = body.data?.results ?? []
+    document.getElementById('vault-count').textContent = `${results.length} results`
+    if (!results.length) { out.innerHTML = '<span class="out-placeholder">No results found.</span>'; return }
+    out.innerHTML = results.map(r => renderVaultRecord(r)).join('')
+  } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
+}
+function renderVaultRecord(r) {
+  return `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px">
+    <div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.prompt)}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap">
+      <span>${escHtml(r.model||'—')}</span><span>${escHtml(r.tool||'—')}</span>
+      <span>${new Date(r.created_at).toLocaleDateString()}</span>
+      ${(r.tags||[]).map(t=>`<span style="background:var(--surface);padding:1px 5px;border-radius:99px">${escHtml(t)}</span>`).join('')}
+    </div>
+    <button class="outline" style="font-size:10px;padding:2px 8px;margin-top:6px" onclick="deleteVaultRecord('${r.id}',this)">Delete</button>
+  </div>`
 }
 async function deleteVaultRecord(id, btn) {
   btn.disabled = true
@@ -2438,7 +2498,7 @@ Object.assign(window, {
   feedToSensitivity, feedToEntropy, feedEntropyToSweep, feedCotToCompare,
   feedThinkToSensitivity, feedArchaeologyToThink,
   runMonitorStream, stopMonitorStream, loadMonitorPatterns, loadAuditLog, scanInGuardLab,
-  loadVault, deleteVaultRecord, saveToVault, exportVaultJSONL,
+  loadVault, loadVaultSemantic, onVaultModeChange, deleteVaultRecord, saveToVault, exportVaultJSONL,
   runReplay,
   showAssertionCreator, loadAssertionSuites, createAssertionSuite, runAssertionSuite, loadSuiteHistory, deleteAssertionSuite,
   addAtlasPrompt, loadAtlasLibrary, deleteAtlasPrompt, runAtlasEmbed, runAtlasNearest,

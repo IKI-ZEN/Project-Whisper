@@ -18,6 +18,15 @@ export interface CompleteOpts {
   systemPrompt?: string
   temperature?: number
   maxTokens?: number
+  responseFormat?: 'json' | string
+  reasoningEffort?: 'low' | 'medium' | 'high'
+  thinking?: number
+  groundingEnabled?: boolean
+  tools?: object[]
+  fallbackModel?: string
+  byokAlias?: string
+  zdr?: boolean
+  collectLogPayload?: boolean
 }
 
 export interface CompareResult {

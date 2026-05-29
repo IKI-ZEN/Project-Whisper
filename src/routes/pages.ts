@@ -1199,6 +1199,15 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
       </div>
     </div>
   </div>
+  <div class="section" style="margin-top:24px">
+    <div class="section-title">Platform Resources</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0">
+      <a href="/api/openapi.json" target="_blank" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">OpenAPI 3.1 spec</a>
+      <a href="/tools.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Tools workbench</a>
+      <a href="/vibe.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Vibe builder</a>
+      <a href="/apps" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Apps gallery</a>
+    </div>
+  </div>
 </main>
 <script nonce="${nonce}" type="module" src="/chart.js"></script>
 <script nonce="${nonce}">
