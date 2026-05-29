@@ -8,6 +8,7 @@
 </head>
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
+  <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false">≡</button>
   <a href="/" class="brand">Whisper</a>
   <a href="/" class="navlink">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
@@ -16,7 +17,8 @@
   <a href="/dashboard" class="navlink">Dashboard</a>
 </nav>
 <div class="layout">
-  <nav class="tool-sidebar" aria-label="Tools navigation">
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <nav class="tool-sidebar" id="tool-sidebar" aria-label="Tools navigation">
     <div class="sb-picker" id="sb-picker">
       <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Active Sandbox</span>
       <div class="sb-picker-row">
@@ -2193,6 +2195,19 @@ async function deleteProbe(id, btn) {
   try { await fetch(`/api/probes/${id}`, { method:'DELETE' }); btn.closest('[data-probe-item]').remove() }
   catch { btn.disabled = false }
 }
+
+;(function initSidebarToggle() {
+  const toggle   = document.getElementById('sidebar-toggle')
+  const sidebar  = document.getElementById('tool-sidebar')
+  const backdrop = document.getElementById('sidebar-backdrop')
+  if (!toggle || !sidebar || !backdrop) return
+  function open()  { sidebar.classList.add('open');  backdrop.classList.add('open');  toggle.setAttribute('aria-expanded','true') }
+  function close() { sidebar.classList.remove('open'); backdrop.classList.remove('open'); toggle.setAttribute('aria-expanded','false') }
+  toggle.onclick   = () => sidebar.classList.contains('open') ? close() : open()
+  backdrop.onclick = close
+  sidebar.addEventListener('click', e => { if (e.target.classList.contains('tool-nav-btn') && window.innerWidth <= 700) close() })
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close() })
+})()
 
 Object.assign(window, {
   switchTool, toggleHist, toggleExpLog, exportExpLog, restoreExpEntry, showCompareDiff,
