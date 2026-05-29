@@ -1451,12 +1451,37 @@ HuggingFace (`streaming: false`) and Replicate (`streaming: false`) fall back to
 
 `buildGatewayHeaders(key, authH, opts, modelLabel)` is the single source of truth for all `cf-aig-*` headers. Every provider handler — blocking and streaming — calls this function. No handler constructs its own `cf-aig-cache-ttl` or `cf-aig-metadata` headers inline.
 
+The builder also forwards three optional caller-controlled headers when the corresponding `CompletionOpts` fields are set:
+
+| `CompletionOpts` field | Emitted header | When emitted |
+|---|---|---|
+| `byokAlias: "my-key"` | `cf-aig-byok-alias: my-key` | When `byokAlias` is a non-empty string |
+| `zdr: true` | `cf-aig-zdr: true` | When `zdr === true` |
+| `collectLogPayload: false` | `cf-aig-collect-log-payload: false` | When `collectLogPayload === false` |
+
+These are surfaced in the API via `POST /api/ai/complete` and `POST /api/ai/stream` request bodies.
+
 **Analytics Engine data points**
 
 Every AI Gateway request records a data point to Cloudflare Analytics Engine with:
 
 - **Blobs:** `model`, `provider`, `sandboxId`
 - **Doubles:** `latencyMs`, `inputTokens`, `outputTokens`, `costUsd`
+
+**Model fallback routing**
+
+Pass `fallbackModel` in `CompletionOpts` to declare a secondary model. If the primary provider throws (rate limit, outage, bad model ID), `complete()` records the failure to Analytics Engine and retries once with the fallback model:
+
+```json
+POST /api/ai/complete
+{
+  "model": "anthropic:claude-opus-4-8",
+  "fallbackModel": "anthropic:claude-sonnet-4-6",
+  "prompt": "Summarise this document."
+}
+```
+
+Fallback events appear in Analytics Engine with blob[1] = `"fallback"` so they can be tracked separately from successful completions.
 
 **Timeout**
 

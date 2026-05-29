@@ -110,6 +110,7 @@ When Project Whisper is deployed behind a custom domain or `workers.dev` URL, Se
 | Missing DNSSEC | DNS zone not signed | Enable DNSSEC in DNS settings |
 | Mixed content | Some assets served over HTTP while page is HTTPS | Audit asset URLs; enable Always Use HTTPS |
 | SSL certificate expiring | Certificate renewal not triggering | Check Universal SSL or custom certificate configuration |
+| Missing security headers | `X-Content-Type-Options`, `X-Frame-Options`, etc. absent | Already mitigated — all responses include these headers via `src/lib/http.ts` |
 
 ### Investigate for Worker security
 

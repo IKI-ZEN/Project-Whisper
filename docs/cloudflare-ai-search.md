@@ -79,29 +79,52 @@ An AI agent can add this as an MCP tool to query the index in natural language w
 
 ## 4. How It Relates to Project Whisper
 
-Project Whisper already has a **vault** of prompt/response pairs collected from every analysis tool run, and an Atlas **prompt library**. Both are currently queryable only via SQL (exact text match or LIKE queries). AI Search would enable natural-language retrieval over these corpora.
+### Current implementation status
 
-### Potential integration points
+AI Search is **implemented** in Project Whisper for vault semantic search. The binding is declared in `wrangler.toml` (commented out until provisioned) and the search endpoint is live.
 
-| Use case | Current state | With AI Search |
-|----------|--------------|---------------|
-| Vault semantic search | SQL `LIKE` on prompt text | `POST /api/vault/search` → AI Search query over indexed prompts |
-| Atlas library discovery | SQL full-text on title/tags | Natural-language search: "find prompts about JSON extraction" |
-| Sandbox context injection | Full history replay | Retrieve the top-K most relevant past turns for a given prompt |
-| Agent memory | Session-scoped memory only | Per-agent persistent memory searchable by semantic similarity |
+### What was built
 
-### Integration approach (if added)
+**`GET /api/vault/search?q=&limit=&tool=`** — natural language search over vault records.
 
-1. Add `AI_SEARCH` binding to `wrangler.toml` and `src/types/env.d.ts`.
-2. On vault record creation (`src/routes/vault.ts`), fire-and-forget an index upsert alongside the D1 write.
-3. Add `GET /api/vault/search?q=<query>` that calls `env.AI_SEARCH.search({ query })` and returns matching vault records.
-4. For Atlas: similarly index prompt entries on create/update.
+```bash
+# Find vault records about JSON extraction (semantic match, not substring)
+GET /api/vault/search?q=JSON+schema+extraction&limit=10
 
-No new npm dependencies — the binding is a native Workers API.
+# Filter by tool
+GET /api/vault/search?q=temperature+sensitivity&tool=entropy&limit=5
+```
 
-### Relationship to existing `embed()` + `kMeansClusters()`
+Returns ranked vault records. Returns `503 {"ok":false,"error":"AI Search not configured"}` when the `AI_SEARCH` binding is not provisioned.
 
-The existing vault cluster analysis endpoint (`POST /api/vault/analyze`) uses Workers AI embeddings + k-means. AI Search would complement this: clustering reveals structure in the corpus; AI Search answers point queries against it.
+**Automatic indexing on create** — every `POST /api/vault` call fires a non-blocking `AI_SEARCH.upsert()` with the prompt text and `{ tool, model }` metadata. The search index stays current without a separate sync step.
+
+**Rate limit**: 20 requests / minute per IP.
+
+### Activating the binding
+
+1. Create an AI Search instance named `whisper-vault` in the Cloudflare dashboard.
+2. Uncomment the `[[ai_search]]` block in `wrangler.toml`:
+   ```toml
+   [[ai_search]]
+   binding      = "AI_SEARCH"
+   instance_name = "whisper-vault"
+   ```
+3. Deploy — existing vault records will be indexed on their next create; backfill requires a one-off script calling `AI_SEARCH.upsert()` over all records.
+
+### Relationship to existing search and clustering
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| SQL `LIKE` | `GET /api/vault?q=` | Substring match on prompt + response text |
+| Semantic (AI Search) | `GET /api/vault/search?q=` | Hybrid vector + BM25 ranking |
+| K-means clustering | `POST /api/vault/analyze` | Unsupervised grouping — surface themes across the corpus |
+
+The three are complementary: `LIKE` for exact keyword lookup, semantic search for conceptual queries, clustering for exploratory analysis.
+
+### Not yet implemented
+
+Atlas (`/api/atlas/library`) still uses only SQL text search + local embedding cache. AI Search indexing for Atlas is the logical next step when the instance is active.
 
 ---
 

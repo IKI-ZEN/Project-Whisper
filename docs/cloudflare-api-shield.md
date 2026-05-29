@@ -64,7 +64,7 @@ Project Whisper exposes a REST API under `/api/` that processes AI completions, 
 
 ### Immediately applicable (all plans)
 
-- **Schema Validation** — upload an OpenAPI spec derived from `src/lib/schema.ts` parsers and enforce it at the Cloudflare edge, reducing malformed-request noise before it reaches the Worker.
+- **Schema Validation** — an OpenAPI 3.1 spec is served at `GET /api/openapi.json` (covering 20 routes). Upload it to Cloudflare API Shield → Schema Validation to enforce it at the edge, blocking malformed requests before they reach the Worker.
 - **Endpoint Management** — monitor which routes receive traffic and flag unexpected endpoint usage.
 - **Mutual TLS** — for deployments where only known clients (CI, dashboards) should reach the API, mTLS provides a hard-auth layer independent of Cloudflare Access JWTs.
 

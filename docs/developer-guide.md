@@ -282,7 +282,21 @@ Content-Type: application/json
 }
 ```
 
-Optional fields: `tools`, `toolChoice`, `responseFormat` (`"json"` | `"text"`), `thinking` (Anthropic extended thinking budget in tokens), `reasoningEffort` (`"low"` | `"medium"` | `"high"` for OpenAI o-series), `groundingEnabled` (Google search grounding).
+Optional fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `tools` | Tool[] | Tool definitions forwarded to the model |
+| `toolChoice` | `"auto"` \| `"required"` \| `"none"` | Tool selection mode |
+| `responseFormat` | `"json"` \| `"text"` | Output format hint |
+| `jsonSchema` | object | OpenAI `json_schema` strict mode — enforces schema conformance on output |
+| `thinking` | integer | Anthropic: extended thinking budget in tokens |
+| `reasoningEffort` | `"low"` \| `"medium"` \| `"high"` | OpenAI o-series reasoning effort |
+| `groundingEnabled` | boolean | Google: enable `google_search_retrieval` |
+| `byokAlias` | string | AI Gateway: use a named credential from Cloudflare Secrets Store (`cf-aig-byok-alias`) |
+| `zdr` | boolean | AI Gateway: route through Zero Data Retention endpoint (`cf-aig-zdr: true`) |
+| `collectLogPayload` | boolean | AI Gateway: `false` suppresses storing the request/response bodies in gateway logs while preserving the metadata record |
+| `fallbackModel` | string | If the primary model throws, retry once with this model |
 
 ### SSE Streaming
 
@@ -713,6 +727,24 @@ GET /api/vault?model=anthropic:claude-sonnet-4-6&tool=entropy&tag=regression&sin
 | `q` | Full-text search on prompt and response |
 | `limit` / `offset` | Pagination (max 200) |
 
+### Vault Semantic Search
+
+Natural-language search over vault records via the Cloudflare AI Search binding (requires `AI_SEARCH` provisioned in the deployment):
+
+```
+GET /api/vault/search?q=JSON+extraction+examples&limit=10&tool=entropy
+```
+
+| Parameter | Description |
+|---|---|
+| `q` | Natural language query (required) |
+| `limit` | Max results, 1–50 (default 20) |
+| `tool` | Optional filter by tool name |
+
+Returns ranked vault records. Returns `503` if the AI Search binding is not configured.
+
+> **Note:** Records are indexed automatically on create. The `q` parameter on `GET /api/vault` is a SQL `LIKE` substring filter — `GET /api/vault/search` is the semantic endpoint.
+
 ### Vault Cluster Analysis
 
 Embed recent vault records and cluster them by semantic similarity to surface patterns:
@@ -743,8 +775,9 @@ Returns:
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/vault` | Create record manually |
-| `GET` | `/api/vault` | List / search |
-| `POST` | `/api/vault/analyze` | Cluster analysis |
+| `GET` | `/api/vault` | List / filter (SQL `LIKE` on prompt/response) |
+| `GET` | `/api/vault/search` | Semantic search via AI Search binding |
+| `POST` | `/api/vault/analyze` | K-means cluster analysis |
 | `DELETE` | `/api/vault/{id}` | Delete record |
 | `POST` | `/api/vault/{id}/tags` | Update tags |
 | `GET` | `/api/vault/export.jsonl` | Stream JSONL export (fine-tuning format, max 10k rows) |
@@ -891,6 +924,9 @@ All rate limits use a sliding-window algorithm.
 | App image uploads | 20 uploads | 1 minute per app |
 | App emails | 5 emails | 1 minute per app |
 | Vault cluster analysis | 3 requests | 5 minutes per IP |
+| Vault semantic search | 20 requests | 1 minute per IP |
+| Pipeline writes | 30 requests | 1 minute per IP |
+| Vault writes | 30 requests | 1 minute per IP |
 
 Rate-limited responses return HTTP `429` with a plain error message.
 
@@ -911,6 +947,28 @@ All JSON endpoints return a standard envelope:
 ```
 
 Every response includes an `X-Request-ID` header (UUID) for correlation and debugging.
+
+Every response also includes the following security headers:
+
+| Header | Value |
+|---|---|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+| `X-XSS-Protection` | `0` (disabled — handled natively by modern browsers) |
+
+---
+
+## OpenAPI Specification
+
+A machine-readable OpenAPI 3.1 spec covering the primary API surface is available at:
+
+```
+GET /api/openapi.json
+```
+
+Cached for 1 hour. Suitable for upload to Cloudflare API Shield for schema validation, or for client codegen.
 
 ---
 
