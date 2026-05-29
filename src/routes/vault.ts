@@ -7,6 +7,8 @@ import { parseVaultAnalyzeRequest } from '../lib/schema'
 import {
   VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW,
   VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW,
+  VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW,
+  AI_SEARCH_MAX_RESULTS,
 } from '../lib/constants'
 
 // ── Validation helpers ────────────────────────────────────────────────────────
@@ -92,6 +94,10 @@ const create: Handler = async (req: Request, env: Env) => {
       id, prompt, response, model, temperature, system_prompt, tool,
       JSON.stringify(metadata), JSON.stringify(tags), created_at,
     ).run()
+    if (env.AI_SEARCH) {
+      const aiMeta: Record<string, string> = { tool, model }
+      void env.AI_SEARCH.upsert([{ id, content: prompt, metadata: aiMeta }])
+    }
     return json(ok({ id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, created_at }))
   } catch (e) {
     return json(err('Failed to create vault record', String(e)), 500)
@@ -317,10 +323,37 @@ const analyze: Handler = async (req: Request, env: Env) => {
   }
 }
 
+// GET /api/vault/search — semantic search via Cloudflare AI Search binding
+const search: Handler = async (req: Request, env: Env) => {
+  if (!env.AI_SEARCH) return json(err('AI Search not configured'), 503)
+  const url   = new URL(req.url)
+  const q     = url.searchParams.get('q') ?? ''
+  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '20', 10), AI_SEARCH_MAX_RESULTS)
+  const tool  = url.searchParams.get('tool') ?? undefined
+  if (!q.trim()) return json(err('q is required'), 400)
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:vault-search:${ip}`, VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
+  try {
+    const filters = tool ? { tool } : undefined
+    const { results: hits } = await env.AI_SEARCH.search({ query: q, limit, filters })
+    const ids = hits.map(r => r.id)
+    if (ids.length === 0) return json(ok({ query: q, results: [] }))
+    const placeholders = ids.map(() => '?').join(',')
+    const { results: rows } = await env.DB.prepare(
+      `SELECT * FROM vault_records WHERE id IN (${placeholders})`,
+    ).bind(...ids).all<Record<string, unknown>>()
+    return json(ok({ query: q, results: (rows ?? []).map(parseRow) }))
+  } catch (e) {
+    return json(err('Vault search failed', String(e)), 500)
+  }
+}
+
 export const vaultRoutes: Array<[string, string, Handler]> = [
   ['POST',   '/api/vault',              create],
   ['POST',   '/api/vault/analyze',      analyze],          // must come before /api/vault/:id
   ['GET',    '/api/vault/export.jsonl', exportJsonl],      // must come before /api/vault/:id
+  ['GET',    '/api/vault/search',       search],           // must come before /api/vault/:id
   ['GET',    '/api/vault',              list],
   ['DELETE', '/api/vault/:id',         remove],
   ['POST',   '/api/vault/:id/tags',    updateTags],

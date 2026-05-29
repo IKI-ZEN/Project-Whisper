@@ -86,6 +86,13 @@ export interface Env {
   SIGNING_SECRET?: string
   ALLOWED_ORIGINS?: string   // comma-separated origins, or '*' (default)
 
+  // AI Search — managed semantic search (optional; provisioned in CF dashboard)
+  AI_SEARCH?: {
+    search(opts: { query: string; limit?: number; filters?: Record<string, string> }): Promise<{ results: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> }>
+    upsert(records: Array<{ id: string; content: string; metadata?: Record<string, unknown> }>): Promise<void>
+    delete(ids: string[]): Promise<void>
+  }
+
   // Cloudflare Access — Zero Trust identity-aware proxy
   CF_ACCESS_AUD?: string          // Access application audience tag (from the dashboard)
   CF_ACCESS_TEAM_DOMAIN?: string  // e.g. yourteam.cloudflareaccess.com

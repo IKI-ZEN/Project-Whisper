@@ -17,6 +17,7 @@ import { assertionRoutes }  from './routes/assertions'
 import { atlasRoutes }      from './routes/atlas'
 import { probesRoutes, runProbeById } from './routes/probes'
 import { pipelineRoutes }            from './routes/pipelines'
+import { openApiRoutes }             from './routes/openapi'
 
 // Required: Wrangler binds DO classes via exports from this entry file.
 export { SandboxDO }     from './durable/SandboxDO'
@@ -51,7 +52,7 @@ router.post('/s/:id/run',    runHandler)
 router.post('/s/:id/stream', streamHandler)
 
 // Mount route groups
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes, ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes, ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes]) {
+for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes, ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes, ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes, ...openApiRoutes]) {
   router.on(method, path, handler)
 }
 

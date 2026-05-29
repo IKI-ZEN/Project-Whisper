@@ -8,7 +8,7 @@ import {
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
   MAX_DRIFT_TURNS, MAX_STRESS_LEVELS, MAX_RUBRIC_CRITERIA, MAX_RUBRIC_SAMPLES,
   MAX_WEBHOOK_URL_LEN, MAX_IMAGE_BASE64_BYTES, MAX_IMAGES_PER_MESSAGE, MAX_JSON_SCHEMA_BYTES,
-  MAX_TTS_TEXT_LEN,
+  MAX_TTS_TEXT_LEN, AI_SEARCH_MAX_RESULTS,
 } from './constants'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -79,6 +79,11 @@ export interface CompleteRequest {
   groundingEnabled?: boolean
   reasoningEffort?: 'low' | 'medium' | 'high'
   thinking?: number
+  // AI Gateway extended controls
+  byokAlias?:        string   // cf-aig-byok-alias — named credential in Secrets Store
+  zdr?:              boolean  // cf-aig-zdr: true — Zero Data Retention (Unified Billing only)
+  collectLogPayload?: boolean // false → cf-aig-collect-log-payload: false (suppress body logging)
+  fallbackModel?:    string   // tried once if the primary model throws
 }
 
 export interface EmbedRequest {
@@ -228,9 +233,13 @@ export function parseCompleteRequest(body: unknown): CompleteRequest {
     toolChoice:      tc === 'required' || tc === 'none' ? tc : tc !== undefined ? 'auto' : undefined,
     responseFormat:  rf === 'json' ? 'json' : rf === 'text' ? 'text' : undefined,
     jsonSchema,
-    groundingEnabled: body.groundingEnabled === true,
-    reasoningEffort: re === 'low' || re === 'medium' || re === 'high' ? re : undefined,
-    thinking:        body.thinking !== undefined ? num(body.thinking, 'thinking', 8000, 1024, 80000) : undefined,
+    groundingEnabled:  body.groundingEnabled === true,
+    reasoningEffort:   re === 'low' || re === 'medium' || re === 'high' ? re : undefined,
+    thinking:          body.thinking !== undefined ? num(body.thinking, 'thinking', 8000, 1024, 80000) : undefined,
+    byokAlias:         body.byokAlias    !== undefined ? str(body.byokAlias, 'byokAlias') : undefined,
+    zdr:               body.zdr === true,
+    collectLogPayload: body.collectLogPayload === false ? false : undefined,
+    fallbackModel:     body.fallbackModel !== undefined ? str(body.fallbackModel, 'fallbackModel') : undefined,
   }
 }
 
@@ -989,4 +998,17 @@ export function parseTTSRequest(body: unknown): TTSRequest {
     }
   }
   return result
+}
+
+// ── Vault semantic search ──────────────────────────────────────────────────────
+
+export function parseVaultSearchRequest(body: unknown): { q: string; limit: number; tool: string | null } {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const q = str(body.q, 'q')
+  if (!q.trim()) throw new Error('q must not be empty')
+  return {
+    q,
+    limit: body.limit !== undefined ? num(body.limit, 'limit', 20, 1, AI_SEARCH_MAX_RESULTS) : 20,
+    tool:  body.tool  !== undefined ? str(body.tool, 'tool') : null,
+  }
 }

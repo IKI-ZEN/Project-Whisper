@@ -154,3 +154,14 @@ export const CARTESIA_API_VERSION = '2024-06-10'
 
 // TTS text input limit
 export const MAX_TTS_TEXT_LEN = 5_000
+
+// AI Search — semantic vault search
+export const VAULT_SEARCH_RATE_LIMIT_MAX    = 20
+export const VAULT_SEARCH_RATE_LIMIT_WINDOW = 60_000
+export const AI_SEARCH_MAX_RESULTS         = 50
+
+// Model fallback telemetry sentinel
+export const FALLBACK_TELEMETRY_BLOB = 'fallback'
+
+// OpenAPI spec version
+export const API_VERSION = '1.0.0'

@@ -208,7 +208,12 @@ export class Router {
   private addHeaders(res: Response, cors: Record<string, string>, requestId: string): Response {
     const headers = new Headers(res.headers)
     for (const [k, v] of Object.entries(cors)) headers.set(k, v)
-    headers.set('X-Request-ID', requestId)
+    headers.set('X-Request-ID',          requestId)
+    headers.set('X-Content-Type-Options', 'nosniff')
+    headers.set('X-Frame-Options',        'DENY')
+    headers.set('Referrer-Policy',        'strict-origin-when-cross-origin')
+    headers.set('Permissions-Policy',     'camera=(), microphone=(), geolocation=()')
+    headers.set('X-XSS-Protection',       '0')
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
   }
 }

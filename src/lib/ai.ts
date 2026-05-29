@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Message, SandboxConfig, Tool, ContentBlock } from './schema'
 import { sseEvent } from './http'
-import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS, AZURE_OPENAI_API_VERSION, CARTESIA_API_VERSION } from './constants'
+import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, MAX_EMBED_CHARS, AI_GATEWAY_TIMEOUT_MS, AZURE_OPENAI_API_VERSION, CARTESIA_API_VERSION, FALLBACK_TELEMETRY_BLOB } from './constants'
 import { sha256 } from './utils'
 import { estimateCost, type CallType } from './pricing'
 
@@ -344,6 +344,11 @@ export interface CompletionOpts {
   reasoningEffort?: 'low' | 'medium' | 'high' // OpenAI o-series reasoning effort
   sandboxId?: string                         // passed as cf-aig-metadata for observability
   groundingEnabled?: boolean                 // Google: enable google_search_retrieval
+  // AI Gateway extended controls
+  byokAlias?:        string   // cf-aig-byok-alias — named credential in Cloudflare Secrets Store
+  zdr?:              boolean  // cf-aig-zdr: true — Zero Data Retention (Unified Billing)
+  collectLogPayload?: boolean // false → cf-aig-collect-log-payload: false
+  fallbackModel?:    string   // tried once if primary model throws
 }
 
 // Extract plain text from a message content value (strips images for text-only paths)
@@ -476,7 +481,10 @@ function buildGatewayHeaders(
     'cf-aig-cache-ttl':  '3600',
     'cf-aig-skip-cache': temp !== 0 ? 'true' : 'false',
   }
-  if (opts.sandboxId) h['cf-aig-metadata'] = JSON.stringify({ sandboxId: opts.sandboxId, model: modelLabel })
+  if (opts.sandboxId)                 h['cf-aig-metadata']          = JSON.stringify({ sandboxId: opts.sandboxId, model: modelLabel })
+  if (opts.byokAlias)                 h['cf-aig-byok-alias']         = opts.byokAlias
+  if (opts.zdr)                       h['cf-aig-zdr']                 = 'true'
+  if (opts.collectLogPayload === false) h['cf-aig-collect-log-payload'] = 'false'
   return h
 }
 
@@ -885,28 +893,44 @@ function streamCohere(env: Env, gw: GatewayResult, opts: CompletionOpts): Readab
 
 // ── Public complete ───────────────────────────────────────────────────────────
 
+async function dispatchComplete(ai: Ai, env: Env, opts: CompletionOpts): Promise<string> {
+  const gw = parseGateway(opts.model ?? '')
+  if (gw) {
+    if      (gw.def.format === 'anthropic')   return completeAnthropic(env, gw, opts)
+    else if (gw.def.format === 'google')      return completeGoogle(env, gw, opts)
+    else if (gw.def.format === 'cohere')      return completeCohere(env, gw, opts)
+    else if (gw.def.format === 'huggingface') return completeHuggingFace(env, gw, opts)
+    else if (gw.def.format === 'replicate')   return completeReplicate(env, gw, opts)
+    else                                       return completeOpenAI(env, gw, opts)
+  }
+  const response = await run(ai)(opts.model ?? MODELS.text, {
+    messages: buildMessages(opts),
+    temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
+  })
+  return (response as { response?: string }).response ?? String(response)
+}
+
 export async function complete(ai: Ai, env: Env, opts: CompletionOpts): Promise<string> {
   const t0 = Date.now()
-  const gw = parseGateway(opts.model ?? '')
   let result: string
-  if (gw) {
-    if      (gw.def.format === 'anthropic')  result = await completeAnthropic(env, gw, opts)
-    else if (gw.def.format === 'google')     result = await completeGoogle(env, gw, opts)
-    else if (gw.def.format === 'cohere')     result = await completeCohere(env, gw, opts)
-    else if (gw.def.format === 'huggingface') result = await completeHuggingFace(env, gw, opts)
-    else if (gw.def.format === 'replicate')  result = await completeReplicate(env, gw, opts)
-    else result = await completeOpenAI(env, gw, opts)
-  } else {
-    const response = await run(ai)(opts.model ?? MODELS.text, {
-      messages: buildMessages(opts),
-      temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
-      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-      ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
-    })
-    result = (response as { response?: string }).response ?? String(response)
+  try {
+    result = await dispatchComplete(ai, env, opts)
+  } catch (primaryErr) {
+    if (!opts.fallbackModel) throw primaryErr
+    if (env.ANALYTICS) {
+      env.ANALYTICS.writeDataPoint({
+        blobs:   [opts.model ?? '', FALLBACK_TELEMETRY_BLOB, opts.sandboxId ?? ''],
+        doubles: [0, 0, 0, 0],
+        indexes: [opts.sandboxId ?? FALLBACK_TELEMETRY_BLOB],
+      })
+    }
+    result = await dispatchComplete(ai, env, { ...opts, model: opts.fallbackModel, fallbackModel: undefined })
   }
   const latencyMs   = Date.now() - t0
   const model        = opts.model ?? MODELS.text
+  const gw           = parseGateway(model)
   const provider     = gw?.provider ?? 'workers-ai'
   const inputText    = opts.prompt ?? (opts.messages ?? []).map(m => contentToText(m.content)).join('')
   const inputTokens  = Math.ceil(inputText.length / 4)

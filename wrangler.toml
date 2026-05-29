@@ -93,6 +93,13 @@ index_name = "whisper-vectors"
 binding = "ANALYTICS"
 dataset = "whisper_events"
 
+# ── AI Search ─────────────────────────────────────────────────────────────────
+# Run: create an AI Search instance named "whisper-vault" in the CF dashboard
+# then uncomment below to enable semantic vault search (GET /api/vault/search)
+# [[ai_search]]
+# binding      = "AI_SEARCH"
+# instance_name = "whisper-vault"
+
 # ── Cron Triggers ─────────────────────────────────────────────────────────────
 # Runs the scheduled probe handler: hourly, daily, and weekly probes
 [triggers]
