@@ -122,11 +122,12 @@ graph TB
 | `APP_BUILDER` | Durable Object | One `AppBuilderDO` instance per build UUID |
 | `APP_STATE` | Durable Object | One `AppStateDO` instance per build UUID |
 | `SANDBOX_REGISTRY` | KV Namespace | Sandbox metadata list + sliding-window rate limit state |
-| `DB` | D1 Database | Audit log (`sandbox_events`) + usage metrics (`usage_metrics`) |
-| `FILES` | R2 Bucket | Documents, generated app files, images, thumbnails |
+| `DB` | D1 Database | Audit log, usage metrics, probes, vault, assertions, atlas, pipelines |
+| `FILES` | R2 Bucket | Documents, generated app files, images, thumbnails, replay results |
 | `JOB_QUEUE` | Queue | Background `file_process` + `embedding_batch` jobs |
 | `VECTORS` | Vectorize | 768-dimension cosine-similarity index for RAG |
-| `ANALYTICS` | Analytics Engine | Time-series telemetry (optional) |
+| `AI_SEARCH` | AI Search | Semantic similarity search over vault records |
+| `ANALYTICS` | Analytics Engine | Per-inference cost, token, and latency telemetry (optional) |
 | `SEND_EMAIL` | Email Routing | Outbound email from generated apps (optional) |
 
 ---
@@ -250,9 +251,15 @@ Special capabilities routed through `ai.ts`:
 - **Extended thinking** — Anthropic `thinking` content blocks are passed through for the `/api/ai/think` endpoint
 - **Structured output** — `responseFormat: 'json'` enables JSON mode per provider
 - **Search grounding** — `groundingEnabled: true` activates Google Search grounding on compatible Google models
-- **Image generation** — `env.AI.run('@cf/stabilityai/stable-diffusion-xl-base-1.0', ...)`, returns base64 PNG
+- **Vision / multimodal** — `contentBlocks: ContentBlock[]` accepted alongside `prompt`; images forwarded as base64 to providers that support vision (OpenAI, Anthropic, Google, Groq, etc.)
+- **AI Gateway Extended Controls** — `byokAlias` (`cf-aig-byok-alias`), `zdr` (`cf-aig-zdr`), `collectLogPayload` (`cf-aig-collect-log-payload`), and `fallbackModel` (retry on error) injected into gateway requests
+- **Prompt caching** — Anthropic `cache_control: ephemeral` applied automatically to long system prompts
+- **Model fallback** — `fallbackModel` field retried transparently on primary model error; outcome logged to Analytics Engine with `source: 'fallback'`
+- **TTS** — `synthesizeSpeech(env, opts)` dispatches to ElevenLabs or Cartesia; returns binary audio + `Content-Type`
+- **Image generation** — Workers AI (`@cf/stabilityai/stable-diffusion-xl-base-1.0`, base64 PNG) or AI Gateway (`fal:*`/`ideogram:*`, returns URL)
 - **Audio transcription** — `env.AI.run('@cf/openai/whisper', ...)`
 - **Embeddings** — `env.AI.run('@cf/baai/bge-base-en-v1.5', ...)`, 768-dimensional vectors, batched in groups of 100
+- **Cost tracking** — `estimateCost(provider, model, tokensIn, tokensOut)` from `src/lib/pricing.ts` writes to `usage_metrics` and `ANALYTICS` after every inference call
 
 ---
 
@@ -419,6 +426,7 @@ All binary data. Key namespace is path-structured:
 | `apps/{buildId}/{filename}` | Generated app files (`index.html`, `app.js`, etc.) |
 | `apps/{buildId}/.thumbnail.svg` | SVG metadata thumbnail (dot-prefix hides from `list()`) |
 | `apps/{buildId}/images/{imageId}` | R2-backed images uploaded by generated apps |
+| `replays/{replayId}.json` | Stored replay results (per-turn similarity scores) |
 
 R2 objects use `customMetadata` to store structured metadata (document status, image name/size/contentType/uploadedAt) that can be read back without re-reading the object body.
 
@@ -478,15 +486,19 @@ When `SIGNING_SECRET` is set, `exportConfig` appends a `signature` field: hex HM
 
 ### Rate limiting
 
-Three independent layers, all sliding-window, all KV-backed:
+Multiple layers, all sliding-window, all KV-backed (`checkRateLimit(key, max, windowMs, env)` from `http.ts`):
 
 | Layer | Key | Limit | Applied at |
 |-------|-----|-------|-----------|
-| Per-IP AI routes | `rl:ai:{ip}` | 30 req / 60 s | `Router.handle()` before dispatch |
-| Per-sandbox run/stream | `rlState` in DO storage | 20 req / 60 s | `SandboxDO.handleRun/handleStream` |
-| Per-app email | `rl:email:{buildId}` | 5 / 60 s | `sendEmailHandler` in appstate.ts |
-
-All three use the same `checkRateLimit(key, max, windowMs, env)` implementation from `http.ts` (or its in-DO equivalent).
+| Per-IP AI routes | `rl:ai:{ip}` | 30 / 60 s | `Router.handle()` before dispatch |
+| Per-sandbox run/stream | `rlState` in DO storage | 20 / 60 s | `SandboxDO` (in-DO rate limiter) |
+| Per-app email | `rl:email:{buildId}` | 5 / 60 s | `sendEmail` in `appstate.ts` |
+| Per-app image upload | `rl:image:{buildId}` | 20 / 60 s | `uploadImage` in `appstate.ts` |
+| Per-IP sandbox create/import/fork | `rl:sandbox-create:{ip}` | 10 / 60 s | `create`, `importConfig`, `fork` in `sandbox.ts` |
+| Per-IP pipeline run | `rl:pipeline-run:{ip}` | 20 / 60 s | `run` in `pipelines.ts` |
+| Per-IP replay | `rl:replay:{ip}` | 10 / 60 s | `postReplay` in `replay.ts` |
+| Per-IP vault cluster | `rl:vault-analyze:{ip}` | 3 / 5 min | `analyze` in `vault.ts` |
+| Per-IP vault search | `rl:vault-search:{ip}` | 20 / 60 s | `search` in `vault.ts` |
 
 ### Cloudflare Access
 
@@ -840,6 +852,12 @@ The alternative is injecting the build ID as a JavaScript variable in a `<script
 | `sandbox:{uuid}` | Sandbox UUID string + `{ id, name, description, model, createdAt, fromVibe }` metadata |
 | `rl:ai:{ip}` | `number[]` timestamp array for AI IP rate limiter |
 | `rl:email:{buildId}` | `number[]` timestamp array for email rate limiter |
+| `rl:image:{buildId}` | `number[]` timestamp array for image upload rate limiter |
+| `rl:sandbox-create:{ip}` | `number[]` timestamp array for sandbox create/import/fork rate limiter |
+| `rl:pipeline-run:{ip}` | `number[]` timestamp array for pipeline run rate limiter |
+| `rl:replay:{ip}` | `number[]` timestamp array for replay rate limiter |
+| `rl:vault-analyze:{ip}` | `number[]` timestamp array for vault cluster analysis rate limiter |
+| `rl:vault-search:{ip}` | `number[]` timestamp array for vault semantic search rate limiter |
 
 ### Durable Object storage
 

@@ -8,7 +8,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- Saved Pipelines — persist named DAG pipeline definitions to D1; full CRUD at `/api/pipelines`; execute via `POST /api/pipelines/:id/run` with `{ input }` → `{ output, trace }`
+- **Vault Semantic Search** — `GET /api/vault/search?q=<query>` finds semantically similar vault records using the Cloudflare AI Search binding; results ranked by similarity; rate-limited 20 req / 60 s per IP
+- **AI Gateway Extended Controls** — four new fields on all completion requests:
+  - `byokAlias` — named BYOK credential from the Cloudflare Secrets Store (`cf-aig-byok-alias` header)
+  - `zdr` — Zero Data Retention mode for Unified Billing accounts (`cf-aig-zdr: true`)
+  - `collectLogPayload` — set `false` to suppress gateway request/response logging
+  - `fallbackModel` — automatically retried once if the primary model throws (logs to Analytics Engine with `source: 'fallback'`)
+- **23-provider AI Gateway registry** — model string prefix routing extended from 4 to 23 providers. New prefixes: `groq:`, `mistral:`, `deepseek:`, `xai:`, `perplexity:`, `cerebras:`, `openrouter:`, `cohere:`, `huggingface:`, `replicate:`, `parallel:`, `fal:`, `ideogram:`, `bedrock:`, `google-vertex-ai:`, `azure:`, `baseten:`; each with capability flags (tools, vision, streaming, json mode)
+- **OpenAPI 3.1 spec** — `GET /api/openapi.json` returns a machine-readable spec for all routes, generated from the live route table
+- **Text-to-speech** — `POST /api/ai/tts` accepts `{ text, voice?, model?, provider }` and returns binary audio; supports ElevenLabs (provider: `"elevenlabs"`) and Cartesia (provider: `"cartesia"`); requires `ELEVENLABS_API_KEY` or `CARTESIA_API_KEY`
+- **Vision / multimodal** — `complete`, `stream`, and `compare` now accept `contentBlocks: ContentBlock[]` alongside `prompt`; images passed as `{ type: 'image', data: base64, mediaType }` are forwarded to providers that support vision (OpenAI, Anthropic, Google, Groq); max 5 images, 4 MB each
+- **App tokens** — short-lived HMAC-SHA256-signed credentials (1-hour TTL) injected into generated app pages at serve time; used for authenticated `state`, `images`, and `email` calls from within the generated app without exposing `SIGNING_SECRET`
+- **Analytics Engine cost tracking** — every AI inference call records cost, tokens in/out, provider, call type, and model to the `ANALYTICS` binding; visible in Cloudflare Analytics dashboard; `GET /api/usage` aggregates from `usage_metrics` in D1 with provider/model/date filters
+- **Prompt caching** — Anthropic `cache_control: ephemeral` markers applied automatically to eligible long system prompts (≥ 1024 tokens); reduces cost on repeated prompts
+- **Whisperer: Rubric Evaluator** — `POST /api/ai/evaluate` scores a model response against a set of named rubric criteria; returns per-criterion pass/fail and aggregate score
+- **Whisperer: Context Stress Test** — `POST /api/ai/context-stress` runs the same prompt at increasing context sizes to find degradation points; returns per-level similarity to baseline
+- **Whisperer: Multi-Turn Drift** — `POST /api/ai/drift` runs a conversation up to N turns, measuring semantic drift from the opening response at each step
+- **Whisperer: Prompt Ablation** — `POST /api/ai/ablation` removes clauses from a prompt one at a time and measures the impact on response similarity; isolates which clauses matter most
+- **Whisperer: Consistency** — `POST /api/ai/consistency` runs the same prompt across logically equivalent rephrased variants and measures consistency; surfaces factual drift across phrasings
+- **Whisperer: Guard Laboratory** — `POST /api/ai/guard-probe` runs the guard scanner over arbitrary text and returns the full scan result (matched patterns, severity, raw categories); for guard rule tuning without making live sandboxes
+- **Saved Pipelines** — persist named DAG pipeline definitions to D1; full CRUD at `/api/pipelines`; execute via `POST /api/pipelines/:id/run` with `{ input }` → `{ output, trace }`
 - `POST /api/sandbox/:id/fork` — clone a sandbox config into a new independent sandbox (name appended with " (copy)", empty memory, fresh timestamps)
 - Prompt auto-versioning — patching `systemPrompt` on a sandbox automatically saves the previous value to the vault, tagged `system-prompt-version`, providing free version history
 - `POST /api/vault/analyze` — cluster vault records by prompt embedding similarity using k-means; returns cluster representatives, size, tools breakdown, and sample IDs; rate-limited 3 req / 5 min per IP
@@ -17,6 +36,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Unified Architecture Refactor** — seven coordinated improvements applied uniformly across all route files:
+  1. `bool(v, field, fallback)` helper added to `src/lib/schema.ts`; replaces all inline `=== true` boolean coercions in parsers (`zdr`, `groundingEnabled`, `collectLogPayload`, `ragEnabled`, `autoVault`)
+  2. `parseQueryInt(params, key, fallback, min, max)` added to `src/lib/http.ts`; replaces all inline `parseInt`/`isNaN`/`Math.min/max` patterns in vault, monitor, atlas, and pipelines handlers
+  3. `LIST_LIMIT_DEFAULT/MAX`, `MONITOR_LIMIT_DEFAULT/MAX`, and rate-limit constants added to `src/lib/constants.ts`; inline literals eliminated
+  4. UUID validation (`isUUID()`) propagated to all handlers that access KV, D1, R2, or DO stubs by sandbox/doc/prompt id — `sandbox.ts` (10 handlers), `assertions.ts` (5 handlers), `atlas.ts` (2 handlers), `replay.ts` (1 handler), `documents.ts` (docId)
+  5. `checkRateLimit` added to `sandbox.ts` create/import/fork, `pipelines.ts` run, and `replay.ts` post — DO-provisioning and multi-step AI operations now rate-limited per IP
+  6. Whisperer envelope propagation — `cluster`, `archaeology`, and `pipeline` tools switched to `parseWithEnvelope()`; all 13 whisperer tools now support `sandboxId` (inherit model context from a sandbox) and `autoVault` (auto-save results to vault)
+  7. `now()` from `src/lib/utils.ts` propagated to all route files that used `Date.now()` directly (`ai.ts`, `appstate.ts`, `assertions.ts`, `monitor.ts`, `pipelines.ts`, `probes.ts`, `replay.ts`, `security.ts`, `vault.ts`, `whisperer.ts`)
 - D1 migration 0008 (`0008_sandbox_analysis.sql`) — `sandbox_id` column added to `probes` and `assertion_suites` for per-sandbox filtering; `metrics_json` column added to `probe_runs` for rich structured metrics; `sandbox_id` column added to `vault_records`
 - D1 migration 0009 (`0009_usage_cost.sql`) — `provider`, `call_type`, and `cost_usd` columns added to `usage_metrics` for cost attribution per model and call type
 - D1 migration 0010 (`0010_pipelines_webhooks.sql`) — creates the `pipelines` table; adds `webhook_url` column to `probes`

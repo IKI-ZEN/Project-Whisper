@@ -23,6 +23,7 @@ Request → src/index.ts
   └─ Router (URLPattern, src/lib/http.ts)
        ├─ /api/ai/*             src/routes/ai.ts + src/routes/whisperer.ts
        ├─ /api/sandbox/*        src/routes/sandbox.ts
+       ├─ /api/sandbox/:id/documents/*  src/routes/documents.ts
        ├─ /api/vibes/*          src/routes/vibes.ts
        ├─ /api/v2/build/*       src/routes/build.ts
        ├─ /api/app/*            src/routes/appstate.ts
@@ -33,6 +34,8 @@ Request → src/index.ts
        ├─ /api/probes/*         src/routes/probes.ts
        ├─ /api/pipelines/*      src/routes/pipelines.ts
        ├─ /api/monitor/*        src/routes/monitor.ts
+       ├─ /api/openapi.json     src/routes/openapi.ts
+       ├─ /api/csp-report       src/routes/security.ts
        └─ /app/:id, /build/:id  src/routes/pages.ts
 ```
 
@@ -61,7 +64,23 @@ env.SANDBOX.get(env.SANDBOX.newUniqueId())            // wrong
 
 **Use `newId()` from `src/lib/utils.ts`** for ID generation — not `crypto.randomUUID()` directly.
 
-**Validate user-supplied `:id` params as UUIDs** before using them in R2 keys, DO stubs, or KV keys. See `appstate.ts` for the pattern.
+**Use `now()` from `src/lib/utils.ts`** for timestamps — not `Date.now()` directly.
+
+**Validate user-supplied `:id` params as UUIDs** before using them in R2 keys, DO stubs, or KV keys. See `appstate.ts` for the pattern:
+```typescript
+const id = params.id ?? ''
+if (!isUUID(id)) return json(err('Invalid id'), 422)
+```
+
+**Parse integer query params with `parseQueryInt()`** from `src/lib/http.ts` — never `parseInt`/`isNaN`/`Math.min/max` inline:
+```typescript
+const limit = parseQueryInt(url.searchParams, 'limit', LIST_LIMIT_DEFAULT, 1, LIST_LIMIT_MAX)
+```
+
+**Parse boolean body fields with `bool()`** (private to `src/lib/schema.ts`) inside parser functions — never `=== true` inline:
+```typescript
+ragEnabled: bool(body, 'ragEnabled', false)
+```
 
 **TypeScript `strict: true` — no `any` casts without an inline comment** explaining why.
 

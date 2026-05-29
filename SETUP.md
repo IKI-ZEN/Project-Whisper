@@ -127,15 +127,34 @@ Open `.dev.vars` and fill in the values you need. The table below lists what eac
 | Variable | Required for | Notes |
 |----------|-------------|-------|
 | `CLOUDFLARE_ACCOUNT_ID` | AI Gateway models, Pages deploy | Find at dash.cloudflare.com → Account Home |
-| `AI_GATEWAY_ID` | `openai:`, `anthropic:`, `google:` models | Create at dash.cloudflare.com → AI → AI Gateway |
-| `OPENAI_API_KEY` | `openai:gpt-4o` and variants | From platform.openai.com |
-| `ANTHROPIC_API_KEY` | `anthropic:claude-*` models | From console.anthropic.com |
-| `GOOGLE_AI_KEY` | `google:gemini-*` models | From aistudio.google.com |
+| `AI_GATEWAY_ID` | Any non-`@cf/` model prefix | Create at dash.cloudflare.com → AI → AI Gateway |
+| `OPENAI_API_KEY` | `openai:*` models | From platform.openai.com |
+| `ANTHROPIC_API_KEY` | `anthropic:*` models | From console.anthropic.com |
+| `GOOGLE_AI_KEY` | `google:*` models | From aistudio.google.com |
+| `GROQ_API_KEY` | `groq:*` models | From console.groq.com |
+| `MISTRAL_API_KEY` | `mistral:*` models | From console.mistral.ai |
+| `DEEPSEEK_API_KEY` | `deepseek:*` models | From platform.deepseek.com |
+| `XAI_API_KEY` | `xai:*` models (Grok) | From console.x.ai |
+| `PERPLEXITY_API_KEY` | `perplexity:*` (includes web search) | From perplexity.ai |
+| `CEREBRAS_API_KEY` | `cerebras:*` (ultra-fast Llama) | From cloud.cerebras.ai |
+| `OPENROUTER_API_KEY` | `openrouter:*` — 200+ models | From openrouter.ai |
+| `COHERE_API_KEY` | `cohere:*` models | From dashboard.cohere.com |
+| `HUGGINGFACE_API_KEY` | `huggingface:*` models | From huggingface.co |
+| `REPLICATE_API_KEY` | `replicate:*` models | From replicate.com |
+| `PARALLEL_API_KEY` | `parallel:*` — web research | From parallel.ai |
+| `FAL_API_KEY` | `fal:*` — image generation | From fal.ai |
+| `IDEOGRAM_API_KEY` | `ideogram:*` — image generation | From ideogram.ai |
+| `ELEVENLABS_API_KEY` | TTS (`provider: "elevenlabs"`) | From elevenlabs.io |
+| `CARTESIA_API_KEY` | TTS (`provider: "cartesia"`) | From cartesia.ai |
+| `CF_AIG_TOKEN` | `bedrock:*` / `google-vertex-ai:*` BYOK | Cloudflare API token with AI Gateway permissions |
+| `AZURE_OPENAI_API_KEY` | `azure:*` models | From portal.azure.com |
+| `BASETEN_API_KEY` | `baseten:*` models | From baseten.co |
 | `CLOUDFLARE_API_TOKEN` | `POST /api/v2/build/:id/deploy` | Needs Pages:Edit permission |
-| `SIGNING_SECRET` | HMAC-signed exports (optional) | `openssl rand -hex 32` |
+| `SIGNING_SECRET` | HMAC-signed exports + app tokens (optional) | `openssl rand -hex 32` |
 | `ALLOWED_ORIGINS` | Restrict CORS (optional) | Comma-separated, e.g. `https://yourdomain.com` |
 | `CF_ACCESS_AUD` | Cloudflare Access Zero Trust (optional) | AUD tag from the Access app |
 | `CF_ACCESS_TEAM_DOMAIN` | Cloudflare Access Zero Trust (optional) | e.g. `yourteam.cloudflareaccess.com` |
+| `EMAIL_FROM_ADDRESS` | `POST /api/app/:id/email` | Must match a verified Email Routing sender address |
 
 **Minimum viable setup** — for local dev using only Workers AI models (`@cf/...`) you only need:
 

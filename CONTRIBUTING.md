@@ -108,6 +108,8 @@ const { data } = parsed;
 ```
 Parser functions live in `src/lib/schema.ts` and throw `Error` with a human-readable message on invalid input. `parseBody` converts that throw to a 422 response automatically. For routes where the JSON body is genuinely optional, use `parseBodyOptional(req, parser, fallback)` from `src/lib/http.ts` — it returns the fallback value instead of a 400 when the body is absent.
 
+Whisperer tools that need `sandboxId`/`autoVault` envelope support use `parseWithEnvelope(req, parser)` instead of `parseBody`.
+
 **Magic numbers belong in `src/lib/constants.ts`.** Length limits, TTLs, rate limit windows, and other numeric thresholds must be named constants — not inline literals.
 
 **Durable Objects are always addressed by `idFromName()`, never by generated DO ID.** Generated IDs are non-deterministic and cannot be reconstructed from a logical name. Always use the logical name (sandbox UUID or build UUID) as the stable address:
@@ -123,7 +125,20 @@ env.SANDBOX.get(env.SANDBOX.newUniqueId())
 
 **Use `newId()` from `src/lib/utils.ts` for ID generation** — not `crypto.randomUUID()` directly. This keeps ID generation in one place.
 
-**Validate user-supplied `:id` parameters as UUIDs before use.** Any path segment that feeds into an R2 key, DO stub, or KV key must be validated as a UUID before use. See `appstate.ts` for the existing pattern.
+**Validate user-supplied `:id` parameters as UUIDs before use.** Any path segment that feeds into an R2 key, DO stub, or KV key must be validated as a UUID before use:
+```typescript
+const id = params.id ?? ''
+if (!isUUID(id)) return json(err('Invalid id'), 422)
+```
+
+**Use `parseQueryInt()` from `src/lib/http.ts` for integer query parameters.** Never use inline `parseInt`/`isNaN`/`Math.min/max` patterns:
+```typescript
+const limit = parseQueryInt(url.searchParams, 'limit', LIST_LIMIT_DEFAULT, 1, LIST_LIMIT_MAX)
+```
+
+**Use `now()` from `src/lib/utils.ts` for timestamps** — not `Date.now()` directly.
+
+**Use the `bool()` helper inside schema parsers** for boolean body fields — not `=== true` or `typeof x === 'boolean'` inline. (`bool` is private to `src/lib/schema.ts`; use it only inside parser functions there.)
 
 **TypeScript `strict: true` — no `any` casts without justification.** If you need to escape the type system, add an inline comment explaining why.
 
@@ -175,10 +190,15 @@ One subject line is enough for most commits. Add a blank line and a body only wh
 Before opening a PR, confirm all of the following:
 
 - [ ] `npm run type-check` exits 0 — no TypeScript errors.
+- [ ] `npm run type-check` exits 0 — no TypeScript errors.
 - [ ] New routes that accept a JSON body use `parseBody(req, parseFoo)` — no raw `req.json()`.
 - [ ] New routes with a user-supplied `:id` in the path validate it as a UUID before use in R2, KV, or DO stubs.
 - [ ] New numeric limits or thresholds are named constants in `src/lib/constants.ts`, not inline literals.
 - [ ] New Durable Object accesses use `idFromName()`, not generated IDs.
+- [ ] Integer query params use `parseQueryInt()` from `src/lib/http.ts` — no inline `parseInt`/`isNaN`/`Math.min/max`.
+- [ ] Boolean body fields in schema parsers use `bool()` — no inline `=== true` coercions.
+- [ ] Timestamps use `now()` from `src/lib/utils.ts` — not `Date.now()` directly.
+- [ ] New expensive routes (DO creation, multi-step AI chains) have `checkRateLimit` applied.
 - [ ] No npm packages added to `dependencies` in `package.json` (dev dependencies are fine).
 - [ ] `CLAUDE.md` updated if you changed routing patterns, added a new binding, or altered a behaviour described there.
 - [ ] New pipelines or probes with `webhookUrl` fields: ensure webhook URL is validated as `https://` prefix.
@@ -193,13 +213,32 @@ For basic local development with `@cf/…` Workers AI models, most variables can
 
 | Variable | When needed |
 |----------|-------------|
-| `CLOUDFLARE_ACCOUNT_ID` + `AI_GATEWAY_ID` | To route `openai:`, `anthropic:`, or `google:` model prefixes through AI Gateway |
-| `OPENAI_API_KEY` | OpenAI models via AI Gateway |
-| `ANTHROPIC_API_KEY` | Anthropic models via AI Gateway |
-| `GOOGLE_AI_KEY` | Google AI models via AI Gateway |
-| `SIGNING_SECRET` | HMAC-SHA256 signing of sandbox export payloads |
+| `CLOUDFLARE_ACCOUNT_ID` + `AI_GATEWAY_ID` | Route any non-`@cf/` model prefix through AI Gateway |
+| `OPENAI_API_KEY` | `openai:*` models |
+| `ANTHROPIC_API_KEY` | `anthropic:*` models |
+| `GOOGLE_AI_KEY` | `google:*` models |
+| `GROQ_API_KEY` | `groq:*` models |
+| `MISTRAL_API_KEY` | `mistral:*` models |
+| `DEEPSEEK_API_KEY` | `deepseek:*` models |
+| `XAI_API_KEY` | `xai:*` models (Grok) |
+| `PERPLEXITY_API_KEY` | `perplexity:*` models (includes web search) |
+| `CEREBRAS_API_KEY` | `cerebras:*` models (ultra-fast inference) |
+| `OPENROUTER_API_KEY` | `openrouter:*` — 200+ models via one key |
+| `COHERE_API_KEY` | `cohere:*` models |
+| `HUGGINGFACE_API_KEY` | `huggingface:*` models |
+| `REPLICATE_API_KEY` | `replicate:*` models |
+| `PARALLEL_API_KEY` | `parallel:*` — web research and extraction |
+| `FAL_API_KEY` | `fal:*` — image generation (returns URL) |
+| `IDEOGRAM_API_KEY` | `ideogram:*` — image generation (returns URL) |
+| `CARTESIA_API_KEY` | TTS via `POST /api/ai/tts` with `provider: "cartesia"` |
+| `ELEVENLABS_API_KEY` | TTS via `POST /api/ai/tts` with `provider: "elevenlabs"` |
+| `CF_AIG_TOKEN` | Amazon Bedrock (`bedrock:*`) and Google Vertex AI (`google-vertex-ai:*`) via BYOK |
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI (`azure:*`) models |
+| `BASETEN_API_KEY` | Baseten (`baseten:*`) models |
+| `SIGNING_SECRET` | HMAC-SHA256 signing of sandbox export payloads and app tokens |
 | `ALLOWED_ORIGINS` | Restrict CORS to specific origins (default: wildcard `*`) |
 | `CF_ACCESS_AUD` + `CF_ACCESS_TEAM_DOMAIN` | Cloudflare Zero Trust JWT validation on mutation endpoints |
 | `CLOUDFLARE_API_TOKEN` | `POST /api/v2/build/:id/deploy` — deploy generated apps to Cloudflare Pages |
+| `EMAIL_FROM_ADDRESS` | Verified sender address for `POST /api/app/:id/email` |
 
 The `ENVIRONMENT` variable is set to `"development"` automatically by `wrangler.toml` and does not need to be in `.dev.vars`.

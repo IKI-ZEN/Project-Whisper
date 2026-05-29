@@ -18,10 +18,10 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 - **Integrity verification** — SHA-256 fingerprint of every sandbox config stored in the Durable Object; `tampered: true` signals out-of-band modification
 - **HMAC-signed exports** — optional `SIGNING_SECRET` enables cryptographic provenance on config export/import
 
-### AI Whisperer Suite (v0.2.0)
+### AI Whisperer Suite
 
 - **Threat Monitor** — live SSE stream of guard flag events from `sandbox_events` with pattern frequency analytics (`GET /api/monitor/stream`, `/audit`, `/patterns`)
-- **Evidence Vault** — prompt/response dataset builder with tags, filters, and streaming JSONL export in OpenAI fine-tuning format (`/api/vault`)
+- **Evidence Vault** — prompt/response dataset builder with tags, filters, streaming JSONL export in OpenAI fine-tuning format, and semantic search via AI Search (`/api/vault`, `/api/vault/search`)
 - **Replay Engine** — replay a conversation session against a different model or system prompt with per-turn cosine similarity scoring (`POST /api/replay`)
 - **Model Assertions** — behaviour contract testing with 7 assertion types (`contains`, `not-contains`, `matches`, `similarity-gte`, `judge`, `latency-lte`, `guard-clean`) and pass/fail history (`/api/assertions`)
 - **Semantic Map (Atlas)** — prompt library with embedding, k-means clustering, PCA-2D scatter plot, and nearest-prompt search (`/api/atlas`)
@@ -30,17 +30,25 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 - **Vault Cluster Analysis** — embed vault records and cluster by k-means to surface prompt patterns and tool-usage breakdown (`POST /api/vault/analyze`; rate-limited 3 req / 5 min per IP)
 - **Sandbox Fork** — clone any sandbox config into a new independent sandbox with empty memory (`POST /api/sandbox/:id/fork`)
 - **Prompt Auto-versioning** — patching `systemPrompt` on a sandbox automatically saves the previous value to the vault tagged `system-prompt-version`, providing free version history
+- **Rubric Evaluator** — score model responses against named criteria; returns per-criterion pass/fail and aggregate (`POST /api/ai/evaluate`)
+- **Context Stress Test** — run the same prompt at increasing context sizes; find degradation points (`POST /api/ai/context-stress`)
+- **Multi-Turn Drift** — measure semantic drift across a multi-turn conversation (`POST /api/ai/drift`)
+- **Prompt Ablation** — remove clauses one at a time and measure response impact (`POST /api/ai/ablation`)
+- **Consistency** — run logically equivalent prompt variants and measure factual consistency (`POST /api/ai/consistency`)
+- **Guard Laboratory** — run the guard scanner over arbitrary text and inspect matched patterns without touching a live sandbox (`POST /api/ai/guard-probe`)
 
 ## API
 
 ```
 GET  /api/health               health check → {"status":"ok"}
 GET  /api                      endpoint discovery map
+GET  /api/openapi.json         OpenAPI 3.1 machine-readable spec
 
-POST /api/ai/complete          blocking text completion
+POST /api/ai/complete          blocking text completion (supports vision contentBlocks, byokAlias, zdr, fallbackModel)
 POST /api/ai/stream            SSE token stream
 POST /api/ai/embed             embeddings (bge-base-en-v1.5)
-POST /api/ai/image             image generation (flux-1-schnell) → base64 PNG
+POST /api/ai/image             image generation (flux-1-schnell → base64 PNG; fal:/ideogram: → URL)
+POST /api/ai/tts               text-to-speech → binary audio (providers: elevenlabs, cartesia)
 POST /api/ai/transcribe        multipart audio → transcript (whisper)
 POST /api/ai/compare           parallel multi-model comparison with latency
 POST /api/ai/sweep             temperature gradient sampling (attractor basin analysis)
@@ -51,6 +59,13 @@ POST /api/ai/entropy           attractor stability — sample diversity + entrop
 POST /api/ai/archaeology       reverse-engineer candidate system prompts from a response
 POST /api/ai/pipeline          declarative node-graph executor with per-node model routing
 POST /api/ai/think             extended thinking — explicit reasoning trace before answer
+POST /api/ai/evaluate          rubric evaluator — score response against named criteria
+POST /api/ai/context-stress    context stress test — degrade prompts at increasing context size
+POST /api/ai/drift             multi-turn semantic drift measurement
+POST /api/ai/ablation          prompt ablation — isolate clause contribution to response
+POST /api/ai/consistency       variant consistency — measure factual stability across rephrased prompts
+POST /api/ai/guard-probe       guard laboratory — scan arbitrary text, inspect matched patterns
+GET  /api/usage                aggregate cost/token usage across models and providers
 
 GET  /api/vibes                starter templates
 POST /api/vibes                describe app → live sandbox + appUrl + embedCode
@@ -84,6 +99,7 @@ POST   /api/vault              save a prompt/response pair with metadata
 PATCH  /api/vault/:id/tags     update tags on a saved record
 DELETE /api/vault/:id          delete a vault record
 GET    /api/vault/export.jsonl streaming JSONL export in OpenAI fine-tuning format
+GET    /api/vault/search       semantic similarity search via AI Search; ?q=<query>&limit=<n>
 POST   /api/vault/analyze      cluster vault records by embedding similarity (k-means); returns cluster representatives and tools breakdown; rate-limited 3 req / 5 min per IP
 
 POST /api/replay               replay a session export against a new model/system prompt → per-turn similarity scores
@@ -152,11 +168,27 @@ POST /s/:id/stream             short stable stream API
 ```
 @cf/meta/llama-3.1-8b-instruct    Workers AI (default, no key needed)
 @cf/meta/llama-3.3-70b-instruct-fp8-fast
+
 openai:gpt-4o                     via Cloudflare AI Gateway
 openai:gpt-4o-mini
 anthropic:claude-sonnet-4-6
-anthropic:claude-opus-4-7
+anthropic:claude-opus-4-8
 google:gemini-2.0-flash
+groq:llama-3.3-70b-versatile      ultra-fast Llama via Groq
+groq:llama-3.1-8b-instant
+mistral:mistral-large-latest
+deepseek:deepseek-chat
+deepseek:deepseek-reasoner
+xai:grok-2-latest
+xai:grok-4
+perplexity:sonar-pro              includes real-time web search
+cerebras:llama-3.3-70b            ultra-fast Llama via Cerebras
+openrouter:{provider}/{model}     200+ models via a single OpenRouter key
+cohere:command-r-plus
+fal:{model-path}                  image generation, returns URL
+ideogram:V_3                      image generation, returns URL
+bedrock:{model-id}                Amazon Bedrock via BYOK
+azure:{resource}/{deployment}     Azure OpenAI via BYOK
 ```
 
 ## Security
@@ -193,14 +225,19 @@ Set `ALLOWED_ORIGINS=https://yourdomain.com,https://app.example.com` to restrict
 
 ### Rate limiting
 
-Three independent sliding-window layers (plus vault analysis):
+Sliding-window rate limits applied across all expensive operations:
 
 | Layer | Limit | Applied at |
 |-------|-------|-----------|
 | Per-IP on `/api/ai/*` | 30 req / 60 s | Router, before dispatch, keyed by `CF-Connecting-IP` |
 | Per-sandbox `run`/`stream` | 20 req / 60 s | `SandboxDO`, persists across hibernation |
-| Per-app email (`/api/app/:id/email`) | 5 req / 60 s | `sendEmailHandler`, keyed by build ID |
+| Per-app email | 5 req / 60 s | `POST /api/app/:id/email`, keyed by build ID |
+| Per-app image upload | 20 req / 60 s | `POST /api/app/:id/images`, keyed by build ID |
+| Per-IP sandbox create/import/fork | 10 req / 60 s | DO-provisioning operations |
+| Per-IP pipeline execution | 20 req / 60 s | `POST /api/pipelines/:id/run` |
+| Per-IP replay | 10 req / 60 s | `POST /api/replay` |
 | Per-IP vault cluster analysis | 3 req / 5 min | `POST /api/vault/analyze` |
+| Per-IP vault semantic search | 20 req / 60 s | `GET /api/vault/search` |
 
 Excess requests return 429.
 

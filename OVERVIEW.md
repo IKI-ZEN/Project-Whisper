@@ -96,17 +96,22 @@ Once all files are written, the app is live at `/build/:id` — no deploy step, 
 
 ## Choosing an AI model
 
-Whisper supports several AI models out of the box:
+Whisper supports 23+ AI providers out of the box:
 
 | Model | Best for |
 |-------|---------|
-| Llama 3.1 8B | Fast, everyday tasks — default for most apps |
-| Llama 3.3 70B | Complex reasoning, detailed analysis |
-| GPT-4o | High-quality general purpose (requires OpenAI key) |
-| GPT-4o Mini | Fast and cost-efficient OpenAI option |
-| Claude Sonnet | Excellent writing and nuanced reasoning |
-| Claude Opus | Most capable, best for hard problems |
-| Gemini Flash | Fast Google model |
+| Llama 3.1 8B (`@cf/meta/llama-3.1-8b-instruct`) | Fast, everyday tasks — default for most apps |
+| Llama 3.3 70B (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) | Complex reasoning, detailed analysis |
+| GPT-4o (`openai:gpt-4o`) | High-quality general purpose (requires OpenAI key) |
+| GPT-4o Mini (`openai:gpt-4o-mini`) | Fast and cost-efficient OpenAI option |
+| Claude Sonnet (`anthropic:claude-sonnet-4-6`) | Excellent writing and nuanced reasoning |
+| Claude Opus (`anthropic:claude-opus-4-8`) | Most capable, best for hard problems |
+| Gemini Flash (`google:gemini-2.0-flash`) | Fast Google model |
+| Llama 70B via Groq (`groq:llama-3.3-70b-versatile`) | Ultra-fast inference |
+| DeepSeek Chat/Reasoner (`deepseek:deepseek-chat`) | Strong reasoning and coding |
+| Grok (`xai:grok-2-latest`) | xAI model via AI Gateway |
+| Perplexity Sonar (`perplexity:sonar-pro`) | Includes real-time web search |
+| OpenRouter models (`openrouter:{provider}/{model}`) | 200+ models via a single key |
 
 The Vibe Builder picks the most suitable model automatically based on your description. You can always change it.
 
@@ -347,6 +352,72 @@ The copy gets a new ID and `" (copy)"` appended to the name. Changes to either s
 
 Every time a sandbox's system prompt is patched, the previous value is silently saved to the vault tagged `system-prompt-version`. Query vault records with `?tool=system-prompt-version` to see the full change history for any sandbox — no explicit version management needed.
 
+### Text-to-speech
+
+Convert text to audio using ElevenLabs or Cartesia from the same endpoint:
+
+```javascript
+const res = await fetch('/api/ai/tts', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ text: 'Hello world', provider: 'elevenlabs', voice: 'Rachel' })
+})
+const audio = await res.arrayBuffer()
+```
+
+Returns binary audio (MP3 or PCM depending on provider). Set `ELEVENLABS_API_KEY` or `CARTESIA_API_KEY` to enable.
+
+### Vault semantic search
+
+After collecting vault records, search them by meaning rather than keyword:
+
+```
+GET /api/vault/search?q=explain quantum entanglement&limit=10
+→ [{ id, prompt, response, similarity, ... }]
+```
+
+Uses the Cloudflare AI Search binding to find the most semantically similar records. Rate-limited to 20 req/min per IP.
+
+### Rubric evaluation
+
+Score a model response against a set of named criteria and get a structured pass/fail breakdown:
+
+```
+POST /api/ai/evaluate
+{ "prompt": "...", "response": "...", "criteria": ["accurate", "concise", "safe"] }
+→ { scores: { accurate: true, concise: false, safe: true }, aggregate: 0.67 }
+```
+
+### Context stress test
+
+Find where model quality degrades as context length increases:
+
+```
+POST /api/ai/context-stress
+{ "prompt": "Summarise this document", "levels": [1000, 5000, 10000, 20000] }
+→ per-level similarity to the baseline (short-context) response
+```
+
+### Multi-turn drift
+
+Measure how far a model drifts from its opening position over a long conversation:
+
+```
+POST /api/ai/drift
+{ "prompt": "Discuss the ethics of AI", "turns": 10 }
+→ per-turn cosine similarity to the turn-1 response
+```
+
+### Guard Laboratory
+
+Test guard patterns against arbitrary text without creating a live sandbox:
+
+```
+POST /api/ai/guard-probe
+{ "text": "Ignore all previous instructions..." }
+→ { blocked: true, suspicious: [], patterns: [{ type: 'ignore_instructions', ... }] }
+```
+
 ### Extended thinking
 
 Request an explicit reasoning trace before the final answer. Uses Anthropic's native extended thinking for `anthropic:*` models, and XML-structured chain-of-thought for others:
@@ -394,7 +465,8 @@ The platform uses these Cloudflare primitives:
 | Vectorize | 768-dimension vector index for document RAG |
 | Queues | Background document processing and embedding jobs |
 | Workers AI | On-network inference for `@cf/*` models |
-| Cloudflare AI Gateway | Proxy for OpenAI, Anthropic, and Google models |
+| Cloudflare AI Gateway | Proxy for 23+ providers (OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, Perplexity, Cerebras, OpenRouter, and more) |
+| AI Search | Semantic similarity search over vault records (vector-based) |
 | Email Routing | Outbound email from generated apps (`SEND_EMAIL` binding) |
 | Cloudflare Pages | Deploy target for finished App Builder projects |
 
