@@ -8,10 +8,11 @@
     "dev:local": "wrangler dev --local",
     "deploy": "wrangler deploy",
     "type-check": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/lib/utils.test.ts src/lib/analysis.test.ts"
+    "test": "node --import tsx/esm --test 'src/**/*.test.ts'"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4",
+    "tsx": "^4.22.3",
     "typescript": "^5",
     "wrangler": "^4"
   }
