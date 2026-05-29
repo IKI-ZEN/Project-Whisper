@@ -125,6 +125,7 @@ const del: Handler = async (_req, env, params: Params) => {
   const sandboxId = params.id ?? ''
   const docId = params.docId ?? ''
   if (!isUUID(sandboxId)) return json(err('Invalid sandbox id'), 400)
+  if (!isUUID(docId)) return json(err('Invalid document id'), 422)
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
 
   const key = r2Key(sandboxId, docId)

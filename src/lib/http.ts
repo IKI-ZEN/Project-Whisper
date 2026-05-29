@@ -120,6 +120,21 @@ export async function checkAiRateLimit(req: Request, env: Env): Promise<Response
   return checkRateLimit(`rl:ai:${ip}`, AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_MS, env)
 }
 
+// Parse a query-string integer with clamped bounds and a fallback for missing/invalid values.
+export function parseQueryInt(
+  params: URLSearchParams,
+  key: string,
+  fallback: number,
+  min = 0,
+  max = Number.MAX_SAFE_INTEGER,
+): number {
+  const raw = params.get(key)
+  if (raw === null) return fallback
+  const n = parseInt(raw, 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(Math.max(min, n), max)
+}
+
 // Exhaust all pages of a KV list() call and return every key.
 export async function listAllKV<T>(ns: KVNamespace, prefix: string): Promise<KVNamespaceListKey<T>[]> {
   let result = await ns.list<T>({ prefix })

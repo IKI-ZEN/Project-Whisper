@@ -2,7 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, readJson } from '../lib/http'
 import { saveToVault } from '../lib/analysis'
-import { isUUID } from '../lib/utils'
+import { isUUID, now } from '../lib/utils'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
@@ -23,7 +23,7 @@ const sensitivity: Handler = async (req: Request, env: Env) => {
   const { prompt, variants, model, systemPrompt, temperature, maxTokens } = p.data
   try {
     const variantPrompts = await generatePromptVariants(env.AI, env, prompt, variants)
-    const t0 = Date.now()
+    const t0 = now()
     const responses = await Promise.all(
       variantPrompts.map(vp => complete(env.AI, env, { model, prompt: vp, systemPrompt, temperature, maxTokens })),
     )
@@ -32,7 +32,7 @@ const sensitivity: Handler = async (req: Request, env: Env) => {
     const result = {
       variants: variantPrompts.map((vp, i) => ({ prompt: vp, response: responses[i] })),
       similarityMatrix,
-      latencyMs: Date.now() - t0,
+      latencyMs: now() - t0,
     }
     if (p.env.autoVault) void saveToVault(env, { prompt, response: result, model: model ?? '', systemPrompt, tool: 'sensitivity', sandboxId: p.env.sandboxId })
     return json(ok(result))
@@ -42,11 +42,11 @@ const sensitivity: Handler = async (req: Request, env: Env) => {
 }
 
 const cluster: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseClusterRequest)
+  const p = await parseWithEnvelope(req, parseClusterRequest)
   if (!p.ok) return p.response
   const { texts, k, model } = p.data
   try {
-    const t0 = Date.now()
+    const t0 = now()
     const embeddings = await embed(env.AI, texts, model, env)
     const kk = Math.min(k, texts.length)
     const { labels } = kMeansClusters(embeddings, kk)
@@ -57,13 +57,15 @@ const cluster: Handler = async (req: Request, env: Env) => {
       if (!grouped[l]) grouped[l] = []
       grouped[l].push(texts[i])
     }
-    return json(ok({
+    const result = {
       k: kk,
       labels,
       clusters: Object.entries(grouped).map(([label, items]) => ({ label: parseInt(label, 10), items })),
       similarityMatrix,
-      latencyMs: Date.now() - t0,
-    }))
+      latencyMs: now() - t0,
+    }
+    if (p.env.autoVault) void saveToVault(env, { prompt: texts.join('\n'), response: result, model: model ?? '', tool: 'cluster', sandboxId: p.env.sandboxId })
+    return json(ok(result))
   } catch (e) {
     return json(err('Clustering failed', String(e)), 500)
   }
@@ -96,25 +98,28 @@ const entropy: Handler = async (req: Request, env: Env) => {
 }
 
 const archaeology: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parseArchaeologyRequest)
+  const p = await parseWithEnvelope(req, parseArchaeologyRequest)
   if (!p.ok) return p.response
   const { targetResponse, probe, model, candidates, maxTokens } = p.data
   try {
     const results = await reverseEngineerPrompts(
       env.AI, env, targetResponse, probe, model, candidates, maxTokens ?? 2048,
     )
-    return json(ok({ candidates: results }))
+    const result = { candidates: results }
+    if (p.env.autoVault) void saveToVault(env, { prompt: probe, response: result, model: model ?? '', tool: 'archaeology', sandboxId: p.env.sandboxId })
+    return json(ok(result))
   } catch (e) {
     return json(err('Archaeology failed', String(e)), 500)
   }
 }
 
 const pipeline: Handler = async (req: Request, env: Env) => {
-  const p = await parseBody(req, parsePipelineRequest)
+  const p = await parseWithEnvelope(req, parsePipelineRequest)
   if (!p.ok) return p.response
   const { input, nodes, entryId, maxDepth } = p.data
   try {
     const result = await executePipeline(env.AI, env, input, nodes, entryId, maxDepth)
+    if (p.env.autoVault) void saveToVault(env, { prompt: input, response: result, model: '', tool: 'pipeline', sandboxId: p.env.sandboxId })
     return json(ok(result))
   } catch (e) {
     return json(err('Pipeline execution failed', String(e)), 500)
@@ -202,8 +207,10 @@ interface Envelope { autoVault: boolean; sandboxId: string | null }
 function extractEnvelope(body: unknown): Envelope {
   if (typeof body !== 'object' || body === null) return { autoVault: false, sandboxId: null }
   const b = body as Record<string, unknown>
+  const av = b.autoVault
+  if (av !== undefined && av !== null && typeof av !== 'boolean') throw new Error('autoVault must be a boolean')
   return {
-    autoVault: b.autoVault === true,
+    autoVault: av === true,
     sandboxId: typeof b.sandboxId === 'string' && isUUID(b.sandboxId) ? b.sandboxId : null,
   }
 }
@@ -262,7 +269,7 @@ const drift: Handler = async (req: Request, env: Env) => {
   if (!p.ok) return p.response
   const { messages, model, systemPrompt, temperature, maxTokens } = p.data
   try {
-    const t0 = Date.now()
+    const t0 = now()
     const context: Array<{ role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }> = []
     const responses: string[] = []
     for (const msg of messages) {
@@ -282,7 +289,7 @@ const drift: Handler = async (req: Request, env: Env) => {
       fromAnchor: i === 0 ? 0 : 1 - cosineSimilarity(embeddings[0], embeddings[i]),
       fromPrior:  i === 0 ? 0 : 1 - cosineSimilarity(embeddings[i - 1], embeddings[i]),
     }))
-    const driftResult = { turns, latencyMs: Date.now() - t0 }
+    const driftResult = { turns, latencyMs: now() - t0 }
     if (p.env.autoVault) {
       const promptSummary = messages.map(m => m.content).join('\n')
       void saveToVault(env, { prompt: promptSummary, response: driftResult, model: model ?? '', systemPrompt, tool: 'drift', sandboxId: p.env.sandboxId })

@@ -1,8 +1,8 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
+import { json, ok, err, parseBody, parseQueryInt } from '../lib/http'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
-import { newId } from '../lib/utils'
+import { newId, isUUID } from '../lib/utils'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -150,10 +150,7 @@ const listPrompts: Handler = async (req: Request, env: Env) => {
   const url = new URL(req.url)
   const tag   = url.searchParams.get('tag') ?? ''
   const q     = url.searchParams.get('q') ?? ''
-  const limit = Math.min(
-    Math.max(1, parseInt(url.searchParams.get('limit') ?? String(DEFAULT_LIST_LIMIT), 10) || DEFAULT_LIST_LIMIT),
-    MAX_LIST_LIMIT,
-  )
+  const limit = parseQueryInt(url.searchParams, 'limit', DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT)
   try {
     // Build query with optional filters
     let query = 'SELECT id, text, label, tags, created_at FROM prompt_library'
@@ -193,6 +190,7 @@ const listPrompts: Handler = async (req: Request, env: Env) => {
 const getPrompt: Handler = async (req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     const row = await env.DB.prepare(
       'SELECT id, text, label, tags, created_at FROM prompt_library WHERE id = ?',
@@ -213,6 +211,7 @@ const getPrompt: Handler = async (req: Request, env: Env, params) => {
 const deletePrompt: Handler = async (req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
+  if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     await env.DB.prepare('DELETE FROM prompt_library WHERE id = ?').bind(id).run()
     return json(ok({ deleted: true }))

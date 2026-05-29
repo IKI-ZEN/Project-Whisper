@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
-import { newId, isUUID } from '../lib/utils'
+import { newId, isUUID, now } from '../lib/utils'
 import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS } from '../lib/constants'
 import {
   complete, embed, estimateEntropy, runCoTProbe,
@@ -346,7 +346,7 @@ const createProbe: Handler = async (req: Request, env: Env) => {
   if (!p.ok) return p.response
   const { name, description, prompt, tool, params, model, schedule, threshold, sandboxId, webhookUrl } = p.data
   const id = newId()
-  const created_at = Date.now()
+  const created_at = now()
   try {
     await env.DB.prepare(
       'INSERT INTO probes (id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -474,17 +474,17 @@ const runProbe: Handler = async (req: Request, env: Env, params) => {
     const metricValue = extractMetricValue(probe.tool, result)
     const metricsJson = extractMetrics(probe.tool, result)
     const runId = newId()
-    const now = Date.now()
+    const ts = now()
 
     await env.DB.prepare(
       'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, metrics_json, run_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), now).run()
+    ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), ts).run()
 
-    await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(now, probe.id).run()
+    await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(ts, probe.id).run()
 
     const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
     if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
-      dispatchWebhook(probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: now })
+      dispatchWebhook(probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
     }
 
     return json(ok({ runId, metricValue, metrics: metricsJson, result }))
@@ -554,7 +554,7 @@ export async function runProbeById(id: string, env: Env): Promise<void> {
   const metricValue = extractMetricValue(probe.tool, result)
   const metricsJson = extractMetrics(probe.tool, result)
   const runId = newId()
-  const ts = Date.now()
+  const ts = now()
   await env.DB.prepare(
     'INSERT INTO probe_runs (id, probe_id, tool, result, metric_value, metrics_json, run_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
   ).bind(runId, probe.id, probe.tool, JSON.stringify(result), metricValue, JSON.stringify(metricsJson), ts).run()

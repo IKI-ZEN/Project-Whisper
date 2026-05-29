@@ -165,3 +165,23 @@ export const FALLBACK_TELEMETRY_BLOB = 'fallback'
 
 // OpenAPI spec version
 export const API_VERSION = '1.0.0'
+
+// Generic list pagination limits
+export const LIST_LIMIT_DEFAULT = 50
+export const LIST_LIMIT_MAX     = 200
+
+// Monitor-specific pagination limits (higher ceiling for event stream)
+export const MONITOR_LIMIT_DEFAULT = 50
+export const MONITOR_LIMIT_MAX     = 500
+
+// Sandbox creation rate limit (create/import/fork are DO-provisioning operations)
+export const SANDBOX_CREATE_RATE_LIMIT_MAX    = 10
+export const SANDBOX_CREATE_RATE_LIMIT_WINDOW = 60_000
+
+// Pipeline execution rate limit (AI chain calls per IP)
+export const PIPELINE_RUN_RATE_LIMIT_MAX    = 20
+export const PIPELINE_RUN_RATE_LIMIT_WINDOW = 60_000
+
+// Replay rate limit (multi-step AI completions per IP)
+export const REPLAY_RATE_LIMIT_MAX    = 10
+export const REPLAY_RATE_LIMIT_WINDOW = 60_000

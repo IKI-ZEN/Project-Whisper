@@ -1,7 +1,9 @@
+import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
-import { newId } from '../lib/utils'
+import { newId, isUUID, now } from '../lib/utils'
+import { REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW } from '../lib/constants'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,11 +79,11 @@ function parseReplayRequest(body: unknown): ReplayRequest {
 // ── Core replay logic ─────────────────────────────────────────────────────────
 
 async function runReplay(
-  env: Parameters<Handler>[1],
+  env: Env,
   messages: ReplayMessage[],
   config: ReplayConfig,
 ): Promise<{ turns: ReplayTurn[]; latencyMs: number }> {
-  const t0 = Date.now()
+  const t0 = now()
 
   // Extract user turns with their index in the original message list
   const userTurns: Array<{ originalIndex: number; userMessage: string; originalResponse: string | null }> = []
@@ -106,7 +108,7 @@ async function runReplay(
 
   for (let idx = 0; idx < userTurns.length; idx++) {
     const { userMessage, originalResponse } = userTurns[idx]
-    const turnStart = Date.now()
+    const turnStart = now()
 
     // Add this user message to the context
     replayContext.push({ role: 'user', content: userMessage })
@@ -123,7 +125,7 @@ async function runReplay(
       })),
     })
 
-    const latencyMs = Date.now() - turnStart
+    const latencyMs = now() - turnStart
 
     // Compute cosine similarity between original and replayed response
     let similarity: number | null = null
@@ -149,12 +151,15 @@ async function runReplay(
     replayContext.push({ role: 'assistant', content: replayedResponse })
   }
 
-  return { turns, latencyMs: Date.now() - t0 }
+  return { turns, latencyMs: now() - t0 }
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const postReplay: Handler = async (req, env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:replay:${ip}`, REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseReplayRequest)
   if (!p.ok) return p.response
 
@@ -173,7 +178,7 @@ const postReplay: Handler = async (req, env) => {
             targetConfig: config,
             turns,
             latencyMs,
-            createdAt: Date.now(),
+            createdAt: now(),
           }
           return result
         }),
@@ -195,7 +200,7 @@ const postReplay: Handler = async (req, env) => {
         targetConfig,
         turns,
         latencyMs,
-        createdAt: Date.now(),
+        createdAt: now(),
       }
 
       await env.FILES.put(
@@ -212,6 +217,7 @@ const postReplay: Handler = async (req, env) => {
 }
 
 const getReplay: Handler = async (_req, env, params) => {
+  if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
   try {
     const obj = await env.FILES.get(`replays/${params.id}.json`)
     if (!obj) return json(err('Replay not found'), 404)

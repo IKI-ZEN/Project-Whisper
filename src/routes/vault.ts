@@ -1,14 +1,14 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
-import { newId, isUUID } from '../lib/utils'
+import { json, ok, err, parseBody, checkRateLimit, parseQueryInt } from '../lib/http'
+import { newId, isUUID, now } from '../lib/utils'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { parseVaultAnalyzeRequest } from '../lib/schema'
 import {
   VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW,
   VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW,
   VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW,
-  AI_SEARCH_MAX_RESULTS,
+  AI_SEARCH_MAX_RESULTS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX,
 } from '../lib/constants'
 
 // ── Validation helpers ────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ const create: Handler = async (req: Request, env: Env) => {
   const { prompt, response, model, temperature, system_prompt, tool, metadata, tags } = p.data
   try {
     const id         = newId()
-    const created_at = Date.now()
+    const created_at = now()
     await env.DB.prepare(
       `INSERT INTO vault_records (id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -111,12 +111,11 @@ const list: Handler = async (req: Request, env: Env) => {
     const model  = url.searchParams.get('model')  ?? null
     const tool   = url.searchParams.get('tool')   ?? null
     const tag    = url.searchParams.get('tag')    ?? null
-    const since  = parseInt(url.searchParams.get('since') ?? '0', 10)
-    const until  = parseInt(url.searchParams.get('until') ?? String(Date.now()), 10)
-    const limitR = parseInt(url.searchParams.get('limit')  ?? '50', 10)
-    const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
+    const since  = parseQueryInt(url.searchParams, 'since', 0)
+    const until  = parseQueryInt(url.searchParams, 'until', now())
+    const limit  = parseQueryInt(url.searchParams, 'limit', LIST_LIMIT_DEFAULT, 1, LIST_LIMIT_MAX)
+    const offset = parseQueryInt(url.searchParams, 'offset', 0)
     const q      = url.searchParams.get('q') ?? null
-    const limit  = Math.min(Math.max(1, isNaN(limitR) ? 50 : limitR), 200)
 
     const conditions: string[] = ['created_at >= ?', 'created_at <= ?']
     const params: unknown[]    = [since, until]
@@ -190,8 +189,8 @@ const exportJsonl: Handler = async (req: Request, env: Env) => {
     const model  = url.searchParams.get('model')  ?? null
     const tool   = url.searchParams.get('tool')   ?? null
     const tag    = url.searchParams.get('tag')    ?? null
-    const since  = parseInt(url.searchParams.get('since') ?? '0', 10)
-    const until  = parseInt(url.searchParams.get('until') ?? String(Date.now()), 10)
+    const since  = parseQueryInt(url.searchParams, 'since', 0)
+    const until  = parseQueryInt(url.searchParams, 'until', now())
     const q      = url.searchParams.get('q') ?? null
 
     const conditions: string[] = ['created_at >= ?', 'created_at <= ?']
@@ -328,7 +327,7 @@ const search: Handler = async (req: Request, env: Env) => {
   if (!env.AI_SEARCH) return json(err('AI Search not configured'), 503)
   const url   = new URL(req.url)
   const q     = url.searchParams.get('q') ?? ''
-  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '20', 10), AI_SEARCH_MAX_RESULTS)
+  const limit = parseQueryInt(url.searchParams, 'limit', 20, 1, AI_SEARCH_MAX_RESULTS)
   const tool  = url.searchParams.get('tool') ?? undefined
   if (!q.trim()) return json(err('q is required'), 400)
   const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'

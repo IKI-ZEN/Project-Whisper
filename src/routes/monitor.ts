@@ -1,6 +1,8 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, sseEvent, sseResponse } from '../lib/http'
+import { json, ok, err, sseEvent, sseResponse, parseQueryInt } from '../lib/http'
+import { now } from '../lib/utils'
+import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX } from '../lib/constants'
 
 // GET /api/monitor/stream
 // SSE endpoint — returns all sandbox_events since `since` (default: last 60s),
@@ -9,9 +11,7 @@ import { json, ok, err, sseEvent, sseResponse } from '../lib/http'
 const stream: Handler = async (req: Request, env: Env) => {
   try {
     const url = new URL(req.url)
-    const defaultSince = Date.now() - 60_000
-    const sinceParam = url.searchParams.get('since')
-    const since = sinceParam ? parseInt(sinceParam, 10) : defaultSince
+    const since = parseQueryInt(url.searchParams, 'since', now() - 60_000)
     const sandboxId = url.searchParams.get('sandbox_id') ?? null
 
     let query: string
@@ -75,11 +75,10 @@ const audit: Handler = async (req: Request, env: Env) => {
     const url = new URL(req.url)
     const sandboxId  = url.searchParams.get('sandbox_id') ?? null
     const eventType  = url.searchParams.get('event_type') ?? null
-    const since      = parseInt(url.searchParams.get('since')  ?? '0', 10)
-    const until      = parseInt(url.searchParams.get('until')  ?? String(Date.now()), 10)
-    const limitRaw   = parseInt(url.searchParams.get('limit')  ?? '50', 10)
-    const offset     = parseInt(url.searchParams.get('offset') ?? '0', 10)
-    const limit      = Math.min(Math.max(1, isNaN(limitRaw) ? 50 : limitRaw), 200)
+    const since      = parseQueryInt(url.searchParams, 'since', 0)
+    const until      = parseQueryInt(url.searchParams, 'until', now())
+    const limit      = parseQueryInt(url.searchParams, 'limit', MONITOR_LIMIT_DEFAULT, 1, MONITOR_LIMIT_MAX)
+    const offset     = parseQueryInt(url.searchParams, 'offset', 0)
 
     // Build WHERE clauses
     const conditions: string[] = ['created_at >= ?', 'created_at <= ?']
@@ -130,9 +129,8 @@ const audit: Handler = async (req: Request, env: Env) => {
 const patterns: Handler = async (req: Request, env: Env) => {
   try {
     const url = new URL(req.url)
-    const defaultSince = Date.now() - 7 * 24 * 60 * 60 * 1000
-    const since      = parseInt(url.searchParams.get('since') ?? String(defaultSince), 10)
-    const until      = parseInt(url.searchParams.get('until') ?? String(Date.now()), 10)
+    const since      = parseQueryInt(url.searchParams, 'since', now() - 7 * 24 * 60 * 60 * 1000)
+    const until      = parseQueryInt(url.searchParams, 'until', now())
     const sandboxId  = url.searchParams.get('sandbox_id') ?? null
 
     let query: string

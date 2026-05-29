@@ -1,11 +1,11 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
-import { newId, isUUID } from '../lib/utils'
+import { json, ok, err, parseBody, checkRateLimit, parseQueryInt } from '../lib/http'
+import { newId, isUUID, now } from '../lib/utils'
 import type { PipelineNode } from '../lib/schema'
 import { parseCreatePipeline, parsePatchPipeline, parsePipelineRunRequest } from '../lib/schema'
 import { executePipeline } from '../lib/pipeline'
-import { PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW } from '../lib/constants'
+import { PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW, PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
 
 // ── D1 row type ───────────────────────────────────────────────────────────────
 
@@ -44,12 +44,12 @@ const createPipeline: Handler = async (req, env) => {
   if (!p.ok) return p.response
   const { name, description, nodes, entryId } = p.data
   const id  = newId()
-  const now = Date.now()
+  const ts  = now()
   try {
     await env.DB.prepare(
       'INSERT INTO pipelines (id, name, description, nodes, entry_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, name, description, JSON.stringify(nodes), entryId, now, now).run()
-    return json(ok({ id, name, description, nodes, entryId, createdAt: now, updatedAt: now }), 201)
+    ).bind(id, name, description, JSON.stringify(nodes), entryId, ts, ts).run()
+    return json(ok({ id, name, description, nodes, entryId, createdAt: ts, updatedAt: ts }), 201)
   } catch (e) {
     return json(err('Failed to create pipeline', String(e)), 500)
   }
@@ -58,8 +58,8 @@ const createPipeline: Handler = async (req, env) => {
 // GET /api/pipelines
 const listPipelines: Handler = async (req, env) => {
   const url    = new URL(req.url)
-  const limit  = Math.min(Math.max(1, parseInt(url.searchParams.get('limit')  ?? '50', 10) || 50), 200)
-  const offset = Math.max(0, parseInt(url.searchParams.get('offset') ?? '0', 10) || 0)
+  const limit  = parseQueryInt(url.searchParams, 'limit', LIST_LIMIT_DEFAULT, 1, LIST_LIMIT_MAX)
+  const offset = parseQueryInt(url.searchParams, 'offset', 0)
   try {
     const [data, count] = await Promise.all([
       env.DB.prepare('SELECT * FROM pipelines ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(limit, offset).all<PipelineRow>(),
@@ -100,7 +100,7 @@ const patch: Handler = async (req, env, params: Params) => {
     if (!existing) return json(err('Pipeline not found'), 404)
 
     const setClauses: string[] = ['updated_at = ?']
-    const bindings: (string | number)[] = [Date.now()]
+    const bindings: (string | number)[] = [now()]
 
     if (patch.name        !== undefined) { setClauses.push('name = ?');        bindings.push(patch.name) }
     if (patch.description !== undefined) { setClauses.push('description = ?'); bindings.push(patch.description) }
@@ -136,6 +136,9 @@ const run: Handler = async (req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:pipeline-run:${ip}`, PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parsePipelineRunRequest)
   if (!p.ok) return p.response
 

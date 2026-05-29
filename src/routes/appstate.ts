@@ -3,7 +3,7 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'
 import { doFetch } from './sandbox'
-import { newId, isUUID } from '../lib/utils'
+import { newId, isUUID, now } from '../lib/utils'
 import {
   IMAGE_MAX_BYTES, ALLOWED_IMAGE_TYPES,
   IMAGE_RATE_LIMIT_WINDOW_MS, IMAGE_RATE_LIMIT_MAX,
@@ -76,7 +76,7 @@ const uploadImage: Handler = async (req, env, params) => {
   const buf     = await file.arrayBuffer()
   await env.FILES.put(`apps/${id}/images/${imageId}`, buf, {
     httpMetadata:   { contentType: file.type },
-    customMetadata: { name: file.name, size: String(file.size), contentType: file.type, uploadedAt: String(Date.now()) },
+    customMetadata: { name: file.name, size: String(file.size), contentType: file.type, uploadedAt: String(now()) },
   })
   return json(ok({ imageId, url: `/api/app/${id}/images/${imageId}` }))
 }

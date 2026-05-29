@@ -209,6 +209,14 @@ function num(v: unknown, field: string, fallback: number, min?: number, max?: nu
   return v
 }
 
+function bool(v: unknown, field: string, fallback: boolean): boolean {
+  if (!isObj(v)) return fallback
+  const val = (v as Record<string, unknown>)[field]
+  if (val === undefined || val === null) return fallback
+  if (typeof val !== 'boolean') throw new Error(`${field} must be a boolean`)
+  return val
+}
+
 export function parseCompleteRequest(body: unknown): CompleteRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   if (!body.prompt && !body.messages) throw new Error('prompt or messages is required')
@@ -233,12 +241,12 @@ export function parseCompleteRequest(body: unknown): CompleteRequest {
     toolChoice:      tc === 'required' || tc === 'none' ? tc : tc !== undefined ? 'auto' : undefined,
     responseFormat:  rf === 'json' ? 'json' : rf === 'text' ? 'text' : undefined,
     jsonSchema,
-    groundingEnabled:  body.groundingEnabled === true,
+    groundingEnabled:  bool(body, 'groundingEnabled', false),
     reasoningEffort:   re === 'low' || re === 'medium' || re === 'high' ? re : undefined,
     thinking:          body.thinking !== undefined ? num(body.thinking, 'thinking', 8000, 1024, 80000) : undefined,
     byokAlias:         body.byokAlias    !== undefined ? str(body.byokAlias, 'byokAlias') : undefined,
-    zdr:               body.zdr === true,
-    collectLogPayload: body.collectLogPayload === false ? false : undefined,
+    zdr:               bool(body, 'zdr', false),
+    collectLogPayload: body.collectLogPayload !== undefined ? bool(body, 'collectLogPayload', false) : undefined,
     fallbackModel:     body.fallbackModel !== undefined ? str(body.fallbackModel, 'fallbackModel') : undefined,
   }
 }
@@ -308,7 +316,7 @@ export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
     temperature: num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2),
     maxTokens:   num(body.maxTokens,   'maxTokens',   DEFAULT_MAX_TOKENS,  1, 8192),
     guardMode:   gm === 'audit' || gm === 'off' ? gm : 'strict',
-    ragEnabled:  body.ragEnabled === true,
+    ragEnabled:  bool(body, 'ragEnabled', false),
     appHtml:     body.appHtml !== undefined
       ? (() => {
           const h = str(body.appHtml, 'appHtml')

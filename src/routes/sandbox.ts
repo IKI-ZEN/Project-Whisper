@@ -1,9 +1,9 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV } from '../lib/http'
+import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV, checkRateLimit } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
-import { SANDBOX_KEY_PREFIX, SANDBOX_TTL } from '../lib/constants'
+import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
 import { saveToVault } from '../lib/analysis'
@@ -89,6 +89,9 @@ const list: Handler = async (_req, env) => {
 }
 
 const create: Handler = async (req, env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:sandbox-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseCreateSandboxRequest)
   if (!p.ok) return p.response
   const parsed = p.data
@@ -124,6 +127,7 @@ const create: Handler = async (req, env) => {
 
 const getConfig: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   const entry = await env.SANDBOX_REGISTRY.getWithMetadata<SandboxMeta>(`${SANDBOX_KEY_PREFIX}${id}`)
   if (!entry.value) return json(err('Sandbox not found'), 404)
   // Refresh TTL on every read — sliding expiry keeps active sandboxes alive
@@ -136,6 +140,7 @@ const getConfig: Handler = async (_req, env, params: Params) => {
 
 const fingerprint: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   const res = await doFetch(stub(env, id), 'config', 'GET')
   const body = await res.json() as { ok: boolean; data: { integrityHash?: string; tampered: boolean } }
@@ -145,6 +150,7 @@ const fingerprint: Handler = async (_req, env, params: Params) => {
 
 const patchConfig: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   let body: unknown
   try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
@@ -187,6 +193,7 @@ const patchConfig: Handler = async (req, env, params: Params) => {
 
 const metrics: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
   const summary = await env.DB.prepare(
@@ -217,6 +224,7 @@ async function checkAppTokenScope(id: string, req: Request, env: Env): Promise<R
 
 export const run: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
   const scopeDeny = await checkAppTokenScope(id, req, env)
@@ -239,6 +247,7 @@ export const run: Handler = async (req, env, params: Params) => {
 
 export const stream: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
   const scopeDeny = await checkAppTokenScope(id, req, env)
@@ -256,6 +265,7 @@ export const stream: Handler = async (req, env, params: Params) => {
 
 const history: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   const sessionId = new URL(req.url).searchParams.get('sessionId') ?? undefined
 
@@ -268,6 +278,7 @@ const history: Handler = async (req, env, params: Params) => {
 
 const del: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   const identity = req.headers.get('X-Whisper-Identity')
   await doFetch(stub(env, id), '/', 'DELETE')
@@ -280,6 +291,7 @@ const del: Handler = async (req, env, params: Params) => {
 
 const exportConfig: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   const res = await doFetch(stub(env, id), 'config', 'GET')
   const body = await res.json() as { ok: boolean; data: Omit<SandboxConfig, 'memory'> }
@@ -294,6 +306,9 @@ const exportConfig: Handler = async (_req, env, params: Params) => {
 }
 
 const importConfig: Handler = async (req, env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:sandbox-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   let raw: unknown
   try { raw = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
 
@@ -352,6 +367,10 @@ const importConfig: Handler = async (req, env) => {
 
 const fork: Handler = async (req, env, params: Params) => {
   const sourceId = params.id ?? ''
+  if (!isUUID(sourceId)) return json(err('Invalid sandbox id'), 422)
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:sandbox-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   if (!await sandboxExists(env, sourceId)) return json(err('Sandbox not found'), 404)
 
   const cfgRes  = await doFetch(stub(env, sourceId), 'config', 'GET')

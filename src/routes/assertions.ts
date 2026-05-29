@@ -3,7 +3,7 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { scan } from '../lib/guard'
-import { newId, isUUID } from '../lib/utils'
+import { newId, isUUID, now } from '../lib/utils'
 import { resolveAnalysisContext } from '../lib/analysis'
 import { RATE_LIMIT_WINDOW_MS, SUITE_RUN_RATE_LIMIT_MAX, MAX_ASSERTION_REGEX_INPUT } from '../lib/constants'
 
@@ -265,13 +265,13 @@ const createSuite: Handler = async (req, env) => {
   try {
     const { name, description, cases, sandboxId } = p.data
     const id = newId()
-    const now = Date.now()
+    const ts = now()
 
     await env.DB.prepare(
       'INSERT INTO assertion_suites (id, name, description, cases, sandbox_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, name, description, JSON.stringify(cases), sandboxId ?? null, now, now).run()
+    ).bind(id, name, description, JSON.stringify(cases), sandboxId ?? null, ts, ts).run()
 
-    const suite: Suite & { sandbox_id: string | null } = { id, name, description, cases, sandbox_id: sandboxId ?? null, created_at: now, updated_at: now }
+    const suite: Suite & { sandbox_id: string | null } = { id, name, description, cases, sandbox_id: sandboxId ?? null, created_at: ts, updated_at: ts }
     return json(ok(suite))
   } catch (e) {
     return json(err('Failed to create assertion suite', String(e)), 500)
@@ -293,6 +293,7 @@ const listSuites: Handler = async (req, env) => {
 }
 
 const getSuite: Handler = async (_req, env, params) => {
+  if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
   try {
     const row = await env.DB.prepare(
       'SELECT id, name, description, cases, created_at, updated_at FROM assertion_suites WHERE id = ?',
@@ -318,6 +319,7 @@ const getSuite: Handler = async (_req, env, params) => {
 }
 
 const patchSuite: Handler = async (req, env, params) => {
+  if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
   const p = await parseBody(req, parsePatchBody)
   if (!p.ok) return p.response
 
@@ -329,14 +331,14 @@ const patchSuite: Handler = async (req, env, params) => {
     if (!existing) return json(err('Suite not found'), 404)
 
     const patch = p.data
-    const now = Date.now()
+    const ts = now()
     const newName = patch.name ?? existing.name
     const newDescription = patch.description ?? existing.description
     const newCases = patch.cases !== undefined ? JSON.stringify(patch.cases) : existing.cases
 
     await env.DB.prepare(
       'UPDATE assertion_suites SET name = ?, description = ?, cases = ?, updated_at = ? WHERE id = ?',
-    ).bind(newName, newDescription, newCases, now, params.id).run()
+    ).bind(newName, newDescription, newCases, ts, params.id).run()
 
     let patchedCases: TestCase[]
     try { patchedCases = JSON.parse(newCases) as TestCase[] } catch { return json(err('Suite data corrupted'), 500) }
@@ -347,7 +349,7 @@ const patchSuite: Handler = async (req, env, params) => {
       description: newDescription,
       cases: patchedCases,
       created_at: existing.created_at,
-      updated_at: now,
+      updated_at: ts,
     }
     return json(ok(suite))
   } catch (e) {
@@ -356,6 +358,7 @@ const patchSuite: Handler = async (req, env, params) => {
 }
 
 const deleteSuite: Handler = async (_req, env, params) => {
+  if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
   try {
     const existing = await env.DB.prepare(
       'SELECT id FROM assertion_suites WHERE id = ?',
@@ -371,6 +374,7 @@ const deleteSuite: Handler = async (_req, env, params) => {
 }
 
 const runSuite: Handler = async (req, env: Env, params) => {
+  if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
   const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
   const rl = await checkRateLimit(`rl:suite-run:${ip}`, SUITE_RUN_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, env)
   if (rl) return rl
@@ -397,7 +401,7 @@ const runSuite: Handler = async (req, env: Env, params) => {
 
     for (let i = 0; i < cases.length; i++) {
       const tc = cases[i]
-      const turnStart = Date.now()
+      const turnStart = now()
 
       const response = await complete(env.AI, env, {
         model:        tc.model        ?? sandboxModel,
@@ -407,7 +411,7 @@ const runSuite: Handler = async (req, env: Env, params) => {
         maxTokens:    tc.maxTokens,
       })
 
-      const latencyMs = Date.now() - turnStart
+      const latencyMs = now() - turnStart
 
       const assertionResults: AssertionResult[] = []
       for (const assertion of tc.assertions) {
@@ -433,7 +437,7 @@ const runSuite: Handler = async (req, env: Env, params) => {
 
     await env.DB.prepare(
       'INSERT INTO assertion_runs (id, suite_id, ran_at, total_cases, passed, failed, results) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(runId, row.id, Date.now(), totalCases, passed, failed, JSON.stringify(runResults)).run()
+    ).bind(runId, row.id, now(), totalCases, passed, failed, JSON.stringify(runResults)).run()
 
     return json(ok({
       runId,
@@ -449,6 +453,7 @@ const runSuite: Handler = async (req, env: Env, params) => {
 }
 
 const getSuiteHistory: Handler = async (_req, env, params) => {
+  if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
   try {
     const result = await env.DB.prepare(
       'SELECT id, ran_at, total_cases, passed, failed FROM assertion_runs WHERE suite_id = ? ORDER BY ran_at DESC LIMIT 20',

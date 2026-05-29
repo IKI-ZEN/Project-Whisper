@@ -8,7 +8,7 @@ import {
   parseCompleteRequest, parseEmbedRequest, parseImageRequest,
   parseCompareRequest, parseSweepRequest, parseUsageQuery, parseTTSRequest,
 } from '../lib/schema'
-import { toBase64 } from '../lib/utils'
+import { toBase64, now } from '../lib/utils'
 import { MAX_AUDIO_BYTES } from '../lib/constants'
 import { requireAccess } from '../lib/access'
 
@@ -119,7 +119,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     if (!p.ok) return p.response
     const { models, ...opts } = p.data
     const results = await Promise.all(models.map(async model => {
-      const start = Date.now()
+      const start = now()
       try {
         const response = await complete(env.AI, env, { ...opts, model })
         return { model, response, latencyMs: Date.now() - start, error: null }
@@ -136,7 +136,7 @@ export const aiRoutes: Array<[string, string, Handler]> = [
     if (!p.ok) return p.response
     const { prompt, temperatures, model, systemPrompt, maxTokens, samples = 1 } = p.data
     const results = await Promise.all(temperatures.map(async temperature => {
-      const start = Date.now()
+      const start = now()
       const responses = await Promise.all(
         Array.from({ length: samples }, () =>
           complete(env.AI, env, { prompt, model, systemPrompt, maxTokens, temperature })
