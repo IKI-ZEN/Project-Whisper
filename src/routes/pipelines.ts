@@ -86,7 +86,7 @@ const getPipeline: Handler = async (_req, env, params: Params) => {
 }
 
 // PATCH /api/pipelines/:id
-const patchPipelineHandler: Handler = async (req, env, params: Params) => {
+const patch: Handler = async (req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
@@ -132,7 +132,7 @@ const deletePipeline: Handler = async (_req, env, params: Params) => {
 }
 
 // POST /api/pipelines/:id/run
-const runPipelineHandler: Handler = async (req, env, params: Params) => {
+const run: Handler = async (req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
@@ -157,7 +157,7 @@ export const pipelineRoutes: Array<[string, string, Handler]> = [
   ['POST',   '/api/pipelines',         createPipeline],
   ['GET',    '/api/pipelines',         listPipelines],
   ['GET',    '/api/pipelines/:id',     getPipeline],
-  ['PATCH',  '/api/pipelines/:id',     patchPipelineHandler],
+  ['PATCH',  '/api/pipelines/:id',     patch],
   ['DELETE', '/api/pipelines/:id',     deletePipeline],
-  ['POST',   '/api/pipelines/:id/run', runPipelineHandler],
+  ['POST',   '/api/pipelines/:id/run', run],
 ]

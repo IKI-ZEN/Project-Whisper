@@ -11,7 +11,7 @@ import {
 } from '../lib/schema'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
-  generatePromptVariants, runCoTProbe, estimateEntropy, reverseEngineerPrompts, think,
+  generatePromptVariants, runCoTProbe, estimateEntropy, reverseEngineerPrompts, think as thinkAi,
   cosineSimilarity, parsePromptClauses,
 } from '../lib/ai'
 import { executePipeline } from '../lib/pipeline'
@@ -121,12 +121,12 @@ const pipeline: Handler = async (req: Request, env: Env) => {
   }
 }
 
-const thinkHandler: Handler = async (req: Request, env: Env) => {
+const think: Handler = async (req: Request, env: Env) => {
   const p = await parseWithEnvelope(req, parseThinkRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, maxTokens, budgetTokens } = p.data
   try {
-    const result = await think(env.AI, env, { prompt, model, systemPrompt, maxTokens, budgetTokens })
+    const result = await thinkAi(env.AI, env, { prompt, model, systemPrompt, maxTokens, budgetTokens })
     if (p.env.autoVault) void saveToVault(env, { prompt, response: result, model: model ?? '', systemPrompt, tool: 'think', sandboxId: p.env.sandboxId })
     return json(ok(result))
   } catch (e) {
@@ -375,7 +375,7 @@ const guardLab: Handler = async (req: Request, env: Env) => {
 }
 
 export const whispererRoutes: Array<[string, string, Handler]> = [
-  ['POST', '/api/ai/think',        thinkHandler],
+  ['POST', '/api/ai/think',        think],
   ['POST', '/api/ai/sensitivity',  sensitivity],
   ['POST', '/api/ai/cluster',      cluster],
   ['POST', '/api/ai/cot',          cot],

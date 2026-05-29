@@ -215,7 +215,7 @@ async function checkAppTokenScope(id: string, req: Request, env: Env): Promise<R
   return null
 }
 
-export const runHandler: Handler = async (req, env, params: Params) => {
+export const run: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
@@ -237,7 +237,7 @@ export const runHandler: Handler = async (req, env, params: Params) => {
   return res
 }
 
-export const streamHandler: Handler = async (req, env, params: Params) => {
+export const stream: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
@@ -427,8 +427,8 @@ export const sandboxRoutes: Array<[string, string, Handler]> = [
   ['GET',    '/api/sandbox/:id/fingerprint',        fingerprint],
   ['GET',    '/api/sandbox/:id/metrics',            metrics],
   ['PATCH',  '/api/sandbox/:id',                    patchConfig],
-  ['POST',   '/api/sandbox/:id/run',                runHandler],
-  ['POST',   '/api/sandbox/:id/stream',             streamHandler],
+  ['POST',   '/api/sandbox/:id/run',                run],
+  ['POST',   '/api/sandbox/:id/stream',             stream],
   ['GET',    '/api/sandbox/:id/history',            history],
   ['DELETE', '/api/sandbox/:id',                    del],
   ['POST',   '/api/sandbox/:id/session',            issueSession],

@@ -1,7 +1,7 @@
 import type { Env, WhisperJob } from './types/env'
 import { Router, json, ok } from './lib/http'
 import { aiRoutes }              from './routes/ai'
-import { sandboxRoutes, runHandler, streamHandler } from './routes/sandbox'
+import { sandboxRoutes, run, stream } from './routes/sandbox'
 import { vibeRoutes }            from './routes/vibes'
 import { pageRoutes }            from './routes/pages'
 import { documentRoutes }        from './routes/documents'
@@ -48,8 +48,8 @@ router.get('/api', (_req, _env) => Promise.resolve(json(ok({
 router.get('/s/:id', (_req, _env, params) =>
   Promise.resolve(new Response(null, { status: 302, headers: { Location: `/app/${params.id ?? ''}` } }))
 )
-router.post('/s/:id/run',    runHandler)
-router.post('/s/:id/stream', streamHandler)
+router.post('/s/:id/run',    run)
+router.post('/s/:id/stream', stream)
 
 // Mount route groups
 for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes, ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes, ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes, ...openApiRoutes]) {

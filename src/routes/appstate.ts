@@ -18,20 +18,20 @@ function appStateStub(env: Env, buildId: string): DurableObjectStub {
 
 // ── App State (E1) ────────────────────────────────────────────────────────────
 
-export const listAppStateHandler: Handler = (_req, env, params) => {
+const listState: Handler = (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
   return doFetch(appStateStub(env, id), 'kv', 'GET')
 }
 
-export const getAppStateHandler: Handler = (_req, env, params) => {
+const getState: Handler = (_req, env, params) => {
   const id  = params.id  ?? ''
   const key = params.key ?? ''
   if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
   return doFetch(appStateStub(env, id), `kv/${encodeURIComponent(key)}`, 'GET')
 }
 
-export const putAppStateHandler: Handler = async (req, env, params) => {
+const putState: Handler = async (req, env, params) => {
   const id  = params.id  ?? ''
   const key = params.key ?? ''
   if (!isUUID(id)) return json(err('Invalid app id'), 422)
@@ -40,14 +40,14 @@ export const putAppStateHandler: Handler = async (req, env, params) => {
   return doFetch(appStateStub(env, id), `kv/${encodeURIComponent(key)}`, 'PUT', { value: parsed.data.value })
 }
 
-export const deleteAppStateKeyHandler: Handler = (_req, env, params) => {
+const deleteKey: Handler = (_req, env, params) => {
   const id  = params.id  ?? ''
   const key = params.key ?? ''
   if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
   return doFetch(appStateStub(env, id), `kv/${encodeURIComponent(key)}`, 'DELETE')
 }
 
-export const clearAppStateHandler: Handler = (_req, env, params) => {
+const clear: Handler = (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return Promise.resolve(json(err('Invalid app id'), 422))
   return doFetch(appStateStub(env, id), '/', 'DELETE')
@@ -55,7 +55,7 @@ export const clearAppStateHandler: Handler = (_req, env, params) => {
 
 // ── App Images (E4) ───────────────────────────────────────────────────────────
 
-export const uploadImageHandler: Handler = async (req, env, params) => {
+const uploadImage: Handler = async (req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid app id'), 422)
 
@@ -81,7 +81,7 @@ export const uploadImageHandler: Handler = async (req, env, params) => {
   return json(ok({ imageId, url: `/api/app/${id}/images/${imageId}` }))
 }
 
-export const listImagesHandler: Handler = async (_req, env, params) => {
+const listImages: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid app id'), 422)
 
@@ -103,7 +103,7 @@ export const listImagesHandler: Handler = async (_req, env, params) => {
   return json(ok({ images, total: images.length }))
 }
 
-export const serveImageHandler: Handler = async (_req, env, params) => {
+const serveImage: Handler = async (_req, env, params) => {
   const id      = params.id      ?? ''
   const imageId = params.imageId ?? ''
   if (!isUUID(id) || !isUUID(imageId)) return json(err('Invalid id'), 422)
@@ -120,7 +120,7 @@ export const serveImageHandler: Handler = async (_req, env, params) => {
   })
 }
 
-export const deleteImageHandler: Handler = async (_req, env, params) => {
+const deleteImage: Handler = async (_req, env, params) => {
   const id      = params.id      ?? ''
   const imageId = params.imageId ?? ''
   if (!isUUID(id) || !isUUID(imageId)) return json(err('Invalid id'), 422)
@@ -131,7 +131,7 @@ export const deleteImageHandler: Handler = async (_req, env, params) => {
 
 // ── App Email (E5) ────────────────────────────────────────────────────────────
 
-export const sendEmailHandler: Handler = async (req, env, params) => {
+const sendEmail: Handler = async (req, env, params) => {
   if (!env.SEND_EMAIL) return json(err('Email sending is not configured on this server.'), 503)
 
   const id = params.id ?? ''
@@ -172,16 +172,16 @@ export const sendEmailHandler: Handler = async (req, env, params) => {
 
 export const appstateRoutes: Array<[string, string, Handler]> = [
   // State (E1)
-  ['GET',    '/api/app/:id/state',           listAppStateHandler],
-  ['GET',    '/api/app/:id/state/:key',      getAppStateHandler],
-  ['PUT',    '/api/app/:id/state/:key',      putAppStateHandler],
-  ['DELETE', '/api/app/:id/state/:key',      deleteAppStateKeyHandler],
-  ['DELETE', '/api/app/:id/state',           clearAppStateHandler],
+  ['GET',    '/api/app/:id/state',           listState],
+  ['GET',    '/api/app/:id/state/:key',      getState],
+  ['PUT',    '/api/app/:id/state/:key',      putState],
+  ['DELETE', '/api/app/:id/state/:key',      deleteKey],
+  ['DELETE', '/api/app/:id/state',           clear],
   // Images (E4)
-  ['POST',   '/api/app/:id/images',          uploadImageHandler],
-  ['GET',    '/api/app/:id/images',          listImagesHandler],
-  ['GET',    '/api/app/:id/images/:imageId', serveImageHandler],
-  ['DELETE', '/api/app/:id/images/:imageId', deleteImageHandler],
+  ['POST',   '/api/app/:id/images',          uploadImage],
+  ['GET',    '/api/app/:id/images',          listImages],
+  ['GET',    '/api/app/:id/images/:imageId', serveImage],
+  ['DELETE', '/api/app/:id/images/:imageId', deleteImage],
   // Email (E5)
-  ['POST',   '/api/app/:id/email',           sendEmailHandler],
+  ['POST',   '/api/app/:id/email',           sendEmail],
 ]

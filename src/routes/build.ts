@@ -15,13 +15,13 @@ function buildStub(env: Env, id: string): DurableObjectStub {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 // GET /api/v2/build
-export const listBuildsHandler: Handler = async (_req, env) => {
+const list: Handler = async (_req, env) => {
   const keys = await listAllKV(env.SANDBOX_REGISTRY, BUILD_KEY_PREFIX)
   return json(ok({ builds: keys.map(k => k.metadata), total: keys.length }))
 }
 
 // POST /api/v2/build
-export const createBuildHandler: Handler = async (req, env) => {
+const create: Handler = async (req, env) => {
   const parsed = await parseBody(req, parseBuildRequest)
   if (!parsed.ok) return parsed.response
   const { description, name, sandboxId, model } = parsed.data
@@ -43,7 +43,7 @@ export const createBuildHandler: Handler = async (req, env) => {
 }
 
 // GET /api/v2/build/:id
-export const getBuildHandler: Handler = async (_req, env, params) => {
+const get: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const res  = await doFetch(buildStub(env, id), 'status', 'GET')
@@ -53,7 +53,7 @@ export const getBuildHandler: Handler = async (_req, env, params) => {
 }
 
 // GET /api/v2/build/:id/files
-export const listBuildFilesHandler: Handler = async (_req, env, params) => {
+const listFiles: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const res  = await doFetch(buildStub(env, id), 'files', 'GET')
@@ -63,7 +63,7 @@ export const listBuildFilesHandler: Handler = async (_req, env, params) => {
 }
 
 // GET /api/v2/build/:id/files/:filename
-export const getBuildFileHandler: Handler = async (_req, env, params) => {
+const getFile: Handler = async (_req, env, params) => {
   const id       = params.id ?? ''
   const filename = params.filename ?? 'index.html'
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
@@ -75,7 +75,7 @@ export const getBuildFileHandler: Handler = async (_req, env, params) => {
 }
 
 // DELETE /api/v2/build/:id
-export const deleteBuildHandler: Handler = async (_req, env, params) => {
+const del: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const res  = await doFetch(buildStub(env, id), '', 'DELETE')
@@ -86,7 +86,7 @@ export const deleteBuildHandler: Handler = async (_req, env, params) => {
 }
 
 // GET /api/v2/build/:id/thumbnail — E3
-export const getBuildThumbnailHandler: Handler = async (_req, env, params) => {
+const getThumbnail: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid build id'), 422)
   const obj = await env.FILES.get(`apps/${id}/.thumbnail.svg`)
@@ -100,7 +100,7 @@ export const getBuildThumbnailHandler: Handler = async (_req, env, params) => {
 }
 
 // POST /api/v2/build/:id/deploy — E6: Cloudflare Pages direct upload
-export const deployBuildHandler: Handler = async (_req, env, params) => {
+const deploy: Handler = async (_req, env, params) => {
   if (!env.CLOUDFLARE_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID) {
     return json(err('Cloudflare API token not configured — set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID'), 503)
   }
@@ -168,12 +168,12 @@ export const deployBuildHandler: Handler = async (_req, env, params) => {
 // ── Route table ───────────────────────────────────────────────────────────────
 
 export const buildRoutes: Array<[string, string, Handler]> = [
-  ['GET',    '/api/v2/build',                     listBuildsHandler],
-  ['POST',   '/api/v2/build',                     createBuildHandler],
-  ['GET',    '/api/v2/build/:id',                 getBuildHandler],
-  ['GET',    '/api/v2/build/:id/files',           listBuildFilesHandler],
-  ['GET',    '/api/v2/build/:id/files/:filename', getBuildFileHandler],
-  ['DELETE', '/api/v2/build/:id',                 deleteBuildHandler],
-  ['GET',    '/api/v2/build/:id/thumbnail',       getBuildThumbnailHandler],
-  ['POST',   '/api/v2/build/:id/deploy',          deployBuildHandler],
+  ['GET',    '/api/v2/build',                     list],
+  ['POST',   '/api/v2/build',                     create],
+  ['GET',    '/api/v2/build/:id',                 get],
+  ['GET',    '/api/v2/build/:id/files',           listFiles],
+  ['GET',    '/api/v2/build/:id/files/:filename', getFile],
+  ['DELETE', '/api/v2/build/:id',                 del],
+  ['GET',    '/api/v2/build/:id/thumbnail',       getThumbnail],
+  ['POST',   '/api/v2/build/:id/deploy',          deploy],
 ]

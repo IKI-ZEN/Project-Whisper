@@ -413,7 +413,7 @@ function htmlHeaders(nonce: string, allowFrame = false): Record<string, string> 
   }
 }
 
-export const appPageRoute: Handler = async (_req, env, params: Params) => {
+const appPage: Handler = async (_req, env, params: Params) => {
   const id = params.id ?? ''
   if (!await sandboxExists(env, id)) {
     const nonce = genNonce()
@@ -445,7 +445,7 @@ export const appPageRoute: Handler = async (_req, env, params: Params) => {
   return new Response(html, { headers: htmlHeaders(nonce, true) })
 }
 
-export const appsGalleryRoute: Handler = (_req, _env) => {
+const appsGallery: Handler = (_req, _env) => {
   const nonce = genNonce()
   return Promise.resolve(new Response(appsGalleryHtml(nonce), { headers: htmlHeaders(nonce) }))
 }
@@ -1082,7 +1082,7 @@ init()
 </body>
 </html>` }
 
-export const chatRoute: Handler = (_req, _env) => {
+const chat: Handler = (_req, _env) => {
   const nonce = genNonce()
   return Promise.resolve(new Response(chatPageHtml(nonce), { headers: htmlHeaders(nonce) }))
 }
@@ -1398,7 +1398,7 @@ window.addEventListener('load',load)
 </body>
 </html>` }
 
-export const dashboardRoute: Handler = (_req, _env) => {
+const dashboard: Handler = (_req, _env) => {
   const nonce = genNonce()
   return Promise.resolve(new Response(dashboardHtml(nonce), { headers: htmlHeaders(nonce) }))
 }
@@ -1454,19 +1454,19 @@ async function serveBuildFile(env: Env, buildId: string, filename: string): Prom
   return new Response(obj.body, { headers })
 }
 
-export const buildIndexRoute: Handler = (_req, env, params) =>
+const buildIndex: Handler = (_req, env, params) =>
   serveBuildFile(env, params.id ?? '', 'index.html')
 
-export const buildFileRoute: Handler = (_req, env, params) =>
+const buildFile: Handler = (_req, env, params) =>
   serveBuildFile(env, params.id ?? '', params.filename ?? 'index.html')
 
 export const pageRoutes: Array<[string, string, Handler]> = [
-  ['GET', '/',                    chatRoute],
-  ['GET', '/dashboard',           dashboardRoute],
+  ['GET', '/',                    chat],
+  ['GET', '/dashboard',           dashboard],
   ['GET', '/vibe',                (_req, _env) => Promise.resolve(new Response(null, { status: 301, headers: { Location: '/vibe.html' } }))],
   ['GET', '/tools',               (_req, _env) => Promise.resolve(new Response(null, { status: 301, headers: { Location: '/tools.html' } }))],
-  ['GET', '/app/:id',             appPageRoute],
-  ['GET', '/apps',                appsGalleryRoute],
-  ['GET', '/build/:id/:filename', buildFileRoute],
-  ['GET', '/build/:id',           buildIndexRoute],
+  ['GET', '/app/:id',             appPage],
+  ['GET', '/apps',                appsGallery],
+  ['GET', '/build/:id/:filename', buildFile],
+  ['GET', '/build/:id',           buildIndex],
 ]
