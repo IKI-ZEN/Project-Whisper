@@ -1,21 +1,5 @@
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-
-:root{
-  --bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;
-  --text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;
-  --green:#10b981;--red:#f87171;--radius:6px;
-  --mono:"JetBrains Mono","Fira Code",ui-monospace,monospace;
-  --sidebar-w:180px;
-}
-
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-
-/* ── Top nav ── */
-.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
-.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
-.navlink:hover{color:var(--text)}
-.navlink.active{background:var(--accent);color:#fff}
+/* tools.css — page-specific styles (whisper-base.css must load first) */
+:root{--sidebar-w:180px}
 
 /* Hamburger — hidden on desktop, visible on mobile */
 .sidebar-toggle{display:none;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);font-size:18px;width:36px;height:36px;min-height:0;padding:0;cursor:pointer;border-radius:var(--radius);transition:color .15s,background .15s;flex-shrink:0;line-height:1}
@@ -71,21 +55,11 @@ button.full{width:100%}
 .field{display:flex;flex-direction:column;gap:8px}
 .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
 .row>*{flex:1;min-width:140px}
-hr{border:none;border-top:1px solid var(--border)}
 
 /* ── Status ── */
 .status{font-size:12px;padding:6px 10px;border-radius:var(--radius)}
 .status.ok{background:#052e1a;color:var(--green);animation:panelIn .2s ease-out both}
 .status.err{background:#2e0505;color:var(--red);animation:panelIn .2s ease-out both}
-
-/* ── Spinner ── */
-@keyframes spin{to{transform:rotate(360deg)}}
-.spinner{display:inline-block;width:13px;height:13px;border:2px solid #ffffff44;border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
-
-/* ── Scrollbars ── */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 
 /* ── Heatmap ── */
 .hm-cell:hover{outline:2px solid var(--accent2);outline-offset:-2px;opacity:1!important;position:relative;z-index:1}
@@ -97,9 +71,6 @@ hr{border:none;border-top:1px solid var(--border)}
 #exp-log-panel{display:none;max-height:220px;overflow-y:auto;padding:4px 16px 8px}
 #exp-log-export{font-size:10px;padding:3px 9px;border-radius:99px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;margin-left:auto;font-family:inherit;flex-shrink:0}
 #exp-log-export:hover{border-color:var(--accent2);color:var(--accent2)}
-
-/* ── Reduced motion ── */
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 
 /* ── History panels ── */
 .hist-bar{display:flex;align-items:center;justify-content:flex-end;margin-top:6px;gap:8px}
