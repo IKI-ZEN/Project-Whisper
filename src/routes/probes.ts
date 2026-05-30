@@ -1,8 +1,8 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit, parseQueryInt } from '../lib/http'
 import { newId, isUUID, now } from '../lib/utils'
-import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS } from '../lib/constants'
+import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
 import {
   complete, embed, estimateEntropy, runCoTProbe,
   generatePromptVariants, computeSimilarityMatrix,
@@ -20,8 +20,6 @@ const MAX_DESC_LEN        = 512
 const MAX_PROMPT_LEN      = 10_000
 const VALID_TOOLS         = ['entropy', 'sweep', 'sensitivity', 'cot', 'pipeline'] as const
 const VALID_SCHEDULES     = ['hourly', 'daily', 'weekly'] as const
-const DEFAULT_HISTORY_LIMIT = 50
-const MAX_HISTORY_LIMIT   = 200
 
 type ProbeTool     = typeof VALID_TOOLS[number]
 type ProbeSchedule = typeof VALID_SCHEDULES[number]
@@ -499,10 +497,7 @@ const getProbeHistory: Handler = async (req: Request, env: Env, params) => {
   if (!isUUID(id)) return json(err('Invalid id'), 422)
 
   const url = new URL(req.url)
-  const limit = Math.min(
-    Math.max(1, parseInt(url.searchParams.get('limit') ?? String(DEFAULT_HISTORY_LIMIT), 10) || DEFAULT_HISTORY_LIMIT),
-    MAX_HISTORY_LIMIT,
-  )
+  const limit = parseQueryInt(url.searchParams, 'limit', LIST_LIMIT_DEFAULT, 1, LIST_LIMIT_MAX)
 
   try {
     const probe = await env.DB.prepare('SELECT * FROM probes WHERE id = ?').bind(id).first<ProbeRow>()

@@ -8,8 +8,9 @@ import {
   MAX_EMAIL_SUBJECT_LEN, MAX_EMAIL_TEXT_LEN, MAX_GUARD_PROBE_CHARS, MAX_ABLATION_CLAUSES,
   MAX_DRIFT_TURNS, MAX_STRESS_LEVELS, MAX_RUBRIC_CRITERIA, MAX_RUBRIC_SAMPLES,
   MAX_WEBHOOK_URL_LEN, MAX_IMAGE_BASE64_BYTES, MAX_IMAGES_PER_MESSAGE, MAX_JSON_SCHEMA_BYTES,
-  MAX_TTS_TEXT_LEN, AI_SEARCH_MAX_RESULTS,
+  MAX_TTS_TEXT_LEN, AI_SEARCH_MAX_RESULTS, USAGE_LIMIT_DEFAULT, USAGE_LIMIT_MAX,
 } from './constants'
+import { parseQueryInt } from './http'
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -864,8 +865,7 @@ export function parseUsageQuery(params: URLSearchParams): UsageQuery {
   }
   const groupBy = groupByStr as UsageGroupBy | undefined
 
-  const limitStr = params.get('limit')
-  const limit    = limitStr !== null ? Math.min(Math.max(1, parseInt(limitStr, 10) || 100), 1000) : 100
+  const limit = parseQueryInt(params, 'limit', USAGE_LIMIT_DEFAULT, 1, USAGE_LIMIT_MAX)
 
   return { sandboxId, model, provider, from, to, groupBy, limit }
 }

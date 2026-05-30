@@ -185,3 +185,7 @@ export const PIPELINE_RUN_RATE_LIMIT_WINDOW = 60_000
 // Replay rate limit (multi-step AI completions per IP)
 export const REPLAY_RATE_LIMIT_MAX    = 10
 export const REPLAY_RATE_LIMIT_WINDOW = 60_000
+
+// Usage analytics list
+export const USAGE_LIMIT_DEFAULT = 100
+export const USAGE_LIMIT_MAX     = 1000
