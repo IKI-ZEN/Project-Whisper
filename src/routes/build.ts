@@ -2,7 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, listAllKV } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
-import { newId, isUUID } from '../lib/utils'
+import { newId, isUUID, now } from '../lib/utils'
 import { BUILD_KEY_PREFIX, BUILD_TTL } from '../lib/constants'
 import { doFetch, identityHeader } from './sandbox'
 
@@ -36,7 +36,7 @@ const create: Handler = async (req, env) => {
   // Register in KV so builds are enumerable via GET /api/v2/build
   await env.SANDBOX_REGISTRY.put(`${BUILD_KEY_PREFIX}${id}`, id, {
     expirationTtl: BUILD_TTL,
-    metadata: { id, name: name ?? description.slice(0, 64), description, model: model ?? '', createdAt: Date.now() },
+    metadata: { id, name: name ?? description.slice(0, 64), description, model: model ?? '', createdAt: now() },
   })
 
   return json(ok({ buildId: id, wsUrl: `/api/v2/build/${id}/ws`, appUrl: `/build/${id}`, status: 'idle' }))

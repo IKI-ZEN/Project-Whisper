@@ -2,7 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, parseQueryInt } from '../lib/http'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
-import { newId, isUUID } from '../lib/utils'
+import { newId, isUUID, now } from '../lib/utils'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ const addPrompt: Handler = async (req: Request, env: Env) => {
   if (!p.ok) return p.response
   const { text, label, tags } = p.data
   const id = newId()
-  const created_at = Date.now()
+  const created_at = now()
   try {
     await env.DB.prepare(
       'INSERT INTO prompt_library (id, text, label, tags, embedding_cache, created_at) VALUES (?, ?, ?, ?, NULL, ?)',

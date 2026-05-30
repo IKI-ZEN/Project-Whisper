@@ -161,7 +161,7 @@ const reindex: Handler = async (req, env, params: Params) => {
     type: 'embedding_batch',
     sandboxId,
     payload: docIds ? { docIds } : {},
-    createdAt: Date.now(),
+    createdAt: now(),
   }
   await env.JOB_QUEUE.send(job)
   return json(ok({ queued: true, sandboxId }), 202)

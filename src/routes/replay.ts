@@ -121,7 +121,7 @@ async function runReplay(
       messages: replayContext.map(m => ({
         role: m.role as 'user' | 'assistant' | 'system',
         content: m.content,
-        timestamp: Date.now(),
+        timestamp: now(),
       })),
     })
 
