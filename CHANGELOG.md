@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-31
+
 ### Added
 
 - **Chat Environments** — a third entity type alongside sandboxes and apps: AI-configured specialised chat workspaces with per-type operating modes (`general`, `coding`, `research`, `structured`, `creative`, `agent`, `debate`). Full lifecycle routes at `/api/environments` (create, PATCH, fork, export, import); gallery page at `/environments`; compare-mode UI at `/env/:id` fans each message out to up to 4 models simultaneously. Environments reuse `SandboxDO` with `fromEnv: true` in KV metadata — same storage primitive, different view.
@@ -50,9 +52,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `POST /api/vault/analyze` — cluster vault records by prompt embedding similarity using k-means; returns cluster representatives, size, tools breakdown, and sample IDs; rate-limited 3 req / 5 min per IP
 - Pipeline probe tool — probes now accept `tool: 'pipeline'` (fifth tool type alongside `entropy`, `sweep`, `sensitivity`, `cot`) with `params.pipelineId` to schedule saved pipeline DAGs as cron health checks
 - Probe webhook alerts — probes now accept an optional `webhookUrl` (HTTPS, max 512 chars); a fire-and-forget POST is sent to the URL when a metric threshold is breached, with payload `{ probeId, probeName, metricValue, metrics, breachedAt }`
-
-### Changed
-
 - **Second Unified Architecture Refactor** — six coordinated improvements applied after the May 2026 audit:
   1. **Rate limits on whisperer** — `checkRateLimit(`rl:whisperer:{ip}`, 15 req/60 s)` added to all 13 whisperer handlers (`sensitivity`, `cluster`, `cot`, `entropy`, `archaeology`, `pipeline`, `think`, `evaluate`, `contextStress`, `drift`, `ablation`, `consistency`, `guardLab`)
   2. **Rate limits on atlas writes** — `rl:atlas-write:{ip}` (20 req/60 s) on `addPrompt` and `deletePrompt`; `rl:whisperer:{ip}` on `embedAtlas` and `nearestPrompts`

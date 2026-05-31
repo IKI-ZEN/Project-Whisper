@@ -98,6 +98,8 @@ wrangler d1 execute whisper --remote --file=./migrations/0007_atlas.sql
 wrangler d1 execute whisper --remote --file=./migrations/0008_sandbox_analysis.sql
 wrangler d1 execute whisper --remote --file=./migrations/0009_usage_cost.sql
 wrangler d1 execute whisper --remote --file=./migrations/0010_pipelines_webhooks.sql
+wrangler d1 execute whisper --remote --file=./migrations/0011_env_integration.sql
+wrangler d1 execute whisper --remote --file=./migrations/0012_assertions_atlas_env.sql
 
 # Local dev database (for `npm run dev:local`)
 wrangler d1 execute whisper --local --file=./migrations/0001_init.sql
@@ -110,9 +112,11 @@ wrangler d1 execute whisper --local --file=./migrations/0007_atlas.sql
 wrangler d1 execute whisper --local --file=./migrations/0008_sandbox_analysis.sql
 wrangler d1 execute whisper --local --file=./migrations/0009_usage_cost.sql
 wrangler d1 execute whisper --local --file=./migrations/0010_pipelines_webhooks.sql
+wrangler d1 execute whisper --local --file=./migrations/0011_env_integration.sql
+wrangler d1 execute whisper --local --file=./migrations/0012_assertions_atlas_env.sql
 ```
 
-Run all ten migrations in order. They are idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` with `IF NOT EXISTS` equivalents).
+Run all twelve migrations in order. They are idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` with `IF NOT EXISTS` equivalents).
 
 ---
 
@@ -195,7 +199,7 @@ The dev server starts at `http://localhost:8787`.
 npm run type-check   # npx tsc --noEmit
 ```
 
-This is the primary correctness gate — there are no automated behavioural tests. The type-checker catches type and logic errors; feature correctness is verified manually. Run it before every commit.
+Run `npm test` (184 unit tests) before every commit in addition to the type-checker. Both must exit 0.
 
 ---
 

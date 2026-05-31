@@ -35,7 +35,7 @@ Whisper is a zero-runtime-dependency AI harness running entirely on Cloudflare i
    npm run dev        # uses remote Workers AI — requires `wrangler login` first
    npm run dev:local  # uses simulated local AI — no network calls, no login required
    ```
-   Open `http://localhost:8787` for the playground UI (`public/playground.html`).
+   Open `http://localhost:8787` for the chat UI. The Vibe Builder is at `/vibe.html`, AI Workbench at `/tools.html`, and Environments at `/environments`.
 
 ### One-time Cloudflare resource creation
 
@@ -60,6 +60,8 @@ wrangler d1 execute whisper --file=./migrations/0007_atlas.sql
 wrangler d1 execute whisper --file=./migrations/0008_sandbox_analysis.sql
 wrangler d1 execute whisper --file=./migrations/0009_usage_cost.sql
 wrangler d1 execute whisper --file=./migrations/0010_pipelines_webhooks.sql
+wrangler d1 execute whisper --file=./migrations/0011_env_integration.sql
+wrangler d1 execute whisper --file=./migrations/0012_assertions_atlas_env.sql
 ```
 
 After running the above, paste the returned `id` / `preview_id` values into the placeholder entries in `wrangler.toml`.
@@ -72,19 +74,30 @@ Email sending requires Cloudflare Email Routing to be enabled on your domain and
 
 ## 3. Development workflow
 
-### Type-check
+### Tests and type-check
 
-There are no automated tests. `tsc --noEmit` is the primary correctness gate and **must pass before every commit**:
+Both must pass before every commit:
 
 ```bash
-npm run type-check
+npm test             # runs all 184 unit tests (src/**/*.test.ts) via tsx
+npm run type-check   # tsc --noEmit — must also exit 0
 ```
 
-Run it after every non-trivial change. TypeScript `strict: true` is enabled — the compiler will catch most logic and type errors.
+TypeScript `strict: true` is enabled — the compiler catches most logic and type errors. Run both after every non-trivial change.
 
-### Playground UI
+### UI pages
 
-`public/playground.html` is a four-tab SPA (Vibe Builder / Sandbox Chat / AI Workbench / Whisperer). It loads automatically at `http://localhost:8787` when the dev server is running. No build step is needed — it is served as a static asset.
+The dev server serves several pages:
+
+| URL | Page |
+|-----|------|
+| `http://localhost:8787/` | Chat |
+| `http://localhost:8787/vibe.html` | Vibe Builder |
+| `http://localhost:8787/tools.html` | AI Workbench (Whisperer, probes, vault, etc.) |
+| `http://localhost:8787/environments` | Environments gallery |
+| `http://localhost:8787/dashboard` | Dashboard |
+
+No build step is needed — all pages are served as static assets or server-rendered by the Worker.
 
 ### Deploy
 
@@ -189,7 +202,7 @@ One subject line is enough for most commits. Add a blank line and a body only wh
 
 Before opening a PR, confirm all of the following:
 
-- [ ] `npm run type-check` exits 0 — no TypeScript errors.
+- [ ] `npm test` exits 0 — all unit tests pass.
 - [ ] `npm run type-check` exits 0 — no TypeScript errors.
 - [ ] New routes that accept a JSON body use `parseBody(req, parseFoo)` — no raw `req.json()`.
 - [ ] New routes with a user-supplied `:id` in the path validate it as a UUID before use in R2, KV, or DO stubs.
@@ -242,3 +255,19 @@ For basic local development with `@cf/…` Workers AI models, most variables can
 | `EMAIL_FROM_ADDRESS` | Verified sender address for `POST /api/app/:id/email` |
 
 The `ENVIRONMENT` variable is set to `"development"` automatically by `wrangler.toml` and does not need to be in `.dev.vars`.
+
+---
+
+## 8. Deployment and rollback
+
+```bash
+npm run deploy              # wrangler deploy — deploys to production
+
+# Roll back to the previous deployment
+wrangler rollback
+
+# See full deployment history
+wrangler deployments list
+```
+
+**Important:** `wrangler rollback` reverts Worker code to the previous deployment instantly. D1 schema migrations are not automatically reversed — if a migration caused the problem, roll back the code first, then assess whether a manual SQL fix is needed. Migration files contain comments with the reverse SQL where applicable.
