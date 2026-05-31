@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV, checkRateLimit } from '../lib/http'
-import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, type SandboxConfig } from '../lib/schema'
+import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, parsePatchSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
@@ -162,11 +162,11 @@ const patchConfig: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
-  let body: unknown
-  try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
+  const parsed = await parseBody(req, parsePatchSandboxRequest)
+  if (!parsed.ok) return parsed.response
+  const patch = parsed.data
 
   // Auto-version: if systemPrompt is changing, save the old value to vault before patching
-  const patch = body as Partial<{ name: string; description: string; model: string; systemPrompt: string }>
   if (patch.systemPrompt !== undefined) {
     const cfgRes = await doFetch(stub(env, id), 'config', 'GET')
     const cfgBody = await cfgRes.json() as { ok: boolean; data?: { systemPrompt?: string; model?: string } }
@@ -182,7 +182,7 @@ const patchConfig: Handler = async (req, env, params: Params) => {
     }
   }
 
-  const res = await doFetch(stub(env, id), 'config', 'PATCH', body, identityHeader(req))
+  const res = await doFetch(stub(env, id), 'config', 'PATCH', patch, identityHeader(req))
 
   // Keep KV listing metadata in sync when display fields change
   if (res.ok) {

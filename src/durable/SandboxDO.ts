@@ -74,7 +74,7 @@ export class SandboxDO extends DurableObject<Env> {
     const window = stored.window.filter(t => t > cutoff)
     if (window.length >= RATE_LIMIT_MAX_REQUESTS) return false
     window.push(Date.now())
-    void this.ctx.storage.put(RL_STORAGE_KEY, { window })
+    await this.ctx.storage.put(RL_STORAGE_KEY, { window })
     return true
   }
 

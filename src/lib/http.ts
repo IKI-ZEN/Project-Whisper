@@ -23,9 +23,9 @@ export function json(body: unknown, status = 200): Response {
 export async function readJson(req: Request): Promise<unknown> {
   const ct = req.headers.get('Content-Type') ?? ''
   if (!ct.includes('application/json')) throw new Error('Content-Type must be application/json')
-  const cl = parseInt(req.headers.get('Content-Length') ?? '0', 10)
-  if (cl > MAX_REQUEST_BODY) throw new Error('Request body too large (max 1 MB)')
-  return req.json()
+  const buf = await req.arrayBuffer()
+  if (buf.byteLength > MAX_REQUEST_BODY) throw new Error('Request body too large (max 1 MB)')
+  return JSON.parse(new TextDecoder().decode(buf))
 }
 
 // ── Server-Sent Events ────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ export async function checkRateLimit(
   const window = (stored ?? []).filter(t => t > now - windowMs)
   if (window.length >= max) return json(err(message), 429)
   window.push(now)
-  void env.RATE_LIMITS.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
+  await env.RATE_LIMITS.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
   return null
 }
 
