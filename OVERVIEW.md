@@ -70,7 +70,27 @@ The moment you create a sandbox, it gets:
 
 Each sandbox keeps a rolling conversation history (up to 100 turns). Users can have a natural back-and-forth, and the AI remembers what was said earlier in the session. Multiple named sessions let different users maintain independent conversation threads within the same sandbox.
 
-### 4. Apps gallery
+### 4. Chat Environments
+
+**Environments** are a third entity type alongside sandboxes and apps. Where a sandbox is a general-purpose chat and an app is a generated web page, an environment is an AI-configured specialised workspace: the *operating mode* governs model behaviour, the UI contract, and which platform features activate.
+
+You pick an `envType` — `general`, `coding`, `research`, `structured`, `creative`, `agent`, or `debate` — and the platform generates a tailored system prompt, sensible temperature, and default model set. You can then compare up to 4 models simultaneously in **Compare mode**: every message fans out to each model, results stream in parallel columns, and you can see at a glance how models diverge.
+
+| envType | What it does |
+|---------|-------------|
+| `general` | Balanced general assistant |
+| `coding` | Code review and implementation focus; monospace UI |
+| `research` | Citation-aware synthesis; RAG enabled by default |
+| `structured` | Always returns JSON in a `<pre>` block |
+| `creative` | High temperature, multiple voice variants |
+| `agent` | Tool-oriented, step-by-step reasoning |
+| `debate` | Models assigned opposing positions |
+
+Environments reuse `SandboxDO` — they are regular sandboxes with `fromEnv: true` in KV metadata, so all existing sandbox APIs (`run`, `stream`, `history`, `fork`, `export`, `import`) work without changes.
+
+**Gallery:** `/environments` lists all your environments with envType badges and model counts.
+
+### 5. Apps gallery
 
 The `/apps` page lists all your sandboxes in one place — name, description, model, and creation date. One click opens any app.
 
@@ -338,6 +358,14 @@ Returns up to k clusters, each with the prompt most representative of its centro
 
 Scheduled probes can now fire an outbound webhook when a metric threshold is breached. No polling required — set `webhookUrl` on any probe and receive a POST with the metric value, structured metrics, and breach timestamp in real time.
 
+### Replay across environments and sandboxes
+
+`POST /api/replay` accepts two batch fields:
+- `batchEnvIds: string[]` — replay the conversation against each environment's config (resolves system prompt, model, temperature)
+- `batchSandboxIds: string[]` — same, but for any sandbox (symmetric, max 5 each)
+
+All configs run in parallel; each gets its own similarity scores against the original responses. Use this to validate prompt portability when migrating between environments or models.
+
 ### Sandbox fork
 
 Clone any sandbox into an independent copy with a single call:
@@ -482,3 +510,15 @@ The Playground (`/playground.html`) is an in-browser developer interface with fo
 | **Sandbox Chat** | Load any sandbox by ID, chat, edit config (including `guardMode`), view integrity badge |
 | **AI Workbench** | Test raw AI capabilities: text generation, streaming, embeddings, image generation, audio transcription |
 | **Whisperer** | Full AI analysis suite: model comparison, temperature sweep, sensitivity analysis, semantic clustering, chain-of-thought probing, entropy measurement, prompt archaeology, pipeline executor, and extended thinking |
+
+The Tools dashboard (`/tools.html`) provides specialised panels for the analysis and operations features:
+
+| Panel | Purpose |
+|-------|---------|
+| **Threat Monitor** | Live SSE feed of guard events with `environment_id` or `sandbox_id` filter; pattern frequency chart; paginated audit log |
+| **Evidence Vault** | Keyword and semantic search over saved prompt/response pairs; JSONL export |
+| **Replay Engine** | Replay a conversation against a target config; Batch Comparison section runs against `batchEnvIds` and `batchSandboxIds` in parallel |
+| **Model Assertions** | Define and run assertion suites (7 assertion types); filter by `environmentId` |
+| **Semantic Map** | Build and visualise a prompt library; scope prompts to an environment via `environmentId` filter |
+| **Cron Probes** | Schedule whisperer tools on hourly/daily/weekly cron; probe webhooks for threshold alerts |
+| **Whisperer tools** | All 13 analysis endpoints accessible from the analysis tab |

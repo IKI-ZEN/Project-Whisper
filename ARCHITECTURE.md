@@ -155,6 +155,7 @@ for (const [method, path, handler] of [
   ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes,
   ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes,
   ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes,
+  ...environmentRoutes,
 ]) router.on(method, path, handler)
 ```
 
@@ -401,14 +402,15 @@ probe_runs (id, probe_id, result JSON, metric_value, metrics_json, created_at)
 -- sandbox_id: optional link to the source sandbox (migration 0008)
 vault_records (id, prompt, response, model, temperature, system_prompt, tool, metadata JSON, tags JSON, sandbox_id, created_at)
 
--- Assertion suites and test run history (migration 0006, 0008)
+-- Assertion suites and test run history (migrations 0006, 0008, 0012)
 -- sandbox_id: optional link to the target sandbox (migration 0008)
-assertion_suites (id, name, model, system_prompt, sandbox_id, created_at, updated_at)
-assertion_cases (id, suite_id, type, expected, options JSON, created_at)
-assertion_runs (id, suite_id, results JSON, passed, total, created_at)
+-- environment_id: optional link to the target environment (migration 0012)
+assertion_suites (id, name, description, cases JSON, sandbox_id, environment_id, created_at, updated_at)
+assertion_runs (id, suite_id, results JSON, pass_rate, passed, total_cases, ran_at)
 
--- Prompt library with embeddings (migration 0007)
-atlas_prompts (id, text, tags JSON, embedding BLOB, cluster_label, pca_x, pca_y, created_at)
+-- Prompt library with embeddings (migrations 0007, 0012)
+-- environment_id: optional scope to an environment (migration 0012)
+prompt_library (id, text, label, tags JSON, environment_id, embedding_cache BLOB, created_at)
 
 -- Saved pipeline DAG definitions (migration 0010)
 pipelines (id, name, description, nodes JSON, entry_id, created_at, updated_at)
@@ -499,6 +501,12 @@ Multiple layers, all sliding-window, all KV-backed (`checkRateLimit(key, max, wi
 | Per-IP replay | `rl:replay:{ip}` | 10 / 60 s | `postReplay` in `replay.ts` |
 | Per-IP vault cluster | `rl:vault-analyze:{ip}` | 3 / 5 min | `analyze` in `vault.ts` |
 | Per-IP vault search | `rl:vault-search:{ip}` | 20 / 60 s | `search` in `vault.ts` |
+| Per-IP whisperer tools | `rl:whisperer:{ip}` | 15 / 60 s | all 13 handlers in `whisperer.ts`; `embedAtlas`/`nearestPrompts` in `atlas.ts` |
+| Per-IP atlas writes | `rl:atlas-write:{ip}` | 20 / 60 s | `addPrompt`, `deletePrompt` in `atlas.ts` |
+| Per-IP vibe create | `rl:vibe-create:{ip}` | 5 / 60 s | `createVibe` in `vibes.ts` |
+| Per-IP build create | `rl:build-create:{ip}` | 5 / 60 s | `create` in `build.ts` |
+| Per-IP monitor stream/audit | `rl:monitor:{ip}` | 30 / 60 s | `stream`, `audit` in `monitor.ts` |
+| Per-IP document upload | `rl:doc-upload:{ip}` | 20 / 60 s | `upload` in `documents.ts` |
 
 ### Cloudflare Access
 
@@ -858,6 +866,13 @@ The alternative is injecting the build ID as a JavaScript variable in a `<script
 | `rl:replay:{ip}` | `number[]` timestamp array for replay rate limiter |
 | `rl:vault-analyze:{ip}` | `number[]` timestamp array for vault cluster analysis rate limiter |
 | `rl:vault-search:{ip}` | `number[]` timestamp array for vault semantic search rate limiter |
+| `rl:whisperer:{ip}` | `number[]` timestamp array for whisperer tool + atlas embed rate limiter |
+| `rl:atlas-write:{ip}` | `number[]` timestamp array for atlas prompt create/delete rate limiter |
+| `rl:vibe-create:{ip}` | `number[]` timestamp array for vibe creation rate limiter |
+| `rl:build-create:{ip}` | `number[]` timestamp array for build creation rate limiter |
+| `rl:monitor:{ip}` | `number[]` timestamp array for monitor stream/audit rate limiter |
+| `rl:doc-upload:{ip}` | `number[]` timestamp array for document upload rate limiter |
+| `sandbox:{uuid}` (fromEnv) | Sandbox UUID string + `{ id, name, description, model, createdAt, fromEnv: true, envType, envModels }` metadata — environments stored identically to sandboxes with `fromEnv: true` flag |
 
 ### Durable Object storage
 

@@ -33,10 +33,11 @@ Request → src/index.ts
        ├─ /api/atlas/*          src/routes/atlas.ts
        ├─ /api/probes/*         src/routes/probes.ts
        ├─ /api/pipelines/*      src/routes/pipelines.ts
+       ├─ /api/environments/*   src/routes/environments.ts
        ├─ /api/monitor/*        src/routes/monitor.ts
        ├─ /api/openapi.json     src/routes/openapi.ts
        ├─ /api/csp-report       src/routes/security.ts
-       └─ /app/:id, /build/:id  src/routes/pages.ts
+       └─ /app/:id, /build/:id, /env/:id  src/routes/pages.ts
 ```
 
 ## Coding rules

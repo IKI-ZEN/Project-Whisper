@@ -8,6 +8,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Chat Environments** — a third entity type alongside sandboxes and apps: AI-configured specialised chat workspaces with per-type operating modes (`general`, `coding`, `research`, `structured`, `creative`, `agent`, `debate`). Full lifecycle routes at `/api/environments` (create, PATCH, fork, export, import); gallery page at `/environments`; compare-mode UI at `/env/:id` fans each message out to up to 4 models simultaneously. Environments reuse `SandboxDO` with `fromEnv: true` in KV metadata — same storage primitive, different view.
+- **Environments gallery** (`GET /environments`) — server-rendered gallery page lists all `fromEnv: true` sandboxes with envType badges colour-coded by type; mirrors the `/apps` gallery pattern.
+- `POST /api/environments` — create an environment via AI-generated config; generates system prompt tailored to `envType` via `generateEnvConfig()`
+- `PATCH /api/environments/:id` — update `systemPrompt`, `temperature`, `maxTokens`, or `envModels`; validated by new `parsePatchEnvironmentRequest` in `src/lib/schema.ts`; propagates changes to SandboxDO and re-registers KV metadata
+- `POST /api/environments/:id/fork` — clone an environment into a new independent copy (mirrors sandbox fork)
+- `GET /api/environments/:id/export` — HMAC-signed config export (mirrors sandbox export)
+- `POST /api/environments/import` — import a signed environment config as a new environment
+- **`env_resolve` pipeline node type** — new node type in `executePipeline()` and `parsePipelineRequest()`; resolves an environment's config from its sandbox at execution time and exposes `{ systemPrompt, model, temperature, maxTokens }` as the node output; enables environment-aware pipeline DAGs
+- **`batchSandboxIds` in Replay Engine** — `POST /api/replay` now accepts `batchSandboxIds: string[]` (max 5) symmetric with the existing `batchEnvIds`; resolves each sandbox config via `doFetch(stub, 'config', 'GET')` and runs the conversation against each in parallel; tools.html Replay pane updated with Batch Comparison section for both field types
+- **`environment_id` on assertion suites** — `assertion_suites` table gains `environment_id` column (migration 0012); `POST /api/assertions` accepts `environmentId`; `GET /api/assertions?environmentId=...` filters by environment; suite shapes include `environment_id` in responses
+- **`environment_id` on atlas prompt library** — `prompt_library` table gains `environment_id` column (migration 0012); `POST /api/atlas/library` accepts `environmentId`; `GET /api/atlas/library?environmentId=...` filters by environment; prompt shapes include `environment_id` in responses
+- **`environment_id` filter on monitor endpoints** — `GET /api/monitor/stream` and `GET /api/monitor/audit` now accept `?environment_id=...` as an alternative to `?sandbox_id=...`; since environments ARE sandboxes the UUID is used directly in the `sandbox_id` column filter
+- **OpenAPI spec completeness** — `GET /api/openapi.json` now covers all 5 environments routes, replay `batchEnvIds`/`batchSandboxIds` fields, vault `environment_id` filter, probes `environmentId` field, assertion suites `environmentId` field, atlas `environmentId` field, monitor `environment_id` filter; schema objects updated for `CreateEnvironmentRequest`, `PatchEnvironmentRequest`, `CreateAssertionSuiteRequest`, `ReplayRequest`
+- D1 migration `0012_assertions_atlas_env.sql` — `environment_id TEXT` column + index on `assertion_suites`; `environment_id TEXT` column + index on `prompt_library`
+
+### Changed
+
 - **Vault Semantic Search** — `GET /api/vault/search?q=<query>` finds semantically similar vault records using the Cloudflare AI Search binding; results ranked by similarity; rate-limited 20 req / 60 s per IP
 - **AI Gateway Extended Controls** — four new fields on all completion requests:
   - `byokAlias` — named BYOK credential from the Cloudflare Secrets Store (`cf-aig-byok-alias` header)
@@ -15,7 +32,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `collectLogPayload` — set `false` to suppress gateway request/response logging
   - `fallbackModel` — automatically retried once if the primary model throws (logs to Analytics Engine with `source: 'fallback'`)
 - **23-provider AI Gateway registry** — model string prefix routing extended from 4 to 23 providers. New prefixes: `groq:`, `mistral:`, `deepseek:`, `xai:`, `perplexity:`, `cerebras:`, `openrouter:`, `cohere:`, `huggingface:`, `replicate:`, `parallel:`, `fal:`, `ideogram:`, `bedrock:`, `google-vertex-ai:`, `azure:`, `baseten:`; each with capability flags (tools, vision, streaming, json mode)
-- **OpenAPI 3.1 spec** — `GET /api/openapi.json` returns a machine-readable spec for all routes, generated from the live route table
+- **OpenAPI 3.1 spec** — `GET /api/openapi.json` returns a machine-readable spec for all routes, generated from the live route table; updated in this release to cover all environments routes, replay batch fields, assertion/atlas environment filters, and monitor environment filter
 - **Text-to-speech** — `POST /api/ai/tts` accepts `{ text, voice?, model?, provider }` and returns binary audio; supports ElevenLabs (provider: `"elevenlabs"`) and Cartesia (provider: `"cartesia"`); requires `ELEVENLABS_API_KEY` or `CARTESIA_API_KEY`
 - **Vision / multimodal** — `complete`, `stream`, and `compare` now accept `contentBlocks: ContentBlock[]` alongside `prompt`; images passed as `{ type: 'image', data: base64, mediaType }` are forwarded to providers that support vision (OpenAI, Anthropic, Google, Groq); max 5 images, 4 MB each
 - **App tokens** — short-lived HMAC-SHA256-signed credentials (1-hour TTL) injected into generated app pages at serve time; used for authenticated `state`, `images`, and `email` calls from within the generated app without exposing `SIGNING_SECRET`
@@ -36,7 +53,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- **Unified Architecture Refactor** — seven coordinated improvements applied uniformly across all route files:
+- **Second Unified Architecture Refactor** — six coordinated improvements applied after the May 2026 audit:
+  1. **Rate limits on whisperer** — `checkRateLimit(`rl:whisperer:{ip}`, 15 req/60 s)` added to all 13 whisperer handlers (`sensitivity`, `cluster`, `cot`, `entropy`, `archaeology`, `pipeline`, `think`, `evaluate`, `contextStress`, `drift`, `ablation`, `consistency`, `guardLab`)
+  2. **Rate limits on atlas writes** — `rl:atlas-write:{ip}` (20 req/60 s) on `addPrompt` and `deletePrompt`; `rl:whisperer:{ip}` on `embedAtlas` and `nearestPrompts`
+  3. **Rate limits on vibes, build, monitor, documents** — `rl:vibe-create:{ip}` (5 req/60 s) on `createVibe`; `rl:build-create:{ip}` (5 req/60 s) on `create`; `rl:monitor:{ip}` (30 req/60 s) on `stream` and `audit`; `rl:doc-upload:{ip}` (20 req/60 s) on document `upload`
+  4. **`parsePatchEnvironmentRequest` in `schema.ts`** — `patchEnvironment` handler in `environments.ts` migrated from `readJson` + manual casting to `parseBody(req, parsePatchEnvironmentRequest)`; validates `temperature` range, `maxTokens` range, and `envModels` array constraints
+  5. **`environment_id` cross-propagation** — consistently present on create, list, and shape-response across assertions, atlas, monitor (previously absent from all three)
+  6. **Rate limit constants block** — six new constant pairs added to `src/lib/constants.ts`: `WHISPERER_RATE_LIMIT_*`, `ATLAS_WRITE_RATE_LIMIT_*`, `VIBE_CREATE_RATE_LIMIT_*`, `BUILD_CREATE_RATE_LIMIT_*`, `MONITOR_RATE_LIMIT_*`, `DOCUMENT_UPLOAD_RATE_LIMIT_*`
+- **Unified Architecture Refactor** (first, prior release) — seven coordinated improvements applied uniformly across all route files:
   1. `bool(v, field, fallback)` helper added to `src/lib/schema.ts`; replaces all inline `=== true` boolean coercions in parsers (`zdr`, `groundingEnabled`, `collectLogPayload`, `ragEnabled`, `autoVault`)
   2. `parseQueryInt(params, key, fallback, min, max)` added to `src/lib/http.ts`; replaces all inline `parseInt`/`isNaN`/`Math.min/max` patterns in vault, monitor, atlas, and pipelines handlers
   3. `LIST_LIMIT_DEFAULT/MAX`, `MONITOR_LIMIT_DEFAULT/MAX`, and rate-limit constants added to `src/lib/constants.ts`; inline literals eliminated
