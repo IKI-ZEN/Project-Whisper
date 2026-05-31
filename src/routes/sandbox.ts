@@ -82,11 +82,18 @@ export async function registerSandbox(
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-const list: Handler = async (_req, env) => {
+const list: Handler = async (req, env) => {
+  const url  = new URL(req.url)
+  const only = url.searchParams.get('only')   // 'apps' | 'envs' | null (all)
   const keys = await listAllKV<SandboxMeta>(env.SANDBOX_REGISTRY, SANDBOX_KEY_PREFIX)
   const apps = keys
     .filter(k => k.metadata != null)
     .map(k => k.metadata as SandboxMeta)
+    .filter(m => {
+      if (only === 'apps') return !m.fromEnv
+      if (only === 'envs') return m.fromEnv === true
+      return true
+    })
     .sort((a, b) => b.createdAt - a.createdAt)
   return json(ok({ apps, total: apps.length }))
 }

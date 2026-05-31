@@ -9,6 +9,7 @@ import {
   MAX_DRIFT_TURNS, MAX_STRESS_LEVELS, MAX_RUBRIC_CRITERIA, MAX_RUBRIC_SAMPLES,
   MAX_WEBHOOK_URL_LEN, MAX_IMAGE_BASE64_BYTES, MAX_IMAGES_PER_MESSAGE, MAX_JSON_SCHEMA_BYTES,
   MAX_TTS_TEXT_LEN, AI_SEARCH_MAX_RESULTS, USAGE_LIMIT_DEFAULT, USAGE_LIMIT_MAX,
+  MAX_ENV_MODELS, ENV_TYPES,
 } from './constants'
 import { parseQueryInt } from './http'
 
@@ -594,10 +595,13 @@ export function parseEnvironmentRequest(body: unknown): EnvironmentRequest {
   const description = str(body.description, 'description')
   if (description.length < 10)                   throw new Error('description must be at least 10 characters')
   if (description.length > MAX_VIBE_DESCRIPTION)  throw new Error(`description must be <= ${MAX_VIBE_DESCRIPTION} characters`)
-  const envType = str(body.envType, 'envType').slice(0, 32)
+  const envType = str(body.envType, 'envType')
+  if (!(ENV_TYPES as readonly string[]).includes(envType)) {
+    throw new Error(`envType must be one of: ${ENV_TYPES.join(', ')}`)
+  }
   const rawModels = body.envModels
   const envModels = Array.isArray(rawModels)
-    ? rawModels.slice(0, 4).filter((m): m is string => typeof m === 'string')
+    ? rawModels.slice(0, MAX_ENV_MODELS).filter((m): m is string => typeof m === 'string')
     : undefined
   return {
     description,
