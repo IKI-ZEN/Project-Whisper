@@ -139,6 +139,9 @@ const audit: Handler = async (req: Request, env: Env) => {
 // GET /api/monitor/patterns
 // Aggregated guard pattern frequency analysis.
 const patterns: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:monitor:${ip}`, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   try {
     const url = new URL(req.url)
     const since      = parseQueryInt(url.searchParams, 'since', now() - 7 * 24 * 60 * 60 * 1000)
