@@ -1,0 +1,113 @@
+name = "project-whisper"
+main = "src/index.ts"
+compatibility_date = "2025-05-28"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Static Assets (playground UI) ────────────────────────────────────────────
+[assets]
+directory = "./public"
+
+# ── Workers AI ────────────────────────────────────────────────────────────────
+[ai]
+binding = "AI"
+
+# ── Durable Objects ───────────────────────────────────────────────────────────
+[[durable_objects.bindings]]
+name = "SANDBOX"
+class_name = "SandboxDO"
+
+[[durable_objects.bindings]]
+name = "APP_BUILDER"
+class_name = "AppBuilderDO"
+
+[[durable_objects.bindings]]
+name = "APP_STATE"
+class_name = "AppStateDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SandboxDO"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["AppBuilderDO"]
+
+[[migrations]]
+tag = "v3"
+new_classes = ["AppStateDO"]
+
+# ── Email ─────────────────────────────────────────────────────────────────────
+# Run: configure Cloudflare Email Routing at dash.cloudflare.com → Email
+# Set destination_address to a verified address, or leave empty for unrestricted
+[[send_email]]
+name = "SEND_EMAIL"
+
+# ── KV Namespaces ─────────────────────────────────────────────────────────────
+# Run: wrangler kv:namespace create SANDBOX_REGISTRY
+# Run: wrangler kv:namespace create RATE_LIMITS
+# Then replace the placeholder ids below
+[[kv_namespaces]]
+binding = "SANDBOX_REGISTRY"
+id = "00000000000000000000000000000001"
+preview_id = "00000000000000000000000000000002"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "00000000000000000000000000000003"
+preview_id = "00000000000000000000000000000004"
+
+# ── D1 Database ───────────────────────────────────────────────────────────────
+# Run: wrangler d1 create whisper
+# Then replace the placeholder database_id below
+[[d1_databases]]
+binding = "DB"
+database_name = "whisper"
+database_id = "00000000-0000-0000-0000-000000000001"
+
+# ── R2 Bucket ─────────────────────────────────────────────────────────────────
+# Run: wrangler r2 bucket create whisper-files
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "whisper-files"
+
+# ── Queues ────────────────────────────────────────────────────────────────────
+# Run: wrangler queues create whisper-jobs
+[[queues.producers]]
+binding = "JOB_QUEUE"
+queue = "whisper-jobs"
+
+[[queues.consumers]]
+queue = "whisper-jobs"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+# ── Vectorize ─────────────────────────────────────────────────────────────────
+# Run: wrangler vectorize create whisper-vectors --dimensions=768 --metric=cosine
+[[vectorize]]
+binding = "VECTORS"
+index_name = "whisper-vectors"
+
+# ── Analytics Engine ──────────────────────────────────────────────────────────
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "whisper_events"
+
+# ── AI Search ─────────────────────────────────────────────────────────────────
+# Run: create an AI Search instance named "whisper-vault" in the CF dashboard
+# then uncomment below to enable semantic vault search (GET /api/vault/search)
+# [[ai_search]]
+# binding      = "AI_SEARCH"
+# instance_name = "whisper-vault"
+
+# ── Cron Triggers ─────────────────────────────────────────────────────────────
+# Runs the scheduled probe handler: hourly, daily, and weekly probes
+[triggers]
+crons = ["0 * * * *", "0 9 * * *", "0 9 * * 1"]
+
+# ── Environment Variables ─────────────────────────────────────────────────────
+# ENVIRONMENT defaults to "production" when deployed; .dev.vars overrides it to "development" locally.
+[vars]
+ENVIRONMENT = "production"
+# AI_GATEWAY_ID is optional: set it to route flagship models through Cloudflare AI Gateway
+# AI_GATEWAY_ID = "your-gateway-id"

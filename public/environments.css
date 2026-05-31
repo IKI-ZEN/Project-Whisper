@@ -1,0 +1,76 @@
+/* environments.css — page-specific styles (whisper-base.css must load first) */
+
+/* ── Layout (mirrors vibe.css) ─────────────────────────────────────────────── */
+.vibe-layout{display:flex;flex:1;overflow:hidden;height:calc(100dvh - 48px)}
+.vibe-left{width:320px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.vibe-right{flex:1;overflow-y:auto;padding:28px 32px}
+.sidebar-inner{overflow-y:auto;flex:1;padding:20px}
+
+/* ── Type chips ─────────────────────────────────────────────────────────────── */
+.tpl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.tpl-chip{padding:5px 14px;border-radius:99px;font-size:12px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tpl-chip:hover{border-color:var(--accent2);color:var(--accent2)}
+.tpl-chip.active{border-color:var(--accent);background:var(--accent);color:#fff}
+
+/* ── Form fields ─────────────────────────────────────────────────────────────── */
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.field textarea,.field input[type=text]{width:100%;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;resize:none;outline:none;transition:border-color .15s}
+.field textarea:focus,.field input[type=text]:focus{border-color:var(--accent)}
+
+/* ── Model pills ─────────────────────────────────────────────────────────────── */
+.model-pills{display:flex;flex-wrap:wrap;gap:6px;min-height:32px;align-items:center}
+.model-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 10px 3px 12px;border-radius:99px;background:#6366f122;border:1px solid #6366f144;color:var(--accent2)}
+.model-pill .rm-pill{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px;display:inline-flex;align-items:center;transition:color .1s}
+.model-pill .rm-pill:hover{color:#f87171}
+.model-add-row{display:flex;gap:6px;margin-top:6px}
+.model-add-row input{flex:1;padding:5px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:11px;font-family:var(--mono);outline:none}
+.model-add-row input:focus{border-color:var(--accent)}
+.model-add-btn{padding:5px 10px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;transition:all .15s;white-space:nowrap}
+.model-add-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.model-count-hint{font-size:10px;color:var(--muted);margin-top:4px}
+
+/* ── Generate button ─────────────────────────────────────────────────────────── */
+.gen-btn{width:100%;padding:10px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}
+.gen-btn:hover:not(:disabled){background:#4f46e5}
+.gen-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── Result card ─────────────────────────────────────────────────────────────── */
+.env-result{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:16px;animation:fadeIn .2s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.result-name{font-size:18px;font-weight:700;color:var(--text)}
+.result-type{font-size:11px;padding:2px 8px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono);display:inline-block}
+.result-sys{font-size:12px;color:var(--muted);line-height:1.6;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;white-space:pre-wrap;max-height:120px;overflow-y:auto}
+.result-models{display:flex;flex-wrap:wrap;gap:6px}
+.result-model-pill{font-size:11px;padding:3px 10px;border-radius:99px;background:#14b8a622;border:1px solid #14b8a644;color:var(--teal);font-family:var(--mono)}
+.launch-link{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500;transition:background .15s}
+.launch-link:hover{background:#4f46e5}
+.result-actions{display:flex;gap:8px;flex-wrap:wrap}
+.result-btn{padding:8px 14px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;cursor:pointer;transition:all .15s}
+.result-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.result-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:4px}
+.result-code{width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-family:var(--mono);font-size:11px;resize:none;height:56px}
+
+/* ── Empty right panel ───────────────────────────────────────────────────────── */
+.env-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;gap:10px;text-align:center;color:var(--muted)}
+.env-empty .icon{font-size:32px;opacity:.25;margin-bottom:4px}
+.env-empty h3{font-size:16px;font-weight:600;color:var(--text);opacity:.5}
+.env-empty p{font-size:12px;line-height:1.6;max-width:320px}
+
+/* ── Error / status ──────────────────────────────────────────────────────────── */
+.status-msg{font-size:12px;color:var(--muted);text-align:center;margin-top:8px;min-height:16px}
+.status-msg.error{color:#f87171}
+
+/* ── Compare grid preview (defined here for import by env chat page) ─────────── */
+.env-compare-grid{display:grid;gap:1px;background:var(--border)}
+.env-compare-grid.cols-1{grid-template-columns:1fr}
+.env-compare-grid.cols-2{grid-template-columns:repeat(2,1fr)}
+.env-compare-grid.cols-3{grid-template-columns:repeat(3,1fr)}
+.env-compare-grid.cols-4{grid-template-columns:repeat(4,1fr)}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media(max-width:768px){
+  .vibe-layout{flex-direction:column;height:auto;overflow:visible}
+  .vibe-left{width:100%;border-right:none;border-bottom:1px solid var(--border);max-height:50dvh}
+  .vibe-right{padding:18px 16px}
+}

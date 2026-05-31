@@ -1,0 +1,71 @@
+# Copy this file to .dev.vars and fill in real values.
+# All variables except ENVIRONMENT are optional for local dev using Workers AI.
+
+ENVIRONMENT=development
+
+# Required to use OpenAI, Anthropic, or Google models via Cloudflare AI Gateway.
+# Without these, only @cf/... Workers AI models will work.
+CLOUDFLARE_ACCOUNT_ID=
+AI_GATEWAY_ID=
+
+# API keys for gateway providers (only needed if AI_GATEWAY_ID is set)
+# At minimum, set the providers you intend to use — all are optional.
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_AI_KEY=
+GROQ_API_KEY=        # groq:llama-3.3-70b-versatile, groq:llama-3.1-8b-instant
+MISTRAL_API_KEY=     # mistral:mistral-large-latest, mistral:mistral-small-latest
+DEEPSEEK_API_KEY=    # deepseek:deepseek-chat, deepseek:deepseek-reasoner
+XAI_API_KEY=         # xai:grok-2-latest, xai:grok-4
+PERPLEXITY_API_KEY=  # perplexity:sonar-pro (includes real-time web search)
+CEREBRAS_API_KEY=    # cerebras:llama-3.3-70b (ultra-fast Llama inference)
+OPENROUTER_API_KEY=  # openrouter:{provider}/{model} — 200+ models via one key (e.g. openrouter:openai/gpt-4o)
+COHERE_API_KEY=      # cohere:command-r-plus, cohere:command-r, cohere:command
+HUGGINGFACE_API_KEY= # huggingface:{org}/{model} — e.g. huggingface:bigcode/starcoder
+REPLICATE_API_KEY=   # replicate:{version-hash} or replicate:{owner}/{model}
+PARALLEL_API_KEY=    # parallel:speed — web research & structured extraction (x-api-key auth)
+FAL_API_KEY=         # fal:{model-path} — 600+ generative media models, returns image URL (e.g. fal:fal-ai/fast-sdxl)
+IDEOGRAM_API_KEY=    # ideogram:V_3 — image generation, returns image URL
+CARTESIA_API_KEY=    # cartesia TTS via POST /api/ai/tts with provider:"cartesia"
+ELEVENLABS_API_KEY=  # elevenlabs TTS via POST /api/ai/tts with provider:"elevenlabs"
+
+# Amazon Bedrock via AI Gateway compat endpoint + BYOK.
+# Requires AWS credentials configured as Provider Keys in the CF AI Gateway dashboard.
+# CF_AIG_TOKEN is a Cloudflare API token with AI Gateway permissions (dash.cloudflare.com → My Profile → API Tokens).
+# Model format: bedrock:{bedrock-model-id}  e.g. bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
+CF_AIG_TOKEN=
+
+# Azure OpenAI (requires an Azure OpenAI resource with deployed models).
+# Model format: azure:{resource-name}/{deployment-name}  e.g. azure:my-resource/gpt-4o-deployment
+AZURE_OPENAI_API_KEY=
+
+# Baseten — deploy and serve custom or open-source models.
+# Model format: baseten:{model-id}  e.g. baseten:openai/gpt-oss-120b
+BASETEN_API_KEY=
+
+# Optional: sign exported configs with HMAC-SHA256 so imports can verify provenance.
+# Any string works — use `openssl rand -hex 32` to generate a strong secret.
+SIGNING_SECRET=
+
+# Optional: restrict CORS to specific origins (comma-separated). Defaults to '*'.
+# Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+ALLOWED_ORIGINS=
+
+# Optional: Cloudflare Access Zero Trust authentication.
+# When set, all state-mutation API endpoints (create/update/delete sandbox, build, upload)
+# require a valid Cf-Access-Jwt-Assertion header. Read-only and run/stream endpoints
+# remain public. Set up your Access application at dash.cloudflare.com → Access.
+CF_ACCESS_AUD=             # Application Audience (AUD) tag from the Access app settings
+CF_ACCESS_TEAM_DOMAIN=     # e.g. yourteam.cloudflareaccess.com
+
+# Optional: Cloudflare Pages deployment.
+# Requires a token with Pages:Edit permission. Generate at dash.cloudflare.com → My Profile → API Tokens.
+# CLOUDFLARE_ACCOUNT_ID is already used for AI Gateway — set it once for both.
+CLOUDFLARE_API_TOKEN=      # Bearer token for Pages Direct Upload API
+
+# Optional: Email sending via Cloudflare Email Routing.
+# Requires Email Routing to be configured on your domain at dash.cloudflare.com → Email → Email Routing.
+# Create the [[send_email]] binding in wrangler.toml with your verified from-address.
+# SEND_EMAIL binding is automatically available when configured in wrangler.toml.
+EMAIL_FROM_ADDRESS=        # Must match a verified sender address in your Email Routing config.
+                           # Required when using the POST /api/app/:id/email endpoint — returns 503 if unset.
