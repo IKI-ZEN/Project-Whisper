@@ -127,10 +127,25 @@ export async function checkRateLimit(
   return null
 }
 
+// Rate-limit by client IP under the given key prefix (final key = `${keyPrefix}:${ip}`).
+// Returns a 429 Response when over the limit, or null to proceed. Replaces the
+// repeated "read CF-Connecting-IP → checkRateLimit" preamble across route handlers.
+export async function rateLimitByIp(
+  req: Request, env: Env, keyPrefix: string, max: number, windowMs: number,
+): Promise<Response | null> {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  return checkRateLimit(`${keyPrefix}:${ip}`, max, windowMs, env)
+}
+
 // Sliding-window IP rate limiter for /api/ai/* routes.
 export async function checkAiRateLimit(req: Request, env: Env): Promise<Response | null> {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  return checkRateLimit(`rl:ai:${ip}`, AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_MS, env)
+  return rateLimitByIp(req, env, 'rl:ai', AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_MS)
+}
+
+// The caller's audit identity. Set by the router from validated CF Access only —
+// inbound copies are stripped (see stripTrustHeaders), so this is never client-forged.
+export function readIdentity(req: Request): string | null {
+  return req.headers.get('X-Whisper-Identity')
 }
 
 // Parse a query-string integer with clamped bounds and a fallback for missing/invalid values.

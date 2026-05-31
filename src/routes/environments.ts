@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, parseBody, readJson, checkRateLimit } from '../lib/http'
+import { json, ok, err, parseBody, readJson, rateLimitByIp, readIdentity } from '../lib/http'
 import { generateEnvConfig } from '../lib/ai'
 import { parseEnvironmentRequest, parsePatchEnvironmentRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
@@ -10,6 +10,7 @@ import {
   SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW,
   SANDBOX_TTL, SANDBOX_KEY_PREFIX, MAX_ENV_MODELS, ENV_TYPES,
 } from '../lib/constants'
+import { logSandboxEvent } from '../lib/events'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,8 +24,7 @@ async function getEnvMeta(env: Env, id: string) {
 // ── Create ────────────────────────────────────────────────────────────────────
 
 const createEnvironment: Handler = async (req, env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:env-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
   if (rl) return rl
 
   const p = await parseBody(req, parseEnvironmentRequest)
@@ -44,7 +44,7 @@ const createEnvironment: Handler = async (req, env) => {
 
   const id       = newId()
   const ts       = now()
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
 
   const config: SandboxConfig = {
     id,
@@ -76,9 +76,7 @@ const createEnvironment: Handler = async (req, env) => {
     envModels:   envConfig.envModels,
   })
 
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'env_created', JSON.stringify({ description: description.slice(0, 256), envType }), identity, ts).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'env_created', metadata: { description: description.slice(0, 256), envType }, identity, at: ts })
 
   return json(ok({
     id,
@@ -102,7 +100,7 @@ const createEnvironment: Handler = async (req, env) => {
 
 const patchEnvironment: Handler = async (req, env, params: Params) => {
   const id       = params.id ?? ''
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
   if (!isUUID(id)) return json(err('Invalid environment id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Environment not found'), 404)
 
@@ -134,9 +132,7 @@ const patchEnvironment: Handler = async (req, env, params: Params) => {
     if (patch.systemPrompt !== undefined) eventMeta.systemPrompt = true
     if (patch.temperature  !== undefined) eventMeta.temperature  = patch.temperature
     if (patch.maxTokens    !== undefined) eventMeta.maxTokens    = patch.maxTokens
-    void env.DB.prepare(
-      'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-    ).bind(id, 'env_config_update', JSON.stringify(eventMeta), identity, now()).run()
+    void logSandboxEvent(env, { sandboxId: id, type: 'env_config_update', metadata: eventMeta, identity, at: now() })
   }
 
   return res
@@ -168,8 +164,7 @@ const exportEnvironment: Handler = async (_req, env, params: Params) => {
 // ── Import ────────────────────────────────────────────────────────────────────
 
 const importEnvironment: Handler = async (req, env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:env-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
   if (rl) return rl
 
   let raw: unknown
@@ -205,7 +200,7 @@ const importEnvironment: Handler = async (req, env) => {
 
   const id       = newId()
   const ts       = now()
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
 
   const config: SandboxConfig = {
     id,
@@ -236,9 +231,7 @@ const importEnvironment: Handler = async (req, env) => {
     envModels,
   })
 
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'env_imported', JSON.stringify({ name: config.name, envType }), identity, ts).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'env_imported', metadata: { name: config.name, envType }, identity, at: ts })
 
   return json(ok({
     id,
@@ -255,8 +248,7 @@ const importEnvironment: Handler = async (req, env) => {
 const forkEnvironment: Handler = async (req, env, params: Params) => {
   const sourceId = params.id ?? ''
   if (!isUUID(sourceId)) return json(err('Invalid environment id'), 422)
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:env-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   if (!await sandboxExists(env, sourceId)) return json(err('Environment not found'), 404)
 
@@ -270,7 +262,7 @@ const forkEnvironment: Handler = async (req, env, params: Params) => {
   const src      = cfgBody.data
   const id       = newId()
   const ts       = now()
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
   const envType  = src.envType  ?? metadata.envType  ?? 'general'
   const envModels = src.envModels ?? metadata.envModels ?? [src.model]
 
@@ -298,9 +290,7 @@ const forkEnvironment: Handler = async (req, env, params: Params) => {
     envModels,
   })
 
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'env_forked', JSON.stringify({ name: config.name, forkedFrom: sourceId, envType }), identity, ts).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'env_forked', metadata: { name: config.name, forkedFrom: sourceId, envType }, identity, at: ts })
 
   return json(ok({
     id,

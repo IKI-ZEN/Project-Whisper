@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit, parseQueryInt } from '../lib/http'
+import { json, ok, err, parseBody, rateLimitByIp, parseQueryInt } from '../lib/http'
 import { newId, isUUID, now } from '../lib/utils'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { parseVaultAnalyzeRequest } from '../lib/schema'
@@ -80,8 +80,7 @@ function parseRow(row: Record<string, unknown>) {
 
 // POST /api/vault
 const create: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:vault-write:${ip}`, VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:vault-write', VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   const p = await parseBody(req, parseVaultRecord)
   if (!p.ok) return p.response
@@ -258,8 +257,7 @@ const exportJsonl: Handler = async (req: Request, env: Env) => {
 
 // POST /api/vault/analyze — cluster vault records by prompt embedding similarity
 const analyze: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:vault-analyze:${ip}`, VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:vault-analyze', VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW)
   if (rl) return rl
 
   const p = await parseBody(req, parseVaultAnalyzeRequest)
@@ -334,8 +332,7 @@ const search: Handler = async (req: Request, env: Env) => {
   const limit = parseQueryInt(url.searchParams, 'limit', 20, 1, AI_SEARCH_MAX_RESULTS)
   const tool  = url.searchParams.get('tool') ?? undefined
   if (!q.trim()) return json(err('q is required'), 400)
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:vault-search:${ip}`, VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:vault-search', VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW)
   if (rl) return rl
   try {
     const filters = tool ? { tool } : undefined

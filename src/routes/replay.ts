@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { json, ok, err, parseBody, rateLimitByIp } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { newId, isUUID, now } from '../lib/utils'
 import { stub, doFetch } from './sandbox'
@@ -174,8 +174,7 @@ async function runReplay(
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const postReplay: Handler = async (req, env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:replay:${ip}`, REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:replay', REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW)
   if (rl) return rl
   const p = await parseBody(req, parseReplayRequest)
   if (!p.ok) return p.response

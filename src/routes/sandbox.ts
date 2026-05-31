@@ -1,12 +1,13 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV, checkRateLimit } from '../lib/http'
+import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV, rateLimitByIp, readIdentity } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, parsePatchSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
 import { saveToVault } from '../lib/analysis'
+import { logSandboxEvent } from '../lib/events'
 
 // ── KV metadata shape (stored with each sandbox key) ─────────────────────────
 
@@ -43,7 +44,7 @@ export async function doFetch(
 }
 
 export function identityHeader(req: Request): Record<string, string> {
-  const id = req.headers.get('X-Whisper-Identity')
+  const id = readIdentity(req)
   return id ? { 'X-Whisper-Identity': id } : {}
 }
 
@@ -99,8 +100,7 @@ const list: Handler = async (req, env) => {
 }
 
 const create: Handler = async (req, env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:sandbox-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   const p = await parseBody(req, parseCreateSandboxRequest)
   if (!p.ok) return p.response
@@ -108,7 +108,7 @@ const create: Handler = async (req, env) => {
 
   const id = newId()
   const ts = now()
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
 
   const config: SandboxConfig = { ...parsed, id, memory: [], createdAt: ts, updatedAt: ts }
 
@@ -122,9 +122,7 @@ const create: Handler = async (req, env) => {
     createdAt:   ts,
   })
 
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'created', JSON.stringify({ name: config.name }), identity, ts).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'created', metadata: { name: config.name }, identity, at: ts })
 
   return json(ok({
     id,
@@ -248,9 +246,7 @@ export const run: Handler = async (req, env, params: Params) => {
 
   const res = await doFetch(stub(env, id), 'run', 'POST', { message: p.data.message, sessionId: p.data.sessionId })
 
-  void env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'run', '{}', null, now()).run()
+  void logSandboxEvent(env, { sandboxId: id, type: 'run', at: now() })
 
   return res
 }
@@ -290,12 +286,10 @@ const del: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
   await doFetch(stub(env, id), '/', 'DELETE')
   await env.SANDBOX_REGISTRY.delete(`${SANDBOX_KEY_PREFIX}${id}`)
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'deleted', '{}', identity, now()).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'deleted', identity, at: now() })
   return json(ok({ deleted: true }))
 }
 
@@ -316,8 +310,7 @@ const exportConfig: Handler = async (_req, env, params: Params) => {
 }
 
 const importConfig: Handler = async (req, env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:sandbox-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   let raw: unknown
   try { raw = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
@@ -350,7 +343,7 @@ const importConfig: Handler = async (req, env) => {
   const ts = now()
   const config: SandboxConfig = { ...p.data, id, memory: [], createdAt: ts, updatedAt: ts }
 
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
   await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))
   await registerSandbox(env, {
     id,
@@ -360,9 +353,7 @@ const importConfig: Handler = async (req, env) => {
     createdAt:   ts,
   })
 
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'imported', JSON.stringify({ name: config.name }), identity, ts).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'imported', metadata: { name: config.name }, identity, at: ts })
 
   return json(ok({
     id,
@@ -378,8 +369,7 @@ const importConfig: Handler = async (req, env) => {
 const fork: Handler = async (req, env, params: Params) => {
   const sourceId = params.id ?? ''
   if (!isUUID(sourceId)) return json(err('Invalid sandbox id'), 422)
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:sandbox-create:${ip}`, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   if (!await sandboxExists(env, sourceId)) return json(err('Sandbox not found'), 404)
 
@@ -390,7 +380,7 @@ const fork: Handler = async (req, env, params: Params) => {
   const src = cfgBody.data
   const id  = newId()
   const ts  = now()
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
 
   const config: SandboxConfig = {
     ...src,
@@ -404,9 +394,7 @@ const fork: Handler = async (req, env, params: Params) => {
 
   await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))
   await registerSandbox(env, { id, name: config.name, description: config.description, model: config.model, createdAt: ts })
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'created', JSON.stringify({ name: config.name, forkedFrom: sourceId }), identity, ts).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'created', metadata: { name: config.name, forkedFrom: sourceId }, identity, at: ts })
 
   return json(ok({ id, name: config.name, appUrl: `/app/${id}`, shortLink: `/s/${id}`, api: { run: `/s/${id}/run`, stream: `/s/${id}/stream` } }), 201)
 }
