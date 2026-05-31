@@ -445,6 +445,7 @@
       <h2 style="font-size:14px;font-weight:600;color:var(--text)">Threat Monitor <span id="mon-status" style="font-size:11px;color:var(--muted)">idle</span></h2>
       <div class="row">
         <div class="field"><label>Sandbox ID (optional filter)</label><input id="mon-sandbox" placeholder="All sandboxes"/></div>
+        <div class="field"><label>Environment ID (optional filter)</label><input id="mon-env" placeholder="or filter by environment"/></div>
         <div class="field"><label>Since (minutes ago)</label><input type="number" id="mon-since" value="60" min="1" max="10080" style="width:80px"/></div>
       </div>
       <div class="row">
@@ -461,6 +462,7 @@
           <select id="mon-type"><option value="">All</option><option value="guard_flag">guard_flag</option><option value="response_flag">response_flag</option><option value="csp_violation">csp_violation</option><option value="job_failed">job_failed</option></select>
         </div>
         <div class="field"><label>Sandbox ID</label><input id="mon-audit-sandbox" placeholder="optional"/></div>
+        <div class="field"><label>Environment ID</label><input id="mon-audit-env" placeholder="optional"/></div>
         <div class="field"><label>Limit</label><input type="number" id="mon-limit" value="50" min="1" max="200" style="width:72px"/></div>
         <button onclick="loadAuditLog()" style="flex:0 0 auto">Load</button>
       </div>
@@ -526,6 +528,15 @@
         <div class="field"><label>Max Tokens</label><input type="number" id="rpl-tokens" value="512" min="1" max="8192" style="width:80px"/></div>
       </div>
       <div class="field"><label>System Prompt (optional)</label><input id="rpl-sys" placeholder="Override system prompt…"/></div>
+      <hr/>
+      <h3 style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Batch Comparison (optional)</h3>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:6px">Run the same conversation against multiple configs simultaneously. Compares each against original responses.</p>
+      <div class="row">
+        <div class="field"><label>Environment IDs (comma-separated, max 5)</label><input id="rpl-env-ids" placeholder="env-uuid-1, env-uuid-2…"/></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Sandbox IDs (comma-separated, max 5)</label><input id="rpl-sandbox-ids" placeholder="sandbox-uuid-1, sandbox-uuid-2…"/></div>
+      </div>
       <button id="btn-replay" onclick="runReplay()">Replay Session</button>
       <div id="rpl-results" style="margin-top:12px"></div>
     </div>
@@ -535,7 +546,8 @@
       <h2 style="font-size:14px;font-weight:600;color:var(--text)">Model Assertions</h2>
       <p style="font-size:12px;color:var(--muted)">Define assertion suites to contract-test model behavior. Supports: contains, not-contains, matches, similarity-gte, judge, latency-lte, guard-clean.</p>
       <div class="row">
-        <button onclick="loadAssertionSuites()" class="outline">Load Suites</button>
+        <div class="field"><label>Filter by Environment ID</label><input id="ast-filter-env" placeholder="optional"/></div>
+        <button onclick="loadAssertionSuites()" class="outline" style="flex:0 0 auto">Load Suites</button>
         <button onclick="showAssertionCreator()" style="flex:0 0 auto">+ New Suite</button>
       </div>
       <div id="assertion-suites-list" style="margin-top:8px"></div>
@@ -560,10 +572,13 @@
         <div class="row" style="align-items:center">
           <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);cursor:pointer">
             <input type="checkbox" id="ast-attach-sb" style="width:auto;accent-color:var(--accent2)"
-              onchange="document.getElementById('ast-sandbox-badge').style.display=this.checked&&activeSandboxCfg?'inline':'none'"/>
+              onchange="document.getElementById('ast-sandbox-badge').style.display=this.checked&&activeSandboxCfg?'inline':'none';document.getElementById('ast-env-row').style.display=this.checked?'none':''"/>
             Attach to active sandbox
           </label>
           <span id="ast-sandbox-badge" style="display:none;font-size:10px;background:var(--surface);border:1px solid var(--accent2);color:var(--accent2);padding:2px 7px;border-radius:99px"></span>
+        </div>
+        <div id="ast-env-row" class="row" style="align-items:center">
+          <div class="field"><label>Environment ID (optional)</label><input id="ast-env-id" placeholder="attach to an environment instead of sandbox"/></div>
         </div>
         <div class="row">
           <button onclick="createAssertionSuite()">Create Suite</button>
@@ -582,11 +597,13 @@
         <div class="field"><label>Prompt text</label><input id="atl-text" placeholder="Add a prompt to the library…"/></div>
         <div class="field"><label>Label (optional)</label><input id="atl-label" placeholder="e.g. Greeting"/></div>
         <div class="field"><label>Tags</label><input id="atl-tags" placeholder="tag1,tag2"/></div>
+        <div class="field"><label>Environment ID (optional)</label><input id="atl-env-id" placeholder="scope to environment"/></div>
         <button onclick="addAtlasPrompt()" style="flex:0 0 auto">Add</button>
       </div>
       <div id="atl-add-status" style="font-size:11px;margin-top:4px"></div>
       <div class="row">
         <div class="field"><label>k (clusters)</label><input type="number" id="atl-k" value="4" min="2" max="15" style="width:60px"/></div>
+        <div class="field"><label>Filter by Environment ID</label><input id="atl-filter-env" placeholder="optional"/></div>
         <button id="btn-atlas-embed" onclick="runAtlasEmbed()">Embed &amp; Map</button>
         <button class="outline" onclick="loadAtlasLibrary()">Load Library</button>
       </div>
@@ -1744,8 +1761,10 @@ function runMonitorStream() {
   feed.innerHTML = ''
   status.textContent = 'connecting…'; status.style.color = 'var(--accent2)'
   btn.disabled = true; stopBtn.disabled = false
+  const environmentId = document.getElementById('mon-env').value.trim()
   const params = new URLSearchParams({ since: String(since) })
   if (sandboxId) params.set('sandbox_id', sandboxId)
+  else if (environmentId) params.set('environment_id', environmentId)
   const es = new EventSource(`/api/monitor/stream?${params}`)
   monitorES = es
   es.onmessage = e => {
@@ -1797,10 +1816,12 @@ async function loadAuditLog() {
   const out = document.getElementById('mon-audit')
   const eventType = document.getElementById('mon-type').value
   const sandboxId = document.getElementById('mon-audit-sandbox').value.trim()
+  const auditEnvId = document.getElementById('mon-audit-env').value.trim()
   const limit = document.getElementById('mon-limit').value
   const params = new URLSearchParams({ limit })
   if (eventType) params.set('event_type', eventType)
   if (sandboxId) params.set('sandbox_id', sandboxId)
+  else if (auditEnvId) params.set('environment_id', auditEnvId)
   out.innerHTML = '<span class="out-placeholder">Loading…</span>'
   try {
     const res = await fetch(`/api/monitor/audit?${params}`)
@@ -1930,24 +1951,38 @@ async function runReplay() {
     temperature:  parseFloat(document.getElementById('rpl-temp').value) || 0.7,
     maxTokens:    parseInt(document.getElementById('rpl-tokens').value, 10) || 512,
   }
+  const batchEnvRaw = document.getElementById('rpl-env-ids').value.trim()
+  const batchSbRaw  = document.getElementById('rpl-sandbox-ids').value.trim()
+  const batchEnvIds     = batchEnvRaw ? batchEnvRaw.split(',').map(s => s.trim()).filter(Boolean) : undefined
+  const batchSandboxIds = batchSbRaw  ? batchSbRaw.split(',').map(s => s.trim()).filter(Boolean) : undefined
   setLoading(btn, 'Replaying…')
   out.innerHTML = ''
   try {
+    const body = { messages, targetConfig }
+    if (batchEnvIds?.length)     body.batchEnvIds     = batchEnvIds
+    if (batchSandboxIds?.length) body.batchSandboxIds = batchSandboxIds
     const res = await fetch('/api/replay', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ messages, targetConfig })
+      body: JSON.stringify(body)
     })
     const { data } = await res.json()
-    const result = data.result ?? data.results?.[0]
-    if (!result) throw new Error('No result returned')
     lastResult['replay'] = data
-    out.innerHTML = result.turns.map((t, i) =>
-      `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Turn ${i+1} · ${t.latencyMs}ms${t.similarity != null ? ` <span style="color:${t.similarity>0.7?'var(--green)':'var(--red)'}">· sim ${(t.similarity*100).toFixed(1)}%</span>` : ''}</div>
-        <div style="font-size:12px;color:var(--accent2)">User: ${escHtml(t.userMessage)}</div>
-        ${t.originalResponse ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">Original: ${escHtml(t.originalResponse.slice(0,200))}</div>` : ''}
-        <div style="font-size:12px;margin-top:6px">Replayed: ${escHtml(t.replayedResponse.slice(0,200))}</div>
-      </div>`
-    ).join('')
+    const results = data.results ?? (data.result ? [data.result] : [])
+    if (!results.length) throw new Error('No result returned')
+    const renderTurns = (result, label) => {
+      const header = label ? `<div style="font-size:11px;font-weight:600;color:var(--accent2);margin-bottom:6px">Config: ${escHtml(label)}</div>` : ''
+      return `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px">${header}` +
+        result.turns.map((t, i) =>
+          `<div style="border-top:${i>0?'1px solid var(--border)':'none'};padding:${i>0?'8px':0} 0 0">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Turn ${i+1} · ${t.latencyMs}ms${t.similarity != null ? ` <span style="color:${t.similarity>0.7?'var(--green)':'var(--red)'}">· sim ${(t.similarity*100).toFixed(1)}%</span>` : ''}</div>
+            <div style="font-size:12px;color:var(--accent2)">User: ${escHtml(t.userMessage)}</div>
+            ${t.originalResponse ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">Original: ${escHtml(t.originalResponse.slice(0,200))}</div>` : ''}
+            <div style="font-size:12px;margin-top:4px">Replayed: ${escHtml(t.replayedResponse.slice(0,200))}</div>
+          </div>`
+        ).join('') + '</div>'
+    }
+    out.innerHTML = results.length === 1
+      ? renderTurns(results[0], null)
+      : results.map((r, i) => renderTurns(r, r.targetConfig?.model || `Config ${i+1}`)).join('')
     out.appendChild(makeExportBtn('replay', 'replay'))
   } catch(e) { out.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(String(e))}</span>` }
   clearLoading(btn)
@@ -1958,8 +1993,11 @@ function showAssertionCreator() { document.getElementById('assertion-creator').s
 async function loadAssertionSuites() {
   const out = document.getElementById('assertion-suites-list')
   out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  const filterEnvId = document.getElementById('ast-filter-env').value.trim()
+  const params = new URLSearchParams()
+  if (filterEnvId) params.set('environmentId', filterEnvId)
   try {
-    const res = await fetch('/api/assertions')
+    const res = await fetch(`/api/assertions?${params}`)
     const { data } = await res.json()
     if (!data.suites?.length) { out.innerHTML = '<span class="out-placeholder">No suites yet.</span>'; return }
     out.innerHTML = data.suites.map(s =>
@@ -1985,10 +2023,11 @@ async function createAssertionSuite() {
   let cases
   try { cases = JSON.parse(casesRaw) } catch { status.textContent = '⚠ Invalid JSON in cases'; status.style.color = 'var(--red)'; return }
   const sandboxId = document.getElementById('ast-attach-sb').checked && activeSandboxCfg?.id ? activeSandboxCfg.id : undefined
+  const environmentId = !sandboxId ? (document.getElementById('ast-env-id').value.trim() || undefined) : undefined
   status.textContent = 'Creating…'
   try {
     const res = await fetch('/api/assertions', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, description: desc, cases, sandboxId })
+      body: JSON.stringify({ name, description: desc, cases, sandboxId, environmentId })
     })
     const { ok: isOk, data } = await res.json()
     if (!isOk) throw new Error(JSON.stringify(data))
@@ -2041,10 +2080,11 @@ async function addAtlasPrompt() {
   const text = document.getElementById('atl-text').value.trim()
   if (!text) return
   const tags = document.getElementById('atl-tags').value.split(',').map(t=>t.trim()).filter(Boolean)
+  const atlEnvId = document.getElementById('atl-env-id').value.trim() || undefined
   status.textContent = 'Saving…'
   try {
     const res = await fetch('/api/atlas/library', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text, label: document.getElementById('atl-label').value.trim(), tags })
+      body: JSON.stringify({ text, label: document.getElementById('atl-label').value.trim(), tags, environmentId: atlEnvId })
     })
     const { ok: isOk } = await res.json()
     if (!isOk) throw new Error('Save failed')
@@ -2057,8 +2097,11 @@ async function addAtlasPrompt() {
 async function loadAtlasLibrary() {
   const out = document.getElementById('atl-library')
   out.innerHTML = '<span class="out-placeholder">Loading…</span>'
+  const atlFilterEnv = document.getElementById('atl-filter-env').value.trim()
+  const atlParams = new URLSearchParams()
+  if (atlFilterEnv) atlParams.set('environmentId', atlFilterEnv)
   try {
-    const res = await fetch('/api/atlas/library')
+    const res = await fetch(`/api/atlas/library?${atlParams}`)
     const { data } = await res.json()
     if (!data.prompts?.length) { out.innerHTML = '<span class="out-placeholder">No prompts in library yet.</span>'; return }
     out.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${data.prompts.length} prompts in library</div>` +
