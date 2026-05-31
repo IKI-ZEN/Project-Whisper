@@ -1,6 +1,7 @@
 import type { Env, WhisperJob } from './types/env'
 import { Router, json, ok } from './lib/http'
 import { now } from './lib/utils'
+import { logSandboxEvent } from './lib/events'
 import { aiRoutes }              from './routes/ai'
 import { sandboxRoutes, run, stream } from './routes/sandbox'
 import { vibeRoutes }            from './routes/vibes'
@@ -108,15 +109,7 @@ export default {
       } catch (e) {
         console.error('[queue] job failed:', msg.body.type, e)
         try {
-          await env.DB.prepare(
-            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-          ).bind(
-            msg.body.sandboxId ?? '',
-            'job_failed',
-            JSON.stringify({ jobType: msg.body.type, error: String(e), attempts: msg.attempts }),
-            null,
-            now(),
-          ).run()
+          await logSandboxEvent(env, { sandboxId: msg.body.sandboxId ?? '', type: 'job_failed', metadata: { jobType: msg.body.type, error: String(e), attempts: msg.attempts } })
         } catch { /* D1 write must not prevent retry */ }
         msg.retry()
       }

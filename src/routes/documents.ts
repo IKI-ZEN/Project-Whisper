@@ -1,6 +1,6 @@
 import type { Env, WhisperJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, checkRateLimit, parseBodyOptional } from '../lib/http'
+import { json, ok, err, checkRateLimit, rateLimitByIp, parseBodyOptional } from '../lib/http'
 import { scan } from '../lib/guard'
 import { newId, now, isUUID } from '../lib/utils'
 import { MAX_DOCUMENT_BYTES, GUARD_SCAN_SLICE_BYTES, MAX_VECTOR_CHUNKS, REINDEX_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, DOCUMENT_UPLOAD_RATE_LIMIT_MAX, DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW } from '../lib/constants'
@@ -36,8 +36,7 @@ function r2Key(sandboxId: string, docId: string): string {
 const upload: Handler = async (req, env, params: Params) => {
   const sandboxId = params.id ?? ''
   if (!isUUID(sandboxId)) return json(err('Invalid sandbox id'), 400)
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:doc-upload:${ip}`, DOCUMENT_UPLOAD_RATE_LIMIT_MAX, DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:doc-upload', DOCUMENT_UPLOAD_RATE_LIMIT_MAX, DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW)
   if (rl) return rl
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
 

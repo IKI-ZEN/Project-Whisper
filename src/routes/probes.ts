@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit, parseQueryInt } from '../lib/http'
+import { json, ok, err, parseBody, rateLimitByIp, parseQueryInt } from '../lib/http'
 import { newId, isUUID, now } from '../lib/utils'
 import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
 import {
@@ -456,8 +456,7 @@ const deleteProbe: Handler = async (_req: Request, env: Env, params) => {
 }
 
 const runProbe: Handler = async (req: Request, env: Env, params) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:probe-run:${ip}`, PROBE_RUN_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, env)
+  const rl = await rateLimitByIp(req, env, 'rl:probe-run', PROBE_RUN_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const id = params.id
   if (!id) return json(err('Missing id'), 400)

@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, parseQueryInt, checkRateLimit } from '../lib/http'
+import { json, ok, err, parseBody, parseQueryInt, rateLimitByIp } from '../lib/http'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { newId, isUUID, now } from '../lib/utils'
 import {
@@ -138,8 +138,7 @@ function parseNearestRequest(body: unknown): { text: string; n: number } {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const addPrompt: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:atlas-write:${ip}`, ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:atlas-write', ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   const p = await parseBody(req, parseAddPrompt)
   if (!p.ok) return p.response
@@ -229,8 +228,7 @@ const deletePrompt: Handler = async (req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:atlas-write:${ip}`, ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:atlas-write', ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   try {
     await env.DB.prepare('DELETE FROM prompt_library WHERE id = ?').bind(id).run()
@@ -241,8 +239,7 @@ const deletePrompt: Handler = async (req: Request, env: Env, params) => {
 }
 
 const embedAtlas: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
   if (rl) return rl
   const p = await parseBody(req, parseEmbedRequest)
   if (!p.ok) return p.response
@@ -318,8 +315,7 @@ const embedAtlas: Handler = async (req: Request, env: Env) => {
 }
 
 const nearestPrompts: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
   if (rl) return rl
   const p = await parseBody(req, parseNearestRequest)
   if (!p.ok) return p.response
