@@ -189,3 +189,7 @@ export const REPLAY_RATE_LIMIT_WINDOW = 60_000
 // Usage analytics list
 export const USAGE_LIMIT_DEFAULT = 100
 export const USAGE_LIMIT_MAX     = 1000
+
+// Chat environments
+export const MAX_ENV_MODELS = 4
+export const ENV_TYPES      = ['general', 'coding', 'research', 'structured'] as const

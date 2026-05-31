@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Whisper — Environments</title>
+<link rel="stylesheet" href="/whisper-base.css"/>
+<link rel="stylesheet" href="/environments.css"/>
+</head>
+<body>
+  <nav class="topnav" role="navigation" aria-label="Main">
+    <a href="/" class="brand">Whisper</a>
+    <a href="/" class="navlink">Chat</a>
+    <a href="/vibe.html" class="navlink">Vibe</a>
+    <a href="/apps" class="navlink">Apps</a>
+    <a href="/environments.html" class="navlink active" aria-current="page">Environments</a>
+    <a href="/tools.html" class="navlink">Tools</a>
+    <a href="/dashboard" class="navlink">Dashboard</a>
+  </nav>
+
+  <div class="vibe-layout">
+    <!-- Left sidebar: builder controls -->
+    <aside class="vibe-left" aria-label="Environment builder">
+      <div class="sidebar-inner">
+        <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">New Environment</h2>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5">Describe your AI workspace — the environment type defines how models behave and what the UI optimises for.</p>
+
+        <!-- Environment type -->
+        <div class="field">
+          <label>Environment type</label>
+          <div class="tpl-chips" id="type-chips" role="group" aria-label="Environment type">
+            <button class="tpl-chip active" data-type="general" aria-pressed="true">General</button>
+            <button class="tpl-chip" data-type="coding" aria-pressed="false">Coding</button>
+            <button class="tpl-chip" data-type="research" aria-pressed="false">Research</button>
+            <button class="tpl-chip" data-type="structured" aria-pressed="false">Structured</button>
+          </div>
+          <div id="type-hint" style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:-8px"></div>
+        </div>
+
+        <!-- Description -->
+        <div class="field">
+          <label for="env-desc">Description</label>
+          <textarea id="env-desc" rows="4" placeholder="e.g. A Python code review workspace that spots bugs and suggests improvements…" aria-required="true"></textarea>
+        </div>
+
+        <!-- Models -->
+        <div class="field">
+          <label>Models <span style="font-weight:400;text-transform:none;letter-spacing:0">(1–4 for compare mode)</span></label>
+          <div class="model-pills" id="model-pills" role="list" aria-label="Selected models"></div>
+          <div class="model-add-row" id="model-add-row">
+            <input type="text" id="model-input" placeholder="Add model…" list="env-models-list" aria-label="Model name"/>
+            <button class="model-add-btn" id="model-add-btn">Add</button>
+          </div>
+          <div class="model-count-hint" id="model-count-hint"></div>
+        </div>
+
+        <!-- Name (optional) -->
+        <div class="field">
+          <label for="env-name-input">Name <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — AI will generate one)</span></label>
+          <input type="text" id="env-name-input" placeholder="My Code Review Workspace"/>
+        </div>
+
+        <!-- Generate button -->
+        <button class="gen-btn" id="gen-btn" aria-label="Generate environment">
+          <span class="spinner" id="gen-spinner" style="display:none" aria-hidden="true"></span>
+          <span id="gen-label">Generate Environment</span>
+        </button>
+        <div class="status-msg" id="status-msg" role="status" aria-live="polite"></div>
+      </div>
+    </aside>
+
+    <!-- Right panel: result -->
+    <main class="vibe-right" aria-label="Generated environment">
+      <div id="result-area">
+        <div class="env-empty">
+          <div class="icon">⬡</div>
+          <h3>No environment yet</h3>
+          <p>Choose a type, describe your workspace, and hit Generate. The AI will configure the system prompt, temperature, and model defaults for your operating mode.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <datalist id="env-models-list">
+    <option value="@cf/meta/llama-3.1-8b-instruct"/>
+    <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast"/>
+    <option value="@cf/google/gemma-3-12b-it"/>
+    <option value="openai:gpt-4o-mini"/>
+    <option value="openai:gpt-4o"/>
+    <option value="anthropic:claude-haiku-4-5-20251001"/>
+    <option value="anthropic:claude-sonnet-4-6"/>
+    <option value="google:gemini-2.0-flash"/>
+    <option value="google:gemini-1.5-pro"/>
+  </datalist>
+
+<script>
+const MAX_MODELS = 4
+const TYPE_HINTS = {
+  general:    'Balanced conversational workspace. Responds naturally across all topics. Default for everyday AI interaction.',
+  coding:     'Expert programmer mode. Code review focus, monospace input, syntax-aware responses with code blocks.',
+  research:   'Research assistant mode. Enables document upload and retrieval (RAG). Cites sources, flags uncertainty.',
+  structured: 'JSON-only output mode. All responses are structured JSON. Use when you need machine-readable output.',
+}
+
+let selectedType   = 'general'
+let selectedModels = []
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+// ── Type chips ──────────────────────────────────────────────────────────────
+document.getElementById('type-chips').addEventListener('click', function(e){
+  const btn = e.target.closest('[data-type]')
+  if(!btn) return
+  selectedType = btn.dataset.type
+  document.querySelectorAll('[data-type]').forEach(function(b){
+    b.classList.toggle('active', b===btn)
+    b.setAttribute('aria-pressed', b===btn ? 'true' : 'false')
+  })
+  document.getElementById('type-hint').textContent = TYPE_HINTS[selectedType] || ''
+})
+document.getElementById('type-hint').textContent = TYPE_HINTS.general
+
+// ── Model pills ─────────────────────────────────────────────────────────────
+function renderPills(){
+  const container = document.getElementById('model-pills')
+  container.innerHTML = ''
+  selectedModels.forEach(function(m){
+    const pill = document.createElement('div')
+    pill.className = 'model-pill'
+    pill.setAttribute('role','listitem')
+    const label = m.split('/').pop() || m
+    pill.innerHTML = '<span title="'+esc(m)+'">'+esc(label)+'</span>'
+    const rm = document.createElement('button')
+    rm.className = 'rm-pill'
+    rm.setAttribute('aria-label','Remove '+esc(label))
+    rm.textContent = '×'
+    rm.onclick = function(){ removeModel(m) }
+    pill.appendChild(rm)
+    container.appendChild(pill)
+  })
+  const hint = document.getElementById('model-count-hint')
+  const addRow = document.getElementById('model-add-row')
+  if(selectedModels.length >= MAX_MODELS){
+    hint.textContent = 'Maximum '+MAX_MODELS+' models reached'
+    addRow.style.display = 'none'
+  } else {
+    hint.textContent = selectedModels.length === 0
+      ? 'Leave empty to use AI-suggested defaults for your environment type'
+      : selectedModels.length+' model'+(selectedModels.length!==1?'s':'')+' — add up to '+(MAX_MODELS-selectedModels.length)+' more'
+    addRow.style.display = ''
+  }
+}
+
+function addModel(m){
+  m = m.trim()
+  if(!m || selectedModels.includes(m) || selectedModels.length >= MAX_MODELS) return
+  selectedModels.push(m)
+  renderPills()
+}
+function removeModel(m){
+  selectedModels = selectedModels.filter(function(x){ return x !== m })
+  renderPills()
+}
+
+document.getElementById('model-add-btn').onclick = function(){
+  const inp = document.getElementById('model-input')
+  addModel(inp.value)
+  inp.value = ''
+  inp.focus()
+}
+document.getElementById('model-input').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); addModel(this.value); this.value = '' }
+})
+document.getElementById('model-input').addEventListener('change', function(){
+  // datalist selection fires change
+  if(this.value){ addModel(this.value); this.value = '' }
+})
+
+renderPills()
+
+// ── Generate ────────────────────────────────────────────────────────────────
+document.getElementById('gen-btn').onclick = async function(){
+  const desc = document.getElementById('env-desc').value.trim()
+  if(desc.length < 10){
+    setStatus('Description must be at least 10 characters.', true)
+    document.getElementById('env-desc').focus()
+    return
+  }
+
+  setLoading(true)
+  setStatus('')
+
+  try{
+    const body = {
+      description: desc,
+      envType:     selectedType,
+      envModels:   selectedModels.length ? selectedModels : undefined,
+      name:        document.getElementById('env-name-input').value.trim() || undefined,
+    }
+    const r = await fetch('/api/environments', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    })
+    const d = await r.json()
+    if(!d.ok) throw new Error(d.error || 'Generation failed')
+    showResult(d.data)
+  } catch(e){
+    setStatus(String(e), true)
+  } finally {
+    setLoading(false)
+  }
+}
+
+function setLoading(on){
+  const btn = document.getElementById('gen-btn')
+  btn.disabled = on
+  document.getElementById('gen-spinner').style.display = on ? '' : 'none'
+  document.getElementById('gen-label').textContent = on ? 'Generating…' : 'Generate Environment'
+}
+
+function setStatus(msg, isErr){
+  const el = document.getElementById('status-msg')
+  el.textContent = msg || ''
+  el.className = 'status-msg' + (isErr ? ' error' : '')
+}
+
+function showResult(data){
+  const envUrl    = data.envUrl || ('/env/' + data.id)
+  const models    = data.envModels || []
+  const type      = data.envType || selectedType
+  const sys       = (data.config && data.config.systemPrompt) || ''
+  const name      = data.name || 'Untitled Environment'
+  const temp      = (data.config && typeof data.config.temperature === 'number') ? data.config.temperature : 0.7
+  const maxTok    = (data.config && typeof data.config.maxTokens === 'number') ? data.config.maxTokens : 1024
+
+  const modelPills = models.map(function(m){
+    return '<span class="result-model-pill" title="'+esc(m)+'">'+esc(m.split('/').pop()||m)+'</span>'
+  }).join('')
+
+  const embedCode = '<iframe src="'+location.origin+envUrl+'" width="420" height="640" frameborder="0"></iframe>'
+
+  document.getElementById('result-area').innerHTML = ''
+  const card = document.createElement('div')
+  card.className = 'env-result'
+  card.innerHTML =
+    '<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">'
+    +'<span class="result-name">'+esc(name)+'</span>'
+    +'<span class="result-type">'+esc(type)+'</span>'
+    +'</div>'
+    +'<div>'
+    +'<div class="result-section-label">System Prompt</div>'
+    +'<div class="result-sys">'+esc(sys||'(none)')+'</div>'
+    +'</div>'
+    +(models.length ? '<div><div class="result-section-label">Models</div><div class="result-models">'+modelPills+'</div></div>' : '')
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted)">'
+    +'<span>temp <b style="color:var(--text)">'+temp.toFixed(1)+'</b></span>'
+    +'<span>max tokens <b style="color:var(--text)">'+maxTok+'</b></span>'
+    +'</div>'
+    +'<div class="result-actions">'
+    +'<a class="launch-link" href="'+esc(envUrl)+'" target="_blank">Open Environment →</a>'
+    +'<button class="result-btn" id="copy-link-btn">Copy link</button>'
+    +'<button class="result-btn" id="export-btn">Export JSON</button>'
+    +'</div>'
+    +'<div>'
+    +'<div class="result-section-label">Embed</div>'
+    +'<textarea class="result-code" readonly aria-label="Embed code">'+esc(embedCode)+'</textarea>'
+    +'</div>'
+
+  document.getElementById('result-area').appendChild(card)
+
+  document.getElementById('copy-link-btn').onclick = function(){
+    const url = location.origin + envUrl
+    navigator.clipboard?.writeText(url).catch(function(){})
+    this.textContent = 'Copied!'
+    setTimeout(function(){ document.getElementById('copy-link-btn').textContent = 'Copy link' }, 1500)
+  }
+  document.getElementById('export-btn').onclick = function(){
+    const payload = JSON.stringify(data, null, 2)
+    const blob = new Blob([payload], {type:'application/json'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = (name||'env').replace(/[^a-zA-Z0-9_-]/g,'_')+'.json'
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  setStatus('Environment created!')
+}
+</script>
+</body>
+</html>

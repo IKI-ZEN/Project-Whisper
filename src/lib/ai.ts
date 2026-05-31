@@ -1656,3 +1656,86 @@ User description: "${description}"`
     appHtml:      rawAppHtml.length > 0 && rawAppHtml.length <= 51_200 ? rawAppHtml : undefined,
   }
 }
+
+// ── Environment config generator ──────────────────────────────────────────────
+
+export interface EnvConfig {
+  name: string
+  description: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  maxTokens: number
+  envModels: string[]
+}
+
+export async function generateEnvConfig(
+  ai: Ai, env: Env,
+  description: string,
+  envType: string,
+  requestedModels?: string[],
+  name?: string,
+): Promise<EnvConfig> {
+  const hasGateway = Boolean(env.AI_GATEWAY_ID && env.CLOUDFLARE_ACCOUNT_ID)
+
+  const modelDefaults: Record<string, string[]> = hasGateway ? {
+    general:    [MODELS.text,    MODELS.gpt4oMini],
+    coding:     [MODELS.claude,  MODELS.gpt4o],
+    research:   [MODELS.claude,  MODELS.gemini],
+    structured: [MODELS.gpt4o,   MODELS.claude],
+  } : {
+    general:    [MODELS.text,     MODELS.textLarge],
+    coding:     [MODELS.textLarge, MODELS.text],
+    research:   [MODELS.textLarge, MODELS.text],
+    structured: [MODELS.textLarge, MODELS.text],
+  }
+
+  const systemPromptHints: Record<string, string> = {
+    general:    'You are a helpful, knowledgeable assistant. Be concise and clear.',
+    coding:     'You are an expert programmer. Review code carefully, explain bugs clearly, and provide idiomatic, well-commented solutions. Use code blocks with language tags.',
+    research:   'You are a research assistant. Provide thorough, accurate answers with citations where possible. Summarise sources clearly and flag uncertainty.',
+    structured: 'You produce structured JSON output only. Respond with valid JSON matching the schema the user specifies. No prose outside the JSON object.',
+  }
+
+  const metaPrompt = `You are configuring a chat environment. Given the user description and environment type, output ONLY valid JSON — no markdown, no explanation.
+
+JSON fields:
+{
+  "name": "<short descriptive name, max 64 chars>",
+  "description": "<one sentence describing what this environment does, max 256 chars>",
+  "systemPrompt": "<detailed system instructions tuned for the environment type>",
+  "temperature": <0.2 for factual/structured, 0.7 for balanced, 1.0 for creative>,
+  "maxTokens": <512–4096>
+}
+
+Environment type: ${envType}
+Type guidance: ${systemPromptHints[envType] ?? 'You are a helpful assistant.'}
+${name ? `Use the name: "${name}"` : 'Generate an appropriate name from the description.'}
+
+User description: "${description}"`
+
+  const raw = await complete(ai, env, {
+    model:       MODELS.textLarge,
+    prompt:      metaPrompt,
+    temperature: 0.2,
+    maxTokens:   512,
+  })
+
+  const stripped    = raw.replace(/```(?:json)?\n?/g, '').trim()
+  const jsonMatch   = stripped.match(/\{[\s\S]*\}/)
+  const parsed      = jsonMatch ? JSON.parse(jsonMatch[0]) as Record<string, unknown> : {}
+
+  const envModels = (requestedModels && requestedModels.length > 0)
+    ? requestedModels
+    : (modelDefaults[envType] ?? modelDefaults.general)
+
+  return {
+    name:         typeof parsed.name         === 'string' ? parsed.name.slice(0, 64)   : name ?? 'Untitled Environment',
+    description:  typeof parsed.description  === 'string' ? parsed.description.slice(0, 256) : description.slice(0, 256),
+    systemPrompt: typeof parsed.systemPrompt === 'string' ? parsed.systemPrompt : systemPromptHints[envType] ?? 'You are a helpful assistant.',
+    model:        envModels[0],
+    temperature:  typeof parsed.temperature  === 'number' ? parsed.temperature  : DEFAULT_TEMPERATURE,
+    maxTokens:    typeof parsed.maxTokens    === 'number' ? Math.min(4096, Math.max(512, parsed.maxTokens)) : DEFAULT_MAX_TOKENS,
+    envModels,
+  }
+}

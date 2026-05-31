@@ -17,6 +17,9 @@ export interface SandboxMeta {
   model: string
   createdAt: number
   fromVibe?: boolean
+  fromEnv?: boolean
+  envType?: string
+  envModels?: string[]
 }
 
 // ── Internal DO dispatch ──────────────────────────────────────────────────────
