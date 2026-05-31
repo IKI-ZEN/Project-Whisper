@@ -1966,6 +1966,11 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .card-date{font-size:10px;color:var(--muted);margin-left:auto}
 .open-btn{padding:8px 16px;min-height:36px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .open-btn:hover{background:#4f46e5}
+.open-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+.act-btn{padding:7px 12px;min-height:36px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:border-color .15s,color .15s}
+.act-btn:hover{border-color:var(--accent2);color:var(--text)}
+.act-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+.act-btn:disabled{opacity:.5;cursor:not-allowed}
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px;color:var(--muted)}
 .empty h3{font-size:18px;margin-bottom:8px;color:var(--text)}
 .empty-cta{display:inline-block;margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500}
@@ -2018,7 +2023,7 @@ async function load(){
       const modelLabel=models.length>1?models.length+' models':'1 model'
       const delay=Math.min(i,10)*50
       grid.insertAdjacentHTML('beforeend',\`
-        <div class="card" role="listitem" style="animation:cardIn .2s ease-out both;animation-delay:\${delay}ms">
+        <div class="card" role="listitem" style="animation:cardIn .2s ease-out both;animation-delay:\${delay}ms" data-id="\${esc(env.id)}" data-name="\${esc(env.name)}">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="card-name">\${esc(env.name)}</span>
             <span class="type-badge \${esc(cls)}">\${esc(type)}</span>
@@ -2028,13 +2033,62 @@ async function load(){
             <span class="model-count">\${esc(modelLabel)}</span>
             <span class="card-date">\${date}</span>
           </div>
-          <a href="/env/\${esc(env.id)}" class="open-btn">Open <span aria-hidden="true">→</span></a>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <a href="/env/\${esc(env.id)}" class="open-btn">Open <span aria-hidden="true">→</span></a>
+            <button class="act-btn fork-btn" data-id="\${esc(env.id)}" data-name="\${esc(env.name)}" aria-label="Fork \${esc(env.name)}">Fork</button>
+            <button class="act-btn export-btn" data-id="\${esc(env.id)}" data-name="\${esc(env.name)}" aria-label="Export \${esc(env.name)}">Export</button>
+          </div>
         </div>
       \`)
     })
+    document.getElementById('grid').addEventListener('click', handleCardAction)
   }catch(e){
     grid.style.cssText='flex:1;display:flex;align-items:center;justify-content:center'
     grid.innerHTML='<div class="empty"><h3>Failed to load environments</h3><p>'+esc(String(e))+'</p></div>'
+  }
+}
+
+async function handleCardAction(e){
+  const fork   = e.target.closest('.fork-btn')
+  const expt   = e.target.closest('.export-btn')
+  if(fork)   await doFork(fork.dataset.id, fork.dataset.name, fork)
+  if(expt)   await doExport(expt.dataset.id, expt.dataset.name, expt)
+}
+
+async function doFork(id, name, btn){
+  btn.disabled = true
+  btn.textContent = 'Forking…'
+  try{
+    const r = await fetch('/api/environments/'+id+'/fork', {method:'POST'})
+    const d = await r.json()
+    if(!d.ok) throw new Error(d.error || 'Fork failed')
+    window.location.href = d.data.envUrl || '/env/'+d.data.id
+  }catch(e){
+    btn.disabled = false
+    btn.textContent = 'Fork'
+    alert('Fork failed: '+String(e))
+  }
+}
+
+async function doExport(id, name, btn){
+  btn.disabled = true
+  btn.textContent = 'Exporting…'
+  try{
+    const r = await fetch('/api/environments/'+id+'/export')
+    const d = await r.json()
+    if(!d.ok) throw new Error(d.error || 'Export failed')
+    const blob = new Blob([JSON.stringify(d.data, null, 2)], {type:'application/json'})
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url
+    a.download = (name||'env').replace(/[^a-zA-Z0-9_-]/g,'_')+'.json'
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }catch(e){
+    alert('Export failed: '+String(e))
+  }finally{
+    btn.disabled = false
+    btn.textContent = 'Export'
   }
 }
 
