@@ -1,11 +1,12 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { json, ok, err, parseBody, rateLimitByIp, readIdentity } from '../lib/http'
 import { generateVibeConfig } from '../lib/ai'
 import { parseVibeRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
 import { registerSandbox, stub, doFetch, identityHeader } from './sandbox'
 import { EMBED_WIDTH, EMBED_HEIGHT, VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
+import { logSandboxEvent } from '../lib/events'
 
 const TEMPLATES = [
   { id: 'customer-support',  name: 'Customer Support Bot',   tags: ['support', 'chat'],    description: 'Handles FAQs and routes issues to the right team' },
@@ -19,8 +20,7 @@ const listTemplates: Handler = (_req, _env) =>
   Promise.resolve(json(ok({ templates: TEMPLATES })))
 
 const createVibe: Handler = async (req, env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:vibe-create:${ip}`, VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:vibe-create', VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW)
   if (rl) return rl
   const p = await parseBody(req, parseVibeRequest)
   if (!p.ok) return p.response
@@ -39,7 +39,7 @@ const createVibe: Handler = async (req, env) => {
 
   const id       = newId()
   const ts       = now()
-  const identity = req.headers.get('X-Whisper-Identity')
+  const identity = readIdentity(req)
   const config: SandboxConfig = { ...vibeConfig, id, memory: [], createdAt: ts, updatedAt: ts }
 
   await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))
@@ -53,9 +53,7 @@ const createVibe: Handler = async (req, env) => {
     fromVibe:    true,
   })
 
-  await env.DB.prepare(
-    'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-  ).bind(id, 'vibe_created', JSON.stringify({ description: description.slice(0, 256) }), identity, ts).run()
+  await logSandboxEvent(env, { sandboxId: id, type: 'vibe_created', metadata: { description: description.slice(0, 256) }, identity, at: ts })
 
   const embedCode = `<iframe src="/app/${id}" width="${EMBED_WIDTH}" height="${EMBED_HEIGHT}" frameborder="0" allow="microphone"></iframe>`
 

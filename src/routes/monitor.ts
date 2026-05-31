@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, sseEvent, sseResponse, parseQueryInt, checkRateLimit } from '../lib/http'
+import { json, ok, err, sseEvent, sseResponse, parseQueryInt, rateLimitByIp } from '../lib/http'
 import { now } from '../lib/utils'
 import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW } from '../lib/constants'
 
@@ -9,8 +9,7 @@ import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX, MONITOR_RATE_LIMIT_MAX, MONIT
 // optionally filtered by sandbox_id or environment_id. Clients use EventSource with Last-Event-ID
 // for reconnect-based polling.
 const stream: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:monitor:${ip}`, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
   if (rl) return rl
   try {
     const url = new URL(req.url)
@@ -77,8 +76,7 @@ const stream: Handler = async (req: Request, env: Env) => {
 // GET /api/monitor/audit
 // Paginated audit log reader with optional filters.
 const audit: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:monitor:${ip}`, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
   if (rl) return rl
   try {
     const url           = new URL(req.url)
@@ -139,8 +137,7 @@ const audit: Handler = async (req: Request, env: Env) => {
 // GET /api/monitor/patterns
 // Aggregated guard pattern frequency analysis.
 const patterns: Handler = async (req: Request, env: Env) => {
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:monitor:${ip}`, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW, env)
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
   if (rl) return rl
   try {
     const url = new URL(req.url)

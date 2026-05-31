@@ -2,7 +2,8 @@ import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../types/env'
 import type { SandboxConfig, Message } from '../lib/schema'
 import { runInSandboxWithRAG, streamInSandboxWithRAG, isToolCallReply, decodeToolCalls, encodeToolResult, contentToText } from '../lib/ai'
-import { json, sseResponse } from '../lib/http'
+import { json, sseResponse, readIdentity } from '../lib/http'
+import { logSandboxEvent } from '../lib/events'
 import { now } from '../lib/utils'
 import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS, GUARD_FLAG_INPUT_PREVIEW_CHARS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
@@ -238,9 +239,7 @@ export class SandboxDO extends DurableObject<Env> {
             return
           }
           if (guard.riskLevel !== 'clean') {
-            void this.env.DB.prepare(
-              'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-            ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'ws', patterns: guard.patterns }), null, now()).run()
+            void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'ws', patterns: guard.patterns } })
           }
         }
 
@@ -288,7 +287,7 @@ export class SandboxDO extends DurableObject<Env> {
 
   private async handleInit(req: Request): Promise<Response> {
     const config   = await req.json() as SandboxConfig
-    const identity = req.headers.get('X-Whisper-Identity') ?? null
+    const identity = readIdentity(req)
 
     const guard = this.guardedScan(config.systemPrompt ?? '', config.guardMode)
     if (guard) {
@@ -296,9 +295,7 @@ export class SandboxDO extends DurableObject<Env> {
         return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
       }
       if (guard.riskLevel !== 'clean') {
-        void this.env.DB.prepare(
-          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'init', patterns: guard.patterns }), identity, now()).run()
+        void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'init', patterns: guard.patterns }, identity })
       }
     }
 
@@ -317,7 +314,7 @@ export class SandboxDO extends DurableObject<Env> {
   private async handlePatchConfig(req: Request): Promise<Response> {
     const patch    = await req.json() as Partial<SandboxConfig>
     const config   = await this.load()
-    const identity = req.headers.get('X-Whisper-Identity') ?? null
+    const identity = readIdentity(req)
 
     if (patch.systemPrompt !== undefined) {
       const effectiveMode = patch.guardMode ?? config.guardMode ?? 'strict'
@@ -327,9 +324,7 @@ export class SandboxDO extends DurableObject<Env> {
           return json({ ok: false, error: 'System prompt blocked: adversarial content detected', patterns: guard.patterns }, 422)
         }
         if (guard.riskLevel !== 'clean') {
-          void this.env.DB.prepare(
-            'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-          ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'patch', patterns: guard.patterns }), identity, now()).run()
+          void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'patch', patterns: guard.patterns }, identity })
         }
       }
     }
@@ -346,7 +341,7 @@ export class SandboxDO extends DurableObject<Env> {
 
     const body     = await req.json() as { message: string; sessionId?: string }
     const { message, sessionId } = body
-    const identity = req.headers.get('X-Whisper-Identity') ?? null
+    const identity = readIdentity(req)
     const config   = await this.load()
     const gMode    = config.guardMode ?? 'strict'
 
@@ -356,9 +351,7 @@ export class SandboxDO extends DurableObject<Env> {
         return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
       }
       if (guard.riskLevel !== 'clean') {
-        void this.env.DB.prepare(
-          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'run', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }), identity, now()).run()
+        void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'run', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }, identity })
       }
     }
 
@@ -377,9 +370,7 @@ export class SandboxDO extends DurableObject<Env> {
 
     const replyGuard = this.guardedScan(reply, gMode)
     if (replyGuard && replyGuard.riskLevel !== 'clean') {
-      void this.env.DB.prepare(
-        'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-      ).bind(config.id, 'response_flag', JSON.stringify({ patterns: replyGuard.patterns }), identity, now()).run()
+      void logSandboxEvent(this.env, { sandboxId: config.id, type: 'response_flag', metadata: { patterns: replyGuard.patterns }, identity })
     }
 
     const trimmed = updatedMemory.slice(-MAX_MESSAGES)
@@ -404,7 +395,7 @@ export class SandboxDO extends DurableObject<Env> {
 
     const body     = await req.json() as { message: string; sessionId?: string }
     const { message } = body
-    const identity = req.headers.get('X-Whisper-Identity') ?? null
+    const identity = readIdentity(req)
     const config   = await this.load()
     const gMode    = config.guardMode ?? 'strict'
 
@@ -414,9 +405,7 @@ export class SandboxDO extends DurableObject<Env> {
         return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
       }
       if (guard.riskLevel !== 'clean') {
-        void this.env.DB.prepare(
-          'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
-        ).bind(config.id, 'guard_flag', JSON.stringify({ source: 'stream', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }), identity, now()).run()
+        void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'stream', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }, identity })
       }
     }
 

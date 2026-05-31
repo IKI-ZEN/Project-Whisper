@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { json, ok, err, parseBody, rateLimitByIp } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { scan } from '../lib/guard'
 import { newId, isUUID, now } from '../lib/utils'
@@ -387,8 +387,7 @@ const deleteSuite: Handler = async (_req, env, params) => {
 
 const runSuite: Handler = async (req, env: Env, params) => {
   if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
-  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
-  const rl = await checkRateLimit(`rl:suite-run:${ip}`, SUITE_RUN_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, env)
+  const rl = await rateLimitByIp(req, env, 'rl:suite-run', SUITE_RUN_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   try {
     const row = await env.DB.prepare(
