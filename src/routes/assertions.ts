@@ -59,6 +59,7 @@ interface SuiteRow {
   description: string
   cases: string
   sandbox_id: string | null
+  environment_id: string | null
   created_at: number
   updated_at: number
 }
@@ -116,7 +117,7 @@ function parseTestCase(c: unknown): TestCase {
   }
 }
 
-function parseSuiteBody(body: unknown): { name: string; description: string; cases: TestCase[]; sandboxId: string | null } {
+function parseSuiteBody(body: unknown): { name: string; description: string; cases: TestCase[]; sandboxId: string | null; environmentId: string | null } {
   if (typeof body !== 'object' || body === null) throw new Error('Request body must be an object')
   const b = body as Record<string, unknown>
   if (typeof b.name !== 'string' || !b.name) throw new Error('name is required')
@@ -127,11 +128,14 @@ function parseSuiteBody(body: unknown): { name: string; description: string; cas
   if (b.cases.length > 50) throw new Error('cases may have at most 50 items')
   const sandboxId = typeof b.sandboxId === 'string' && isUUID(b.sandboxId)
     ? b.sandboxId : null
+  const environmentId = typeof b.environmentId === 'string' && isUUID(b.environmentId)
+    ? b.environmentId : null
   return {
     name: b.name,
     description,
     cases: b.cases.map(parseTestCase),
     sandboxId,
+    environmentId,
   }
 }
 
@@ -263,29 +267,35 @@ const createSuite: Handler = async (req, env) => {
   if (!p.ok) return p.response
 
   try {
-    const { name, description, cases, sandboxId } = p.data
+    const { name, description, cases, sandboxId, environmentId } = p.data
     const id = newId()
     const ts = now()
 
     await env.DB.prepare(
-      'INSERT INTO assertion_suites (id, name, description, cases, sandbox_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, name, description, JSON.stringify(cases), sandboxId ?? null, ts, ts).run()
+      'INSERT INTO assertion_suites (id, name, description, cases, sandbox_id, environment_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, name, description, JSON.stringify(cases), sandboxId ?? null, environmentId ?? null, ts, ts).run()
 
-    const suite: Suite & { sandbox_id: string | null } = { id, name, description, cases, sandbox_id: sandboxId ?? null, created_at: ts, updated_at: ts }
-    return json(ok(suite))
+    return json(ok({ id, name, description, cases, sandbox_id: sandboxId ?? null, environment_id: environmentId ?? null, created_at: ts, updated_at: ts }))
   } catch (e) {
     return json(err('Failed to create assertion suite', String(e)), 500)
   }
 }
 
 const listSuites: Handler = async (req, env) => {
-  const url       = new URL(req.url)
-  const sandboxId = url.searchParams.get('sandboxId') ?? null
+  const url           = new URL(req.url)
+  const sandboxId     = url.searchParams.get('sandboxId') ?? null
+  const environmentId = url.searchParams.get('environmentId') ?? null
   try {
-    const base = 'SELECT id, name, description, sandbox_id, json_array_length(cases) as case_count, created_at, updated_at FROM assertion_suites'
-    const result = sandboxId
-      ? await env.DB.prepare(`${base} WHERE sandbox_id = ? ORDER BY created_at DESC LIMIT 100`).bind(sandboxId).all()
-      : await env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT 100`).all()
+    const base = 'SELECT id, name, description, sandbox_id, environment_id, json_array_length(cases) as case_count, created_at, updated_at FROM assertion_suites'
+    let stmt: D1PreparedStatement
+    if (sandboxId) {
+      stmt = env.DB.prepare(`${base} WHERE sandbox_id = ? ORDER BY created_at DESC LIMIT 100`).bind(sandboxId)
+    } else if (environmentId) {
+      stmt = env.DB.prepare(`${base} WHERE environment_id = ? ORDER BY created_at DESC LIMIT 100`).bind(environmentId)
+    } else {
+      stmt = env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT 100`)
+    }
+    const result = await stmt.all()
     return json(ok(result.results ?? []))
   } catch (e) {
     return json(err('Failed to list assertion suites', String(e)), 500)
@@ -296,7 +306,7 @@ const getSuite: Handler = async (_req, env, params) => {
   if (!params.id || !isUUID(params.id)) return json(err('Invalid id'), 422)
   try {
     const row = await env.DB.prepare(
-      'SELECT id, name, description, cases, created_at, updated_at FROM assertion_suites WHERE id = ?',
+      'SELECT id, name, description, cases, sandbox_id, environment_id, created_at, updated_at FROM assertion_suites WHERE id = ?',
     ).bind(params.id).first<SuiteRow>()
 
     if (!row) return json(err('Suite not found'), 404)
@@ -304,15 +314,16 @@ const getSuite: Handler = async (_req, env, params) => {
     let cases: TestCase[]
     try { cases = JSON.parse(row.cases) as TestCase[] } catch { return json(err('Suite data corrupted'), 500) }
 
-    const suite: Suite = {
+    return json(ok({
       id: row.id,
       name: row.name,
       description: row.description,
       cases,
+      sandbox_id: row.sandbox_id ?? null,
+      environment_id: row.environment_id ?? null,
       created_at: row.created_at,
       updated_at: row.updated_at,
-    }
-    return json(ok(suite))
+    }))
   } catch (e) {
     return json(err('Failed to get assertion suite', String(e)), 500)
   }
@@ -325,7 +336,7 @@ const patchSuite: Handler = async (req, env, params) => {
 
   try {
     const existing = await env.DB.prepare(
-      'SELECT id, name, description, cases, created_at, updated_at FROM assertion_suites WHERE id = ?',
+      'SELECT id, name, description, cases, sandbox_id, environment_id, created_at, updated_at FROM assertion_suites WHERE id = ?',
     ).bind(params.id).first<SuiteRow>()
 
     if (!existing) return json(err('Suite not found'), 404)
@@ -343,15 +354,16 @@ const patchSuite: Handler = async (req, env, params) => {
     let patchedCases: TestCase[]
     try { patchedCases = JSON.parse(newCases) as TestCase[] } catch { return json(err('Suite data corrupted'), 500) }
 
-    const suite: Suite = {
+    return json(ok({
       id: existing.id,
       name: newName,
       description: newDescription,
       cases: patchedCases,
+      sandbox_id: existing.sandbox_id ?? null,
+      environment_id: existing.environment_id ?? null,
       created_at: existing.created_at,
       updated_at: ts,
-    }
-    return json(ok(suite))
+    }))
   } catch (e) {
     return json(err('Failed to update assertion suite', String(e)), 500)
   }
@@ -380,7 +392,7 @@ const runSuite: Handler = async (req, env: Env, params) => {
   if (rl) return rl
   try {
     const row = await env.DB.prepare(
-      'SELECT id, name, description, cases, sandbox_id, created_at, updated_at FROM assertion_suites WHERE id = ?',
+      'SELECT id, name, description, cases, sandbox_id, environment_id, created_at, updated_at FROM assertion_suites WHERE id = ?',
     ).bind(params.id).first<SuiteRow>()
 
     if (!row) return json(err('Suite not found'), 404)
@@ -389,8 +401,9 @@ const runSuite: Handler = async (req, env: Env, params) => {
     // will use the sandbox's config, making this suite a contract test for a specific app.
     let sandboxModel: string | undefined
     let sandboxSystemPrompt: string | undefined
-    if (row.sandbox_id) {
-      const ctx = await resolveAnalysisContext(row.sandbox_id, env)
+    const resolveId = row.sandbox_id ?? row.environment_id
+    if (resolveId) {
+      const ctx = await resolveAnalysisContext(resolveId, env)
       if (ctx.model)        sandboxModel        = ctx.model
       if (ctx.systemPrompt) sandboxSystemPrompt = ctx.systemPrompt
     }

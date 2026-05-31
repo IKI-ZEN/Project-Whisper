@@ -1,9 +1,9 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, listAllKV } from '../lib/http'
+import { json, ok, err, parseBody, listAllKV, checkRateLimit } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
 import { newId, isUUID, now } from '../lib/utils'
-import { BUILD_KEY_PREFIX, BUILD_TTL } from '../lib/constants'
+import { BUILD_KEY_PREFIX, BUILD_TTL, BUILD_CREATE_RATE_LIMIT_MAX, BUILD_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
 import { doFetch, identityHeader } from './sandbox'
 
 // ── DO stub helper ────────────────────────────────────────────────────────────
@@ -22,6 +22,9 @@ const list: Handler = async (_req, env) => {
 
 // POST /api/v2/build
 const create: Handler = async (req, env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:build-create:${ip}`, BUILD_CREATE_RATE_LIMIT_MAX, BUILD_CREATE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const parsed = await parseBody(req, parseBuildRequest)
   if (!parsed.ok) return parsed.response
   const { description, name, sandboxId, model } = parsed.data

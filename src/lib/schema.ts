@@ -542,7 +542,7 @@ export function parsePipelineRequest(body: unknown): PipelineRequest {
   const rawNodes = body.nodes
   if (!Array.isArray(rawNodes) || rawNodes.length === 0 || rawNodes.length > MAX_PIPELINE_NODES)
     throw new Error(`nodes must be an array of 1–${MAX_PIPELINE_NODES} objects`)
-  const VALID_TYPES = ['complete', 'classify', 'guard', 'transform', 'parallel']
+  const VALID_TYPES = ['complete', 'classify', 'guard', 'transform', 'parallel', 'env_resolve']
   const nodes = rawNodes.map((n, i): PipelineNode => {
     if (typeof n !== 'object' || n === null) throw new Error(`node[${i}] must be an object`)
     const nn = n as Obj
@@ -567,6 +567,7 @@ export function parsePipelineRequest(body: unknown): PipelineRequest {
       maxTokens:    nn.maxTokens    !== undefined ? num(nn.maxTokens,    `node[${i}].maxTokens`,    DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
       template:     nn.template     !== undefined ? str(nn.template,     `node[${i}].template`)     : undefined,
       branches:     Array.isArray(nn.branches) ? (nn.branches as unknown[]).map(String) : undefined,
+      envId:        nn.envId        !== undefined ? str(nn.envId,        `node[${i}].envId`)        : undefined,
     }
   })
   const entryId = str(body.entryId, 'entryId')
@@ -1041,6 +1042,27 @@ export function parseTTSRequest(body: unknown): TTSRequest {
 }
 
 // ── Vault semantic search ──────────────────────────────────────────────────────
+
+export function parsePatchEnvironmentRequest(body: unknown): {
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+  envModels?: string[]
+} {
+  if (!isObj(body)) throw new Error('Body must be a JSON object')
+  const out: { systemPrompt?: string; temperature?: number; maxTokens?: number; envModels?: string[] } = {}
+  if (body.systemPrompt !== undefined) out.systemPrompt = str(body.systemPrompt, 'systemPrompt')
+  if (body.temperature  !== undefined) out.temperature  = num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2)
+  if (body.maxTokens    !== undefined) out.maxTokens    = num(body.maxTokens, 'maxTokens', DEFAULT_MAX_TOKENS, 64, 8192)
+  if (body.envModels    !== undefined) {
+    if (!Array.isArray(body.envModels) || body.envModels.length === 0 || body.envModels.length > MAX_ENV_MODELS)
+      throw new Error(`envModels must be an array of 1–${MAX_ENV_MODELS} model strings`)
+    if (!(body.envModels as unknown[]).every((m: unknown) => typeof m === 'string'))
+      throw new Error('All envModels entries must be strings')
+    out.envModels = body.envModels as string[]
+  }
+  return out
+}
 
 export function parseVaultSearchRequest(body: unknown): { q: string; limit: number; tool: string | null } {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')

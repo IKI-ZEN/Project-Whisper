@@ -1,11 +1,11 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { generateVibeConfig } from '../lib/ai'
 import { parseVibeRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
 import { registerSandbox, stub, doFetch, identityHeader } from './sandbox'
-import { EMBED_WIDTH, EMBED_HEIGHT } from '../lib/constants'
+import { EMBED_WIDTH, EMBED_HEIGHT, VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
 
 const TEMPLATES = [
   { id: 'customer-support',  name: 'Customer Support Bot',   tags: ['support', 'chat'],    description: 'Handles FAQs and routes issues to the right team' },
@@ -19,6 +19,9 @@ const listTemplates: Handler = (_req, _env) =>
   Promise.resolve(json(ok({ templates: TEMPLATES })))
 
 const createVibe: Handler = async (req, env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:vibe-create:${ip}`, VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseVibeRequest)
   if (!p.ok) return p.response
   const { description, name } = p.data

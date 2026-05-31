@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, readJson } from '../lib/http'
+import { json, ok, err, parseBody, readJson, checkRateLimit } from '../lib/http'
 import { saveToVault } from '../lib/analysis'
 import { isUUID, now } from '../lib/utils'
 import {
@@ -16,8 +16,12 @@ import {
 } from '../lib/ai'
 import { executePipeline } from '../lib/pipeline'
 import { scanVerbose, PATTERN_DESCRIPTIONS } from '../lib/guard'
+import { WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW } from '../lib/constants'
 
 const sensitivity: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseSensitivityRequest)
   if (!p.ok) return p.response
   const { prompt, variants, model, systemPrompt, temperature, maxTokens } = p.data
@@ -42,6 +46,9 @@ const sensitivity: Handler = async (req: Request, env: Env) => {
 }
 
 const cluster: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseClusterRequest)
   if (!p.ok) return p.response
   const { texts, k, model } = p.data
@@ -72,6 +79,9 @@ const cluster: Handler = async (req: Request, env: Env) => {
 }
 
 const cot: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseCotRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, temperature, maxTokens, samples } = p.data
@@ -85,6 +95,9 @@ const cot: Handler = async (req: Request, env: Env) => {
 }
 
 const entropy: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseEntropyRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, temperature, maxTokens, samples } = p.data
@@ -98,6 +111,9 @@ const entropy: Handler = async (req: Request, env: Env) => {
 }
 
 const archaeology: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseArchaeologyRequest)
   if (!p.ok) return p.response
   const { targetResponse, probe, model, candidates, maxTokens } = p.data
@@ -114,6 +130,9 @@ const archaeology: Handler = async (req: Request, env: Env) => {
 }
 
 const pipeline: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parsePipelineRequest)
   if (!p.ok) return p.response
   const { input, nodes, entryId, maxDepth } = p.data
@@ -127,6 +146,9 @@ const pipeline: Handler = async (req: Request, env: Env) => {
 }
 
 const think: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseThinkRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, maxTokens, budgetTokens } = p.data
@@ -140,6 +162,9 @@ const think: Handler = async (req: Request, env: Env) => {
 }
 
 const evaluate: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseEvaluateRequest)
   if (!p.ok) return p.response
   const { prompt, systemPrompt, model, judgeModel, samples, criteria } = p.data
@@ -232,6 +257,9 @@ async function parseWithEnvelope<T>(
 const STRESS_PADDING_PHRASE = 'The following is background context provided for reference purposes only. '
 
 const contextStress: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseContextStressRequest)
   if (!p.ok) return p.response
   const { prompt, systemPrompt, model, paddingLevels, maxTokens } = p.data
@@ -265,6 +293,9 @@ const contextStress: Handler = async (req: Request, env: Env) => {
 }
 
 const drift: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseDriftRequest)
   if (!p.ok) return p.response
   const { messages, model, systemPrompt, temperature, maxTokens } = p.data
@@ -301,6 +332,9 @@ const drift: Handler = async (req: Request, env: Env) => {
 }
 
 const ablation: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseAblationRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, temperature, maxTokens } = p.data
@@ -336,6 +370,9 @@ const ablation: Handler = async (req: Request, env: Env) => {
 }
 
 const consistency: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseConsistencyRequest)
   if (!p.ok) return p.response
   const { prompt, model, systemPrompt, maxTokens, samples } = p.data
@@ -365,6 +402,9 @@ const consistency: Handler = async (req: Request, env: Env) => {
 }
 
 const guardLab: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseWithEnvelope(req, parseGuardProbeRequest)
   if (!p.ok) return p.response
   try {

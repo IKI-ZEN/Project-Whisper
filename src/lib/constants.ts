@@ -193,3 +193,25 @@ export const USAGE_LIMIT_MAX     = 1000
 // Chat environments
 export const MAX_ENV_MODELS = 4
 export const ENV_TYPES      = ['general', 'coding', 'research', 'structured', 'creative', 'agent', 'debate'] as const
+
+// Whisperer analysis (AI-intensive multi-call endpoints)
+export const WHISPERER_RATE_LIMIT_MAX    = 15
+export const WHISPERER_RATE_LIMIT_WINDOW = 60_000
+
+// Atlas prompt library writes
+export const ATLAS_WRITE_RATE_LIMIT_MAX    = 20
+export const ATLAS_WRITE_RATE_LIMIT_WINDOW = 60_000
+
+// Vibe & Build AI generation (expensive)
+export const VIBE_CREATE_RATE_LIMIT_MAX     = 5
+export const VIBE_CREATE_RATE_LIMIT_WINDOW  = 60_000
+export const BUILD_CREATE_RATE_LIMIT_MAX    = 5
+export const BUILD_CREATE_RATE_LIMIT_WINDOW = 60_000
+
+// Monitor stream/audit (prevent scraping)
+export const MONITOR_RATE_LIMIT_MAX    = 30
+export const MONITOR_RATE_LIMIT_WINDOW = 60_000
+
+// Document upload (R2 + D1 write per file)
+export const DOCUMENT_UPLOAD_RATE_LIMIT_MAX    = 20
+export const DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW = 60_000

@@ -1,8 +1,12 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, parseQueryInt } from '../lib/http'
+import { json, ok, err, parseBody, parseQueryInt, checkRateLimit } from '../lib/http'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { newId, isUUID, now } from '../lib/utils'
+import {
+  ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW,
+  WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW,
+} from '../lib/constants'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +31,7 @@ interface PromptRow {
   label:           string
   tags:            string
   embedding_cache: string | null
+  environment_id:  string | null
   created_at:      number
 }
 
@@ -94,7 +99,7 @@ function pca2d(matrix: Float32Array[]): Array<[number, number]> {
 
 // ── Parsers ───────────────────────────────────────────────────────────────────
 
-function parseAddPrompt(body: unknown): { text: string; label: string; tags: string[] } {
+function parseAddPrompt(body: unknown): { text: string; label: string; tags: string[]; environmentId: string | null } {
   if (typeof body !== 'object' || body === null) throw new Error('Body must be an object')
   const b = body as Record<string, unknown>
   const text = typeof b.text === 'string' ? b.text.trim() : ''
@@ -108,7 +113,9 @@ function parseAddPrompt(body: unknown): { text: string; label: string; tags: str
     if (t.length > MAX_TAG_LEN) throw new Error(`Each tag must be at most ${MAX_TAG_LEN} characters`)
     return t
   })
-  return { text, label, tags }
+  const environmentId = typeof b.environmentId === 'string' && isUUID(b.environmentId)
+    ? b.environmentId : null
+  return { text, label, tags, environmentId }
 }
 
 function parseEmbedRequest(body: unknown): { k: number } {
@@ -131,29 +138,33 @@ function parseNearestRequest(body: unknown): { text: string; n: number } {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const addPrompt: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:atlas-write:${ip}`, ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseAddPrompt)
   if (!p.ok) return p.response
-  const { text, label, tags } = p.data
+  const { text, label, tags, environmentId } = p.data
   const id = newId()
   const created_at = now()
   try {
     await env.DB.prepare(
-      'INSERT INTO prompt_library (id, text, label, tags, embedding_cache, created_at) VALUES (?, ?, ?, ?, NULL, ?)',
-    ).bind(id, text, label, JSON.stringify(tags), created_at).run()
-    return json(ok({ id, text, label, tags, created_at }))
+      'INSERT INTO prompt_library (id, text, label, tags, environment_id, embedding_cache, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)',
+    ).bind(id, text, label, JSON.stringify(tags), environmentId ?? null, created_at).run()
+    return json(ok({ id, text, label, tags, environment_id: environmentId ?? null, created_at }))
   } catch (e) {
     return json(err('Failed to insert prompt', String(e)), 500)
   }
 }
 
 const listPrompts: Handler = async (req: Request, env: Env) => {
-  const url = new URL(req.url)
-  const tag   = url.searchParams.get('tag') ?? ''
-  const q     = url.searchParams.get('q') ?? ''
-  const limit = parseQueryInt(url.searchParams, 'limit', DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT)
+  const url           = new URL(req.url)
+  const tag           = url.searchParams.get('tag') ?? ''
+  const q             = url.searchParams.get('q') ?? ''
+  const environmentId = url.searchParams.get('environmentId') ?? null
+  const limit         = parseQueryInt(url.searchParams, 'limit', DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT)
   try {
     // Build query with optional filters
-    let query = 'SELECT id, text, label, tags, created_at FROM prompt_library'
+    let query = 'SELECT id, text, label, tags, environment_id, created_at FROM prompt_library'
     const conditions: string[] = []
     const bindings: (string | number)[] = []
 
@@ -167,6 +178,10 @@ const listPrompts: Handler = async (req: Request, env: Env) => {
       conditions.push("tags LIKE ?")
       bindings.push(`%${tag.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`)
     }
+    if (environmentId) {
+      conditions.push("environment_id = ?")
+      bindings.push(environmentId)
+    }
     if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ')
     query += ' ORDER BY created_at DESC LIMIT ?'
     bindings.push(limit)
@@ -179,6 +194,7 @@ const listPrompts: Handler = async (req: Request, env: Env) => {
       text: r.text,
       label: r.label,
       tags: (() => { try { return JSON.parse(r.tags) as string[] } catch { return [] } })(),
+      environment_id: r.environment_id ?? null,
       created_at: r.created_at,
     }))
     return json(ok({ prompts, total: prompts.length }))
@@ -193,7 +209,7 @@ const getPrompt: Handler = async (req: Request, env: Env, params) => {
   if (!isUUID(id)) return json(err('Invalid id'), 422)
   try {
     const row = await env.DB.prepare(
-      'SELECT id, text, label, tags, created_at FROM prompt_library WHERE id = ?',
+      'SELECT id, text, label, tags, environment_id, created_at FROM prompt_library WHERE id = ?',
     ).bind(id).first<Omit<PromptRow, 'embedding_cache'>>()
     if (!row) return json(err('Prompt not found'), 404)
     return json(ok({
@@ -201,6 +217,7 @@ const getPrompt: Handler = async (req: Request, env: Env, params) => {
       text: row.text,
       label: row.label,
       tags: (() => { try { return JSON.parse(row.tags) as string[] } catch { return [] } })(),
+      environment_id: row.environment_id ?? null,
       created_at: row.created_at,
     }))
   } catch (e) {
@@ -212,6 +229,9 @@ const deletePrompt: Handler = async (req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:atlas-write:${ip}`, ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   try {
     await env.DB.prepare('DELETE FROM prompt_library WHERE id = ?').bind(id).run()
     return json(ok({ deleted: true }))
@@ -221,6 +241,9 @@ const deletePrompt: Handler = async (req: Request, env: Env, params) => {
 }
 
 const embedAtlas: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseEmbedRequest)
   if (!p.ok) return p.response
   const { k } = p.data
@@ -295,6 +318,9 @@ const embedAtlas: Handler = async (req: Request, env: Env) => {
 }
 
 const nearestPrompts: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:whisperer:${ip}`, WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   const p = await parseBody(req, parseNearestRequest)
   if (!p.ok) return p.response
   const { text, n } = p.data

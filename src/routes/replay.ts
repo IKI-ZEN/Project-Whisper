@@ -25,7 +25,8 @@ interface ReplayRequest {
   messages: ReplayMessage[]
   targetConfig: ReplayConfig
   batchConfigs?: ReplayConfig[]
-  batchEnvIds?: string[]  // resolve configs from environment IDs and run as batch
+  batchEnvIds?: string[]     // resolve configs from environment IDs and run as batch
+  batchSandboxIds?: string[] // resolve configs from sandbox IDs and run as batch
 }
 
 interface ReplayTurn {
@@ -77,11 +78,18 @@ function parseReplayRequest(body: unknown): ReplayRequest {
     if (!b.batchEnvIds.every((id: unknown) => typeof id === 'string')) throw new Error('batchEnvIds must be strings')
   }
 
+  if (b.batchSandboxIds !== undefined) {
+    if (!Array.isArray(b.batchSandboxIds)) throw new Error('batchSandboxIds must be an array')
+    if (b.batchSandboxIds.length > 5) throw new Error('batchSandboxIds may have at most 5 items')
+    if (!b.batchSandboxIds.every((id: unknown) => typeof id === 'string')) throw new Error('batchSandboxIds must be strings')
+  }
+
   return {
-    messages:     b.messages     as ReplayMessage[],
-    targetConfig: b.targetConfig as ReplayConfig,
-    batchConfigs: b.batchConfigs as ReplayConfig[] | undefined,
-    batchEnvIds:  b.batchEnvIds  as string[]       | undefined,
+    messages:        b.messages        as ReplayMessage[],
+    targetConfig:    b.targetConfig    as ReplayConfig,
+    batchConfigs:    b.batchConfigs    as ReplayConfig[] | undefined,
+    batchEnvIds:     b.batchEnvIds     as string[]       | undefined,
+    batchSandboxIds: b.batchSandboxIds as string[]       | undefined,
   }
 }
 
@@ -172,7 +180,7 @@ const postReplay: Handler = async (req, env) => {
   const p = await parseBody(req, parseReplayRequest)
   if (!p.ok) return p.response
 
-  const { messages, targetConfig, batchConfigs: explicitBatch, batchEnvIds } = p.data
+  const { messages, targetConfig, batchConfigs: explicitBatch, batchEnvIds, batchSandboxIds } = p.data
   const replayId = newId()
 
   // Resolve environment configs into ReplayConfigs when batchEnvIds is provided
@@ -196,7 +204,28 @@ const postReplay: Handler = async (req, env) => {
     )).filter((c): c is ReplayConfig => c !== null)
   }
 
-  const batchConfigs = [...(explicitBatch ?? []), ...resolvedEnvConfigs]
+  // Resolve sandbox configs into ReplayConfigs when batchSandboxIds is provided
+  let resolvedSandboxConfigs: ReplayConfig[] = []
+  if (batchSandboxIds && batchSandboxIds.length > 0) {
+    resolvedSandboxConfigs = (await Promise.all(
+      batchSandboxIds.map(async (sandboxId) => {
+        if (!isUUID(sandboxId)) return null
+        try {
+          const res  = await doFetch(stub(env, sandboxId), 'config', 'GET')
+          const body = await res.json() as { ok: boolean; data?: { model?: string; systemPrompt?: string; temperature?: number; maxTokens?: number } }
+          if (!body.ok || !body.data) return null
+          return {
+            model:        body.data.model,
+            systemPrompt: body.data.systemPrompt,
+            temperature:  body.data.temperature,
+            maxTokens:    body.data.maxTokens,
+          } as ReplayConfig
+        } catch { return null }
+      }),
+    )).filter((c): c is ReplayConfig => c !== null)
+  }
+
+  const batchConfigs = [...(explicitBatch ?? []), ...resolvedEnvConfigs, ...resolvedSandboxConfigs]
 
   try {
     if (batchConfigs && batchConfigs.length > 0) {

@@ -2,7 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, parseBody, readJson, checkRateLimit } from '../lib/http'
 import { generateEnvConfig } from '../lib/ai'
-import { parseEnvironmentRequest, type SandboxConfig } from '../lib/schema'
+import { parseEnvironmentRequest, parsePatchEnvironmentRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
 import { registerSandbox, stub, doFetch, identityHeader, sandboxExists } from './sandbox'
 import { signPayload, verifySignature } from '../lib/vault'
@@ -109,18 +109,9 @@ const patchEnvironment: Handler = async (req, env, params: Params) => {
   const { metadata } = await getEnvMeta(env, id)
   if (!metadata?.fromEnv) return json(err('Not an environment'), 404)
 
-  let body: unknown
-  try { body = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
-  const patch = body as Partial<{ systemPrompt: string; temperature: number; maxTokens: number; envModels: string[] }>
-
-  if (patch.envModels !== undefined) {
-    if (!Array.isArray(patch.envModels) || patch.envModels.length === 0 || patch.envModels.length > MAX_ENV_MODELS) {
-      return json(err(`envModels must be an array of 1–${MAX_ENV_MODELS} model strings`), 422)
-    }
-    if (!patch.envModels.every(m => typeof m === 'string')) {
-      return json(err('All envModels entries must be strings'), 422)
-    }
-  }
+  const p = await parseBody(req, parsePatchEnvironmentRequest)
+  if (!p.ok) return p.response
+  const patch = p.data
 
   const configPatch: Record<string, unknown> = {}
   if (patch.systemPrompt !== undefined) configPatch.systemPrompt = patch.systemPrompt

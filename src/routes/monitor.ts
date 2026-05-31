@@ -1,28 +1,34 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, sseEvent, sseResponse, parseQueryInt } from '../lib/http'
+import { json, ok, err, sseEvent, sseResponse, parseQueryInt, checkRateLimit } from '../lib/http'
 import { now } from '../lib/utils'
-import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX } from '../lib/constants'
+import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW } from '../lib/constants'
 
 // GET /api/monitor/stream
 // SSE endpoint — returns all sandbox_events since `since` (default: last 60s),
-// optionally filtered by sandbox_id. Clients use EventSource with Last-Event-ID
+// optionally filtered by sandbox_id or environment_id. Clients use EventSource with Last-Event-ID
 // for reconnect-based polling.
 const stream: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:monitor:${ip}`, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   try {
     const url = new URL(req.url)
-    const since = parseQueryInt(url.searchParams, 'since', now() - 60_000)
-    const sandboxId = url.searchParams.get('sandbox_id') ?? null
+    const since         = parseQueryInt(url.searchParams, 'since', now() - 60_000)
+    const sandboxId     = url.searchParams.get('sandbox_id') ?? null
+    const environmentId = url.searchParams.get('environment_id') ?? null
+    // environment_id IS the sandbox_id (environments are sandboxes), resolve to effective filter
+    const effectiveSandboxId = environmentId ?? sandboxId
 
     let query: string
     let bindings: unknown[]
 
-    if (sandboxId) {
+    if (effectiveSandboxId) {
       query = `SELECT id, sandbox_id, event_type, metadata, identity, created_at, request_id
                FROM sandbox_events
                WHERE created_at >= ? AND sandbox_id = ?
                ORDER BY created_at ASC`
-      bindings = [since, sandboxId]
+      bindings = [since, effectiveSandboxId]
     } else {
       query = `SELECT id, sandbox_id, event_type, metadata, identity, created_at, request_id
                FROM sandbox_events
@@ -71,21 +77,27 @@ const stream: Handler = async (req: Request, env: Env) => {
 // GET /api/monitor/audit
 // Paginated audit log reader with optional filters.
 const audit: Handler = async (req: Request, env: Env) => {
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const rl = await checkRateLimit(`rl:monitor:${ip}`, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW, env)
+  if (rl) return rl
   try {
-    const url = new URL(req.url)
-    const sandboxId  = url.searchParams.get('sandbox_id') ?? null
-    const eventType  = url.searchParams.get('event_type') ?? null
-    const since      = parseQueryInt(url.searchParams, 'since', 0)
-    const until      = parseQueryInt(url.searchParams, 'until', now())
-    const limit      = parseQueryInt(url.searchParams, 'limit', MONITOR_LIMIT_DEFAULT, 1, MONITOR_LIMIT_MAX)
-    const offset     = parseQueryInt(url.searchParams, 'offset', 0)
+    const url           = new URL(req.url)
+    const sandboxId     = url.searchParams.get('sandbox_id') ?? null
+    const environmentId = url.searchParams.get('environment_id') ?? null
+    const eventType     = url.searchParams.get('event_type') ?? null
+    const since         = parseQueryInt(url.searchParams, 'since', 0)
+    const until         = parseQueryInt(url.searchParams, 'until', now())
+    const limit         = parseQueryInt(url.searchParams, 'limit', MONITOR_LIMIT_DEFAULT, 1, MONITOR_LIMIT_MAX)
+    const offset        = parseQueryInt(url.searchParams, 'offset', 0)
+    // environment_id IS the sandbox_id (environments are sandboxes), resolve to effective filter
+    const effectiveSandboxId = environmentId ?? sandboxId
 
     // Build WHERE clauses
     const conditions: string[] = ['created_at >= ?', 'created_at <= ?']
     const params: unknown[]    = [since, until]
 
-    if (sandboxId) { conditions.push('sandbox_id = ?'); params.push(sandboxId) }
-    if (eventType) { conditions.push('event_type = ?'); params.push(eventType) }
+    if (effectiveSandboxId) { conditions.push('sandbox_id = ?'); params.push(effectiveSandboxId) }
+    if (eventType)           { conditions.push('event_type = ?'); params.push(eventType) }
 
     const where = conditions.join(' AND ')
 
