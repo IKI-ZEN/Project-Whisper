@@ -49,7 +49,7 @@ _Assessed: 2026-05-31_
 | # | Check | Status | Detail |
 |---|-------|--------|--------|
 | 3.1 | Migration files present and idempotent | ✅ | 12 migrations use `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` equivalents. Safe to re-run. |
-| 3.2 | SETUP.md migration list is stale | ❌ | SETUP.md documents only migrations 0001–0010. Migrations **0011** (`env_integration`) and **0012** (`assertions_atlas_env`) are missing from the setup instructions. A fresh deployment following SETUP.md will be missing `environment_id` columns on `vault_records`, `probes`, `assertion_suites`, and `prompt_library`, causing 500 errors on environment-scoped queries. |
+| 3.2 | SETUP.md migration list is stale | ✅ | Fixed — `0011_env_integration.sql` and `0012_assertions_atlas_env.sql` added to both `--remote` and `--local` command blocks in SETUP.md; count updated to "twelve". |
 | 3.3 | No migration runner / version tracking | ⚠️ | There is no migration state table (like `schema_migrations` in Rails). Migrations must be applied manually in order. Rerunning a migration that uses `ALTER TABLE ... ADD COLUMN` without `IF NOT EXISTS` will fail on SQLite (though most do use `IF NOT EXISTS`). |
 | 3.4 | No DOWN migrations | ⚠️ | Migrations are additive-only. There is no rollback path for a schema change — a bad migration that lands in production requires manual SQL to revert. |
 | 3.5 | Local vs remote migration parity | ⚠️ | SETUP.md shows separate commands for `--local` and `--remote`. It's easy to run one but not the other. A developer whose local DB is on 0012 but whose production DB is only on 0010 will see silent discrepancies. |
@@ -65,8 +65,8 @@ _Assessed: 2026-05-31_
 | # | Check | Status | Detail |
 |---|-------|--------|--------|
 | 4.1 | TypeScript type-check runs on every push and PR | ✅ | `.github/workflows/typecheck.yml` runs `tsc --noEmit` on all branches and PRs. |
-| 4.2 | Test workflow runs on every push and PR | ⚠️ | `.github/workflows/test.yml` runs tests, but **only 2 of 9 test files** are invoked: `utils.test.ts` and `analysis.test.ts`. The remaining 7 files (covering `appToken`, `guard`, `http`, `markdown`, `pipeline`, `pricing`, `schema`) never run in CI. 166 of 184 tests are invisible to CI. |
-| 4.3 | Node version inconsistency in CI | ⚠️ | `typecheck.yml` uses Node **20**; `test.yml` uses Node **22**. SETUP.md states "Node.js 20 or later". Inconsistency causes no current failures but makes the test environment unreliable as a parity check with the typecheck environment. |
+| 4.2 | Test workflow runs on every push and PR | ✅ | Fixed — `.github/workflows/test.yml` now runs `npm test` (all 184 tests via `src/**/*.test.ts` glob), replacing the hardcoded 2-file list. |
+| 4.3 | Node version inconsistency in CI | ✅ | Fixed — `test.yml` updated to `node-version: '20'`, matching `typecheck.yml` and the documented minimum. |
 | 4.4 | No deploy workflow | ℹ️ | There is no CI-triggered deploy. Production deploys are manual (`npm run deploy`). For a single-tenant tool this is acceptable, but means no deploy history or gated deploys. |
 | 4.5 | PR template exists | ✅ | `.github/PULL_REQUEST_TEMPLATE.md` present. |
 | 4.6 | Issue templates exist | ✅ | Bug report and feature request YAML templates present. |
@@ -124,7 +124,7 @@ return json(ok({ status: dbOk && kvOk ? 'ok' : 'degraded', db: dbOk, kv: kvOk })
 | # | Check | Status | Detail |
 |---|-------|--------|--------|
 | 7.1 | Worker rollback via `wrangler rollback` | ✅ | Cloudflare Workers retains previous deployment versions. `wrangler rollback` reverts the Worker code and bindings configuration to the prior version. |
-| 7.2 | Rollback procedure documented | ❌ | Neither CONTRIBUTING.md nor SETUP.md mentions `wrangler rollback` or any rollback procedure. A deployer facing an incident has no documented recovery path. |
+| 7.2 | Rollback procedure documented | ✅ | Fixed — "8. Deployment and rollback" section added to CONTRIBUTING.md with `wrangler rollback` and `wrangler deployments list` commands and a note on D1 migration handling. |
 | 7.3 | D1 schema rollback | ❌ | There are no DOWN migrations. A deployed schema change cannot be automatically rolled back. `wrangler rollback` reverts the Worker code but the D1 schema stays at the new version — old code running against new schema can cause errors if columns are referenced. |
 | 7.4 | Staged rollout / canary | ⚠️ | No canary or staged rollout configured. Every deploy is an instant 100% cutover. Cloudflare offers gradual rollouts (Durable Object migrations support phased migration) but they are not used here. |
 | 7.5 | Durable Object migration safety | ✅ | DO class migrations use `new_classes` (not `renamed_classes` or `deleted_classes`). This is the safest migration type — existing DO instances are unaffected. |
@@ -148,7 +148,7 @@ return json(ok({ status: dbOk && kvOk ? 'ok' : 'degraded', db: dbOk, kv: kvOk })
 | 8.3 | `package-lock.json` committed | ✅ | Ensures reproducible installs across machines and CI. |
 | 8.4 | `"private": true` in package.json | ✅ | Prevents accidental `npm publish`. |
 | 8.5 | No automated dependency updates | ⚠️ | No Dependabot or Renovate configuration. Dev dependency updates (especially `wrangler`, which ships new Workers APIs) must be tracked and applied manually. |
-| 8.6 | No `engines` field in package.json | ⚠️ | SETUP.md states "Node.js 20 or later" but `package.json` has no `engines` field to enforce this. A developer on Node 18 will get no warning until something fails. |
+| 8.6 | No `engines` field in package.json | ✅ | Fixed — `"engines": { "node": ">=20" }` added to `package.json`. |
 | 8.7 | Wrangler version pinned loosely | ℹ️ | `"wrangler": "^4"` accepts any 4.x. Current lock: `4.92.0`. In practice Wrangler 4 has been stable, but a major version bump to 5 would require a `package-lock.json` update. |
 
 **Next steps:**
@@ -166,12 +166,12 @@ Issues that work locally but could silently fail in a fresh production deploymen
 
 | # | Issue | Severity | Detail |
 |---|-------|----------|--------|
-| 9.1 | SETUP.md missing migrations 0011–0012 | ❌ | A fresh setup following SETUP.md will not run `0011_env_integration.sql` or `0012_assertions_atlas_env.sql`. Any endpoint that references `environment_id` on vault records, probes, assertion suites, or the prompt library will return a D1 `no such column` 500 error. |
+| 9.1 | SETUP.md missing migrations 0011–0012 | ✅ | Fixed — both migrations added to SETUP.md remote and local command blocks. |
 | 9.2 | Placeholder IDs in `wrangler.toml` | ❌ | KV namespace IDs (`00000000000000000000000000000001` etc.) and D1 database ID are placeholders. Deploying without replacing them causes every KV and D1 call to fail at runtime. There is no pre-deploy validation. |
-| 9.3 | CI test workflow runs only 2 of 9 test files | ⚠️ | `.github/workflows/test.yml` hardcodes `src/lib/utils.test.ts src/lib/analysis.test.ts`. The other 7 test files — including schema parser tests, HTTP rate limit tests, and app token tests — never run in CI. Regressions in those areas are invisible until manual testing. |
+| 9.3 | CI test workflow runs only 2 of 9 test files | ✅ | Fixed — `test.yml` now runs `npm test` (all 184 tests). |
 | 9.4 | `VECTORS` unguarded when RAG is enabled | ⚠️ | `runInSandboxWithRAG` in `ai.ts:1268` calls `env.VECTORS.query()` with no null check. If `wrangler vectorize create` was not run, the Worker throws `TypeError: Cannot read properties of undefined` instead of a graceful 503. |
 | 9.5 | `JOB_QUEUE` unguarded in documents.ts | ⚠️ | Document upload (`documents.ts:95`, `documents.ts:169`) calls `env.JOB_QUEUE.send()` with no null check. If Queues are not provisioned, uploads fail with an unhandled runtime error. |
-| 9.6 | Node version mismatch across CI | ⚠️ | `typecheck.yml` uses Node 20; `test.yml` uses Node 22. SETUP.md specifies Node 20+. Tests may pass on Node 22 in CI but behave differently on a developer's Node 20 machine. |
+| 9.6 | Node version mismatch across CI | ✅ | Fixed — `test.yml` now uses Node 20, matching `typecheck.yml` and the documented minimum. |
 | 9.7 | Vectorize has no local simulator | ℹ️ | `npm run dev:local` (local mode) does not simulate Vectorize. Document upload and RAG retrieval silently fail or throw in local mode. Documented in SETUP.md troubleshooting, but new developers can be surprised. |
 | 9.8 | `wrangler.toml` hardcodes `ENVIRONMENT = "production"` | ℹ️ | The `[vars]` section sets `ENVIRONMENT = "production"`. Local dev overrides this via `.dev.vars`. This is correct and documented — but it means `wrangler dev` (without a `.dev.vars`) will report as production unless the env file is present. |
 

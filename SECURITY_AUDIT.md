@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-05-31  
 **Scope:** Full codebase review — `src/**/*.ts`, `public/tools.html`, `wrangler.toml`, `.dev.vars.example`  
-**Status:** Phase 1 complete — findings documented, awaiting approval before fixes applied
+**Status:** Code fixes applied — SEC-03, SEC-04, SEC-05, SEC-08 resolved; SEC-01/SEC-06 require deployment config
 
 ---
 
@@ -12,12 +12,12 @@
 |----|----------|------|-------|--------|
 | SEC-01 | CRITICAL | Auth | CF Access is optional — full auth bypass when env vars absent | Open |
 | SEC-02 | HIGH | Code execution | `eval` via `new Function()` in SandboxDO with no memory limit | Open |
-| SEC-03 | HIGH | SSRF | Webhook URL allows private IP ranges (10.x, 172.16.x, 192.168.x) | Open |
-| SEC-04 | HIGH | Rate limiting | `Content-Length` header trusted for body size — actual body not capped | Open |
-| SEC-05 | HIGH | Rate limiting | Rate limit KV writes are fire-and-forget (`void`) — counter skipped on KV failure | Open |
+| SEC-03 | HIGH | SSRF | Webhook URL allows private IP ranges (10.x, 172.16.x, 192.168.x) | **Fixed** |
+| SEC-04 | HIGH | Rate limiting | `Content-Length` header trusted for body size — actual body not capped | **Fixed** |
+| SEC-05 | HIGH | Rate limiting | Rate limit KV writes are fire-and-forget (`void`) — counter skipped on KV failure | **Fixed** |
 | SEC-06 | HIGH | CORS | Default CORS origin is `*` — any web page can call the API cross-origin | Open |
 | SEC-07 | MEDIUM | Input validation | `messages[]` array has no explicit length cap in `parseCompleteRequest` | Open |
-| SEC-08 | MEDIUM | Input validation | `patchConfig` passes raw unvalidated body to SandboxDO — schema bypassed | Open |
+| SEC-08 | MEDIUM | Input validation | `patchConfig` passes raw unvalidated body to SandboxDO — schema bypassed | **Fixed** |
 | SEC-09 | MEDIUM | Secrets | Single `SIGNING_SECRET` covers three cryptographically distinct domains | Open |
 | SEC-10 | MEDIUM | Info leakage | Internal error details (`String(e)`) exposed in `detail` field of API responses | Open |
 | SEC-11 | MEDIUM | Code execution | `sessionId` is not UUID-validated — arbitrary DO storage key suffix injection | Open |
@@ -530,11 +530,11 @@ Zero runtime npm dependencies — no supply chain risk from third-party packages
 Items from this audit that block launch:
 
 - [ ] **SEC-01**: Set `CF_ACCESS_AUD` + `CF_ACCESS_TEAM_DOMAIN`, or set `DISABLE_AUTH=true` explicitly
-- [ ] **SEC-03**: Add private IP blocking to `parseWebhookUrl` (code change)
-- [ ] **SEC-04**: Fix body size check to read actual bytes, not `Content-Length` header (code change)
-- [ ] **SEC-05**: Await rate limit KV writes (code change)
+- [x] **SEC-03**: Add private IP blocking to `parseWebhookUrl` — `isPrivateIp()` added in `src/lib/schema.ts`
+- [x] **SEC-04**: Fix body size check to read actual bytes — `readJson()` now uses `arrayBuffer()` in `src/lib/http.ts`
+- [x] **SEC-05**: Await rate limit KV writes — `void` → `await` in `http.ts:113` and `SandboxDO.ts:77`
 - [ ] **SEC-06**: Set explicit `ALLOWED_ORIGINS` in production wrangler secrets (config change)
-- [ ] **SEC-08**: Add `parsePatchSandboxRequest` schema parser (code change)
+- [x] **SEC-08**: Add `parsePatchSandboxRequest` schema parser — implemented in `schema.ts`, wired in `sandbox.ts:patchConfig`
 
 Items deferred to post-launch hardening:
 
@@ -547,4 +547,4 @@ Items deferred to post-launch hardening:
 
 ---
 
-*No changes have been made to the codebase. All proposed diffs above are pending explicit approval.*
+*SEC-03, SEC-04, SEC-05, and SEC-08 are fixed in commit `191a2db`. SEC-01 and SEC-06 require production deployment configuration.*

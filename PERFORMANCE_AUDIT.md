@@ -40,7 +40,7 @@ _Assessed: 2026-05-31_
 
 ### PERF-01 — Rate Limit Write Is Fire-and-Forget (Race Condition)
 
-**Severity: HIGH**
+**Severity: HIGH** | **Status: Fixed** (`void` → `await` in `src/lib/http.ts:113` and `src/durable/SandboxDO.ts:77`)
 
 **Location:** `src/lib/http.ts:113`, `src/durable/SandboxDO.ts:77`
 

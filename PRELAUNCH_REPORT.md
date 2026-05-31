@@ -12,7 +12,7 @@ Project Whisper is a feature-complete, architecturally sound single-tenant AI wo
 
 **The core platform is ready for production use with a defined owner who will configure it properly.**
 
-The outstanding risks are almost entirely *operational* — configuration choices and environment setup — rather than architectural flaws. The two code-level security issues that must be fixed (SEC-03, SEC-04) are small, targeted changes. The auth model (SEC-01) works correctly when CF Access is configured; it silently bypasses auth when it isn't, which is a deployment risk, not a code defect.
+The outstanding risks are almost entirely *operational* — configuration choices and environment setup — rather than architectural flaws. All four required code fixes (SEC-03, SEC-04, SEC-05, SEC-08) have been applied; all docs and CI gaps have been closed. The only remaining pre-launch items are the 5 deployment configuration tasks. The auth model (SEC-01) works correctly when CF Access is configured; it silently bypasses auth when it isn't, which is a deployment risk, not a code defect.
 
 No single audit found a fundamental design flaw that would require restructuring the application before launch.
 
@@ -27,12 +27,12 @@ No single audit found a fundamental design flaw that would require restructuring
 |----|----------|-------|--------|
 | SEC-01 | CRITICAL | CF Access optional — full auth bypass when vars absent | Must configure |
 | SEC-02 | HIGH | `eval` via `new Function()` in SandboxDO | Accepted (CF isolate sandboxed) |
-| SEC-03 | HIGH | Webhook SSRF — private IP ranges not blocked | Code fix required |
-| SEC-04 | HIGH | `Content-Length` header trusted; actual body uncapped | Code fix required |
-| SEC-05 | HIGH | Rate limit KV writes are `void` — counter skipped under failure | Code fix required |
+| SEC-03 | HIGH | Webhook SSRF — private IP ranges not blocked | **Fixed** |
+| SEC-04 | HIGH | `Content-Length` header trusted; actual body uncapped | **Fixed** |
+| SEC-05 | HIGH | Rate limit KV writes are `void` — counter skipped under failure | **Fixed** |
 | SEC-06 | HIGH | Default CORS is `*` | Config fix required |
 | SEC-07 | MEDIUM | `messages[]` array has no length cap | Post-launch |
-| SEC-08 | MEDIUM | `patchConfig` passes raw body to SandboxDO — schema bypassed | Code fix required |
+| SEC-08 | MEDIUM | `patchConfig` passes raw body to SandboxDO — schema bypassed | **Fixed** |
 | SEC-09 | MEDIUM | Single `SIGNING_SECRET` for three security domains | Post-launch |
 | SEC-10 | MEDIUM | Internal error details in API `detail` field | Post-launch |
 | SEC-11 | MEDIUM | `sessionId` not UUID-validated — DO storage key injection | Post-launch |
@@ -84,7 +84,7 @@ No single audit found a fundamental design flaw that would require restructuring
 
 | ID | Severity | Finding | Practical Impact |
 |----|----------|---------|-----------------|
-| PERF-01 | HIGH | Rate limit writes are `void` — race under burst | Same as SEC-05 — fix together |
+| PERF-01 | HIGH | Rate limit writes are `void` — race under burst | **Fixed** (same fix as SEC-05) |
 | PERF-02 | HIGH | Document indexing: sequential embed batches | 10 MB doc takes ~100s; should be ~35s |
 | PERF-03 | MEDIUM | Vault text search uses `LIKE '%q%'` — full table scan | Degrades at 10,000+ vault records |
 | PERF-05 | MEDIUM | `listAllKV` fetches all sandboxes before filtering | Slow at 500+ sandboxes |
@@ -106,11 +106,11 @@ No single audit found a fundamental design flaw that would require restructuring
 |---|-------|--------|--------|
 | Secrets in source | ✅ | Zero hardcoded secrets |
 | CI type-check | ✅ | Runs on all PRs and branches |
-| CI tests | ⚠️ | Only 2 of 9 test files run in CI |
+| CI tests | ✅ | All 184 tests run in CI via `npm test` |
 | Deployment config | ✅ | `wrangler deploy` path is standard and well-tested |
 | wrangler.toml IDs | ❌ | Placeholder `000...` IDs must be replaced before deploy |
-| SETUP.md migration list | ❌ | Missing migrations 0011 and 0012 |
-| Rollback documented | ❌ | No `wrangler rollback` instructions exist |
+| SETUP.md migration list | ✅ | Migrations 0011 and 0012 added |
+| Rollback documented | ✅ | `wrangler rollback` section added to CONTRIBUTING.md |
 | CORS default | ⚠️ | Must set `ALLOWED_ORIGINS` before production |
 | `VECTORS`/`JOB_QUEUE` null guards | ⚠️ | Unguarded — throws instead of 503 |
 | Uptime alerting | ⚠️ | No Cloudflare Health Check configured |
@@ -137,7 +137,7 @@ No single audit found a fundamental design flaw that would require restructuring
 
 ## 3. What Has Been Fixed
 
-All changes from prior development cycles are committed to branch `claude/whisper-dashboard-redesign-e8OzO`. The following findings from the initial audit scan have already been addressed:
+All changes are committed to branch `claude/whisper-dashboard-redesign-e8OzO`. The following findings have been addressed:
 
 | Finding | Fix applied |
 |---------|------------|
@@ -153,6 +153,17 @@ All changes from prior development cycles are committed to branch `claude/whispe
 | No environments gallery page | `/environments` gallery with skeleton loading and fork/export |
 | No `PATCH /api/environments/:id` | Added with `parsePatchEnvironmentRequest` |
 | Phase 4/5 environments features | Compare mode, consensus scoring, cost badges, templates, creative/agent/debate types |
+| SEC-03 — Webhook SSRF | `isPrivateIp()` + `isPrivateIpv4()` added to `schema.ts`; `parseWebhookUrl` now blocks all private IPv4 ranges and `::ffff:` mapped addresses |
+| SEC-04 — Body size bypass | `readJson()` now reads `arrayBuffer()` and checks actual `byteLength`; no longer trusts `Content-Length` header |
+| SEC-05/PERF-01 — Rate limit writes | `void` → `await` on `RATE_LIMITS.put` in `http.ts` and `ctx.storage.put` in `SandboxDO.ts` |
+| SEC-08 — Sandbox PATCH passthrough | `parsePatchSandboxRequest` added to `schema.ts`; `patchConfig` now uses `parseBody` — unknown fields stripped before reaching DO |
+| SETUP.md stale migration list | Migrations 0011 and 0012 added to both remote and local command blocks; count updated to "twelve" |
+| CONTRIBUTING.md stale playground refs | Multi-page URL table replaces `playground.html` reference; no-tests claim replaced with `npm test` instructions |
+| CONTRIBUTING.md missing rollback section | "8. Deployment and rollback" section added with `wrangler rollback` and `wrangler deployments list` |
+| CHANGELOG.md [Unreleased] not promoted | Promoted to `[0.3.0] — 2026-05-31`; duplicate `### Changed` sections merged |
+| CI tests only ran 2 of 9 test files | `test.yml` replaced with `npm test`; Node version normalised to 20 |
+| `package.json` missing `engines` field | `"engines": { "node": ">=20" }` added |
+| `CLAUDE.md` "no automated tests" claim | Updated to reference `npm test` alongside `npm run type-check` |
 
 ---
 
@@ -198,17 +209,17 @@ All changes from prior development cycles are committed to branch `claude/whispe
 
 ### SHOULD DO (security code fixes — before any public/shared exposure)
 
-6. **Fix SEC-03 (SSRF)** — add private IP range blocking to `parseWebhookUrl()` in `schema.ts`. The proposed diff is in `SECURITY_AUDIT.md`.
+6. ~~**Fix SEC-03 (SSRF)**~~ ✅ Fixed — `isPrivateIp()` added to `parseWebhookUrl()` in `src/lib/schema.ts`.
 
-7. **Fix SEC-04 (body size)** — change `readJson()` in `http.ts` to read `arrayBuffer()` and check actual bytes, not `Content-Length` header.
+7. ~~**Fix SEC-04 (body size)**~~ ✅ Fixed — `readJson()` now reads `arrayBuffer()` in `src/lib/http.ts`.
 
-8. **Fix SEC-05/PERF-01 (rate limits)** — change `void env.RATE_LIMITS.put(...)` → `await` in `http.ts:113` and `void this.ctx.storage.put(...)` → `await` in `SandboxDO.ts:77`.
+8. ~~**Fix SEC-05/PERF-01 (rate limits)**~~ ✅ Fixed — `void` → `await` in `http.ts:113` and `SandboxDO.ts:77`.
 
-9. **Fix SEC-08 (schema bypass)** — add `parsePatchSandboxRequest` to `schema.ts` and use it in `sandbox.ts:patchConfig` to prevent raw body passthrough to the DO.
+9. ~~**Fix SEC-08 (schema bypass)**~~ ✅ Fixed — `parsePatchSandboxRequest` in `schema.ts`; `patchConfig` uses `parseBody`.
 
-10. **Update SETUP.md** to include migrations 0011 and 0012 in both `--local` and `--remote` command lists.
+10. ~~**Update SETUP.md**~~ ✅ Fixed — migrations 0011 and 0012 added to both command blocks.
 
-11. **Document rollback** — add `wrangler rollback` / `wrangler deployments list` commands to CONTRIBUTING.md.
+11. ~~**Document rollback**~~ ✅ Fixed — "8. Deployment and rollback" section added to `CONTRIBUTING.md`.
 
 ### RECOMMENDED (before public users)
 
@@ -235,29 +246,29 @@ All changes from prior development cycles are committed to branch `claude/whispe
 
 ### CONDITIONAL GO ✅ (with pre-conditions)
 
-**The platform is launch-ready provided the following 11 items are completed:**
+**5 deployment configuration tasks remain. All code and docs items are complete.**
 
-| # | Item | Category | Effort |
+| # | Item | Category | Status |
 |---|------|----------|--------|
-| 1 | Replace `wrangler.toml` placeholder IDs | Config | 30 min |
-| 2 | Apply all 12 D1 migrations | Config | 15 min |
-| 3 | Set `CF_ACCESS_AUD` + `CF_ACCESS_TEAM_DOMAIN` | Config | 10 min |
-| 4 | Set `SIGNING_SECRET` | Config | 5 min |
-| 5 | Set `ALLOWED_ORIGINS` | Config | 5 min |
-| 6 | Update SETUP.md (add migrations 0011–0012) | Docs | 5 min |
-| 7 | Document rollback in CONTRIBUTING.md | Docs | 10 min |
-| 8 | Fix SEC-03 (SSRF private IP blocking) | Code | 30 min |
-| 9 | Fix SEC-04 (actual body size check) | Code | 15 min |
-| 10 | Fix SEC-05 (await rate limit writes) | Code | 5 min |
-| 11 | Fix SEC-08 (parsePatchSandboxRequest) | Code | 45 min |
+| 1 | Replace `wrangler.toml` placeholder IDs | Config | Pending |
+| 2 | Apply all 12 D1 migrations | Config | Pending |
+| 3 | Set `CF_ACCESS_AUD` + `CF_ACCESS_TEAM_DOMAIN` | Config | Pending |
+| 4 | Set `SIGNING_SECRET` | Config | Pending |
+| 5 | Set `ALLOWED_ORIGINS` | Config | Pending |
+| 6 | Update SETUP.md (add migrations 0011–0012) | Docs | ✅ Done |
+| 7 | Document rollback in CONTRIBUTING.md | Docs | ✅ Done |
+| 8 | Fix SEC-03 (SSRF private IP blocking) | Code | ✅ Done |
+| 9 | Fix SEC-04 (actual body size check) | Code | ✅ Done |
+| 10 | Fix SEC-05 (await rate limit writes) | Code | ✅ Done |
+| 11 | Fix SEC-08 (parsePatchSandboxRequest) | Code | ✅ Done |
 
-**Total pre-launch work estimate: ~3 hours** for a developer familiar with the codebase.
+**Total remaining pre-launch work: ~65 minutes** (5 config tasks).
 
 **Why not NO-GO:** No audit found a fundamental flaw, data integrity risk, or architectural problem that requires significant rework. The security issues are well-understood, bounded in scope, and have clear, small fixes. The testing gaps document existing behavior rather than revealing unknown bugs. The performance bottlenecks are volume thresholds that will not be hit immediately.
 
-**Why not unconditional GO:** Items 3, 8, 9, and 10 (auth configuration and the three security code fixes) represent real attack surface on a live deployment. SEC-05 in particular means rate limits are best-effort under burst load — if the platform is publicly accessible without CF Access configured (SEC-01), this combination is exploitable.
+**Why not unconditional GO:** Items 1–5 (deployment configuration) are required to make the application function at all: without real resource IDs the bindings point nowhere; without CF Access the API is unauthenticated; without `SIGNING_SECRET` and `ALLOWED_ORIGINS` the security posture is degraded. These are purely operational tasks.
 
-**The shortest safe path to launch:** Complete items 1–5 (all config, ~65 minutes), commit items 8–10 (3 targeted code changes, ~50 minutes), and run `npm run type-check` before deploying. Items 6, 7, and 11 should follow within the first week of operation.
+**The shortest safe path to launch:** Run the resource-provisioning commands from `SETUP.md`, set the 5 secrets/env vars, apply all 12 D1 migrations, and deploy. All code is ready.
 
 ---
 
