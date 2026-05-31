@@ -4,7 +4,8 @@ import { json, ok, err, parseBody, checkRateLimit, parseQueryInt } from '../lib/
 import { newId, isUUID, now } from '../lib/utils'
 import type { PipelineNode } from '../lib/schema'
 import { parseCreatePipeline, parsePatchPipeline, parsePipelineRunRequest } from '../lib/schema'
-import { executePipeline } from '../lib/pipeline'
+import { executePipeline, type EnvResolver } from '../lib/pipeline'
+import { stub, doFetch } from './sandbox'
 import { PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW, PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
 
 // ── D1 row type ───────────────────────────────────────────────────────────────
@@ -147,7 +148,15 @@ const run: Handler = async (req, env, params: Params) => {
     if (!row) return json(err('Pipeline not found'), 404)
 
     const nodes = JSON.parse(row.nodes) as PipelineNode[]
-    const result = await executePipeline(env.AI, env, p.data.input, nodes, row.entry_id)
+    const envResolver: EnvResolver = async (envId) => {
+      if (!isUUID(envId)) return null
+      try {
+        const res  = await doFetch(stub(env, envId), 'config', 'GET')
+        const body = await res.json() as { ok: boolean; data?: Record<string, unknown> }
+        return body.ok && body.data ? body.data : null
+      } catch { return null }
+    }
+    const result = await executePipeline(env.AI, env, p.data.input, nodes, row.entry_id, undefined, envResolver)
     return json(ok(result))
   } catch (e) {
     return json(err('Pipeline execution failed', String(e)), 500)

@@ -41,9 +41,13 @@ function evaluateCondition(condition: string, output: string): boolean {
   return false
 }
 
+// Resolves an environment config by ID; injected by the route layer to avoid circular imports.
+export type EnvResolver = (envId: string) => Promise<Record<string, unknown> | null>
+
 async function executeNode(
   ai: Ai, env: Env,
   node: PipelineNode, input: string, original: string,
+  envResolver?: EnvResolver,
 ): Promise<string> {
   switch (node.type) {
     case 'transform':
@@ -96,6 +100,12 @@ async function executeNode(
       return results[0]
     }
 
+    case 'env_resolve': {
+      if (!node.envId || !envResolver) return input
+      const config = await envResolver(node.envId)
+      return config === null ? input : JSON.stringify(config)
+    }
+
     case 'complete':
     default: {
       const prompt = node.template
@@ -118,6 +128,7 @@ async function runFrom(
   nodeId: string, input: string, original: string,
   trace: PipelineTrace[], depth: number, maxDepth: number,
   visited: Set<string> = new Set(),
+  envResolver?: EnvResolver,
 ): Promise<string> {
   if (depth >= maxDepth) return input
   if (visited.has(nodeId)) throw new Error(`Pipeline cycle detected at node "${nodeId}"`)
@@ -126,7 +137,7 @@ async function runFrom(
   visited.add(nodeId)
 
   const t0 = Date.now()
-  const output = await executeNode(ai, env, node, input, original)
+  const output = await executeNode(ai, env, node, input, original, envResolver)
   const latencyMs = Date.now() - t0
 
   let conditionMet: string | undefined
@@ -142,7 +153,7 @@ async function runFrom(
   trace.push({ nodeId, type: node.type, input, output, conditionMet, latencyMs })
 
   if (!nextId) return output
-  return runFrom(ai, env, nodeMap, nextId, output, original, trace, depth + 1, maxDepth, new Set(visited))
+  return runFrom(ai, env, nodeMap, nextId, output, original, trace, depth + 1, maxDepth, new Set(visited), envResolver)
 }
 
 export async function executePipeline(
@@ -151,11 +162,12 @@ export async function executePipeline(
   nodes: PipelineNode[],
   entryId: string,
   maxDepth?: number,
+  envResolver?: EnvResolver,
 ): Promise<PipelineResult> {
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
   const trace: PipelineTrace[] = []
   const output = await runFrom(
-    ai, env, nodeMap, entryId, input, input, trace, 0, maxDepth ?? MAX_PIPELINE_DEPTH,
+    ai, env, nodeMap, entryId, input, input, trace, 0, maxDepth ?? MAX_PIPELINE_DEPTH, new Set(), envResolver,
   )
   return { output, trace }
 }

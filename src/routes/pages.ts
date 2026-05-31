@@ -1552,6 +1552,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .slider-row{display:flex;align-items:center;gap:8px}
 .opt-slider{flex:1;accent-color:var(--accent)}
 .opt-val{font-size:11px;color:var(--muted);font-family:var(--mono);width:28px;text-align:right}
+.hist-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--muted);user-select:none}
+.hist-toggle input{accent-color:var(--accent)}
+.hist-badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#10b98122;color:var(--green);font-family:var(--mono)}
+.consensus-bar{display:flex;align-items:center;gap:8px;padding:4px 12px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;font-size:10px;color:var(--muted);min-height:24px}
+.consensus-score{font-family:var(--mono);color:var(--teal)}
+.col-cost{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.star-btn{background:none;border:none;cursor:pointer;font-size:14px;opacity:.4;padding:0;line-height:1;transition:opacity .15s}
+.star-btn:hover,.star-btn.active{opacity:1}
 /* Add model popover */
 .model-picker{position:relative}
 .model-picker input{padding:4px 8px;border-radius:var(--radius);background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:11px;font-family:var(--mono);width:200px;outline:none}
@@ -1575,6 +1583,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </nav>
 
 <div class="model-strip" id="model-strip" role="toolbar" aria-label="Active models"></div>
+<div class="consensus-bar" id="consensus-bar" style="display:none"></div>
 
 <div class="compare-grid cols-1" id="compare-grid"></div>
 
@@ -1594,6 +1603,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <div class="opt-full">
       <label class="opt-label" for="opt-sys">System prompt</label>
       <textarea id="opt-sys" class="opt-input opt-textarea" placeholder="System prompt…" aria-label="System prompt"></textarea>
+    </div>
+    <div>
+      <label class="opt-label">History</label>
+      <label class="hist-toggle"><input type="checkbox" id="opt-hist"/> Include conversation history</label>
+    </div>
+    <div>
+      <button class="opt-input" id="clear-hist-btn" style="cursor:pointer;background:none;border:1px solid var(--border);color:var(--muted);width:auto;padding:4px 10px" title="Clear stored history">Clear history</button>
+    </div>
+    <div class="opt-full">
+      <button class="opt-input" id="export-compare-btn" style="cursor:pointer;background:none;border:1px solid var(--border);color:var(--muted);width:auto;padding:4px 10px">Export comparison as JSONL</button>
     </div>
   </div>
   <div class="input-row">
@@ -1624,11 +1643,36 @@ const ENV_RAG    = ${safeRag}
 
 const MAX_MODELS = 4
 const LS_KEY     = 'env:' + ENV_ID + ':models'
+const LS_HIST_KEY = 'env:' + ENV_ID + ':hist'
+
+const COST_TABLE = {
+  'llama-3.1-8b-instruct':           {i:0.0001, o:0.0001},
+  'llama-3.3-70b-instruct-fp8-fast': {i:0.0003, o:0.0005},
+  'gpt-4o-mini':                     {i:0.00015,o:0.0006},
+  'gpt-4o':                          {i:0.0025, o:0.01},
+  'claude-haiku-4-5-20251001':       {i:0.0008, o:0.004},
+  'claude-sonnet-4-6':               {i:0.003,  o:0.015},
+  'claude-opus-4-7':                 {i:0.015,  o:0.075},
+  'gemini-2.0-flash':                {i:0.0001, o:0.0004},
+  'gemini-1.5-pro':                  {i:0.00125,o:0.005},
+}
+function estimateCost(model, inputChars, outputChars){
+  const bare = model.includes(':') ? model.split(':').slice(1).join(':') : model
+  const key = Object.keys(COST_TABLE).find(function(k){ return bare.includes(k) })
+  const p = COST_TABLE[key] || {i:0.0001, o:0.0001}
+  const tokIn  = inputChars  / 4
+  const tokOut = outputChars / 4
+  return (tokIn/1000)*p.i + (tokOut/1000)*p.o
+}
+function fmtCost(usd){ return usd < 0.0001 ? '<$0.0001' : '$'+(usd).toFixed(4) }
 
 let models      = JSON.parse(localStorage.getItem(LS_KEY) || 'null') || ENV_MODELS.slice()
 let temperature = 0.7
 let maxTokens   = 1024
 let systemPrompt = ENV_SYS
+let history = []
+let histEnabled = false
+let lastComparison = null
 
 function _esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function _il(s){
@@ -1700,6 +1744,12 @@ function renderModelStrip(){
   optBtn.textContent = '⚙'
   optBtn.onclick = toggleOptions
   strip.appendChild(optBtn)
+  const histBadge = document.createElement('span')
+  histBadge.id = 'hist-badge'
+  histBadge.className = 'hist-badge'
+  histBadge.style.display = 'none'
+  strip.appendChild(histBadge)
+  updateHistBadge()
   updateGrid()
 }
 
@@ -1736,9 +1786,18 @@ function ensureColumns(){
       col.className = 'col-panel'
       col.id = eid
       const label = m.split('/').pop() || m
-      col.innerHTML = '<div class="col-header"><span class="col-model-label" title="'+_esc(m)+'">'+_esc(label)+'</span><span class="col-latency" id="lat-'+_esc(eid)+'"></span></div>'
+      col.innerHTML = '<div class="col-header" id="hdr-'+_esc(eid)+'">'
+                    + '<button class="star-btn" id="star-'+_esc(eid)+'" title="Mark as best" aria-label="Mark as best response">★</button>'
+                    + '<span class="col-model-label" title="'+_esc(m)+'">'+_esc(label)+'</span>'
+                    + '<span class="col-cost" id="cost-'+_esc(eid)+'"></span>'
+                    + '<span class="col-latency" id="lat-'+_esc(eid)+'"></span>'
+                    + '</div>'
                     + '<div class="col-messages" id="msgs-'+_esc(eid)+'"></div>'
       grid.appendChild(col)
+      document.getElementById('star-'+_esc(eid)).onclick = function(){
+        document.querySelectorAll('.star-btn').forEach(function(b){b.classList.remove('active')})
+        this.classList.add('active')
+      }
     }
   })
   updateGrid()
@@ -1746,6 +1805,9 @@ function ensureColumns(){
 
 function typeOpts(){
   if(ENV_TYPE==='structured') return {responseFormat:'json'}
+  if(ENV_TYPE==='creative')   return {temperature: Math.max(temperature, 1.0)}
+  if(ENV_TYPE==='agent')      return {}
+  if(ENV_TYPE==='debate')     return {}
   return {}
 }
 
@@ -1768,11 +1830,12 @@ async function streamColumn(model, messages){
     ? JSON.stringify({message: messages[messages.length-1].content})
     : JSON.stringify({messages, model, systemPrompt, temperature, maxTokens, ...typeOpts()})
 
+  let full = ''
   try{
     const res = await fetch(endpoint, {method:'POST',headers:{'Content-Type':'application/json'},body})
     const reader = res.body.getReader()
     const dec = new TextDecoder()
-    let buf='', full=''
+    let buf=''
     while(true){
       const{done,value}=await reader.read()
       if(done)break
@@ -1804,12 +1867,18 @@ async function streamColumn(model, messages){
     }
     if(!full){el.textContent='(no response)';el.classList.remove('typing')}
     if(latEl&&latEl.textContent==='…')latEl.textContent=(Date.now()-t0)+'ms'
+    const costEl = document.getElementById('cost-'+eid)
+    if(costEl && full){
+      const inputLen = messages ? messages.reduce(function(s,m){return s+(typeof m.content==='string'?m.content.length:0)},0) : 0
+      costEl.textContent = fmtCost(estimateCost(model, inputLen, full.length))
+    }
   }catch(e){
     el.textContent='Error: '+e
     el.className='msg error'
     el.classList.remove('typing')
     if(latEl)latEl.textContent='err'
   }
+  return full
 }
 
 async function send(){
@@ -1831,10 +1900,48 @@ async function send(){
     msgsEl.scrollTop=msgsEl.scrollHeight
   })
 
-  // Fan out to all models
-  await Promise.allSettled(models.map(function(m){
-    return streamColumn(m, [{role:'user',content:text}])
+  // Build messages array (history + current user turn)
+  const msgs = histEnabled
+    ? [...history, {role:'user', content:text}]
+    : [{role:'user', content:text}]
+
+  // Fan out to all models; capture first response for history
+  const results = await Promise.allSettled(models.map(function(m){
+    return streamColumn(m, msgs)
   }))
+
+  // Update history with this turn (use first successful response)
+  if(histEnabled){
+    const firstResp = results.find(function(r){return r.status==='fulfilled'&&r.value})
+    const respText = firstResp && firstResp.status==='fulfilled' ? firstResp.value : ''
+    history.push({role:'user', content:text})
+    if(respText) history.push({role:'assistant', content:respText})
+    try{ localStorage.setItem(LS_HIST_KEY, JSON.stringify(history)) }catch{}
+    updateHistBadge()
+  }
+
+  // Consensus scoring across responses
+  if(models.length > 1){
+    const responses = results
+      .filter(function(r){return r.status==='fulfilled'&&r.value})
+      .map(function(r){return r.status==='fulfilled'?r.value:''})
+    if(responses.length >= 2){
+      showConsensus(responses)
+    }
+  }
+
+  // Save last comparison for export
+  lastComparison = {
+    userMessage: text,
+    responses: models.map(function(m, i){
+      const r = results[i]
+      return {
+        model: m,
+        response: r.status==='fulfilled' ? r.value : '',
+        latencyMs: 0,
+      }
+    })
+  }
 
   document.getElementById('send-btn').disabled=false
   input.focus()
@@ -1846,6 +1953,43 @@ function toggleOptions(){
   document.querySelectorAll('[id="options-toggle"],[data-opts-toggle]').forEach(function(b){
     b.setAttribute('aria-expanded',isOpen?'true':'false')
   })
+}
+
+function updateHistBadge(){
+  const badge = document.getElementById('hist-badge')
+  if(!badge) return
+  const turns = Math.floor(history.length / 2)
+  badge.textContent = turns > 0 ? turns+' turn'+(turns!==1?'s':'') : ''
+  badge.style.display = turns > 0 ? '' : 'none'
+}
+
+function tokenSet(text){
+  const words = (text||'').toLowerCase().replace(/[^a-z0-9\\s]/g,' ').split(/\\s+/).filter(Boolean)
+  return new Set(words)
+}
+function jaccard(a, b){
+  if(!a.size && !b.size) return 1
+  let inter = 0
+  a.forEach(function(w){ if(b.has(w)) inter++ })
+  return inter / (a.size + b.size - inter)
+}
+function showConsensus(responses){
+  const bar = document.getElementById('consensus-bar')
+  if(!bar) return
+  const sets = responses.map(tokenSet)
+  let total = 0, count = 0
+  for(let i=0;i<sets.length;i++){
+    for(let j=i+1;j<sets.length;j++){
+      total += jaccard(sets[i], sets[j])
+      count++
+    }
+  }
+  const score = count > 0 ? total/count : 0
+  const pct = Math.round(score * 100)
+  const label = pct >= 75 ? 'High' : pct >= 45 ? 'Moderate' : 'Low'
+  bar.innerHTML = '<span>Consensus:</span> <span class="consensus-score">'+pct+'% ('+label+')</span>'
+                + '<span style="margin-left:auto;color:var(--muted)">'+(responses.length)+' of '+(models.length)+' models responded</span>'
+  bar.style.display = ''
 }
 
 async function init(){
@@ -1869,13 +2013,22 @@ async function init(){
     }
   }catch{}
 
-  // Apply coding type style
-  if(ENV_TYPE==='coding'){
+  // Apply type-specific styles
+  if(ENV_TYPE==='coding'||ENV_TYPE==='agent'){
     document.getElementById('user-input').classList.add('mono-input')
+  }
+  // Apply type badge colour
+  const typeBadge = document.getElementById('env-type-badge')
+  if(typeBadge){
+    const TYPE_COLORS = {coding:'#6366f1',research:'#14b8a6',structured:'#f59e0b',creative:'#ec4899',agent:'#8b5cf6',debate:'#f97316',general:''}
+    typeBadge.style.color = TYPE_COLORS[ENV_TYPE] || ''
+    typeBadge.style.background = (TYPE_COLORS[ENV_TYPE]||'') ? TYPE_COLORS[ENV_TYPE]+'22' : ''
   }
 
   renderModelStrip()
   ensureColumns()
+  histEnabled = false
+  try{ history = JSON.parse(localStorage.getItem(LS_HIST_KEY)||'[]') }catch{}
   document.getElementById('user-input').focus()
 }
 
@@ -1888,6 +2041,27 @@ document.getElementById('opt-maxtok').oninput=function(){
 }
 document.getElementById('opt-sys').oninput=function(){
   systemPrompt=this.value
+}
+document.getElementById('opt-hist').onchange = function(){
+  histEnabled = this.checked
+  history = []
+  try{ history = JSON.parse(localStorage.getItem(LS_HIST_KEY)||'[]') }catch{}
+  updateHistBadge()
+}
+document.getElementById('clear-hist-btn').onclick = function(){
+  history = []
+  try{ localStorage.removeItem(LS_HIST_KEY) }catch{}
+  updateHistBadge()
+}
+document.getElementById('export-compare-btn').onclick = function(){
+  if(!lastComparison) return
+  const line = JSON.stringify(lastComparison)
+  const blob = new Blob([line+'\\n'], {type:'application/x-ndjson'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href=url; a.download='comparison.jsonl'
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 document.getElementById('send-btn').onclick=send
 document.getElementById('user-input').onkeydown=function(e){

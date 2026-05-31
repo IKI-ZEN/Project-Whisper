@@ -37,6 +37,7 @@ function parseVaultRecord(body: unknown): {
   tool: string
   metadata: object
   tags: string[]
+  environmentId: string | null
 } {
   if (typeof body !== 'object' || body === null) throw new Error('body must be a JSON object')
   const b = body as Record<string, unknown>
@@ -54,8 +55,9 @@ function parseVaultRecord(body: unknown): {
     ? b.metadata as object
     : {}
   const tags = b.tags !== undefined ? validateTags(b.tags) : []
+  const environmentId = typeof b.environmentId === 'string' ? b.environmentId : null
 
-  return { prompt, response, model, temperature, system_prompt, tool, metadata, tags }
+  return { prompt, response, model, temperature, system_prompt, tool, metadata, tags, environmentId }
 }
 
 function parseTagsBody(body: unknown): { tags: string[] } {
@@ -83,22 +85,22 @@ const create: Handler = async (req: Request, env: Env) => {
   if (rl) return rl
   const p = await parseBody(req, parseVaultRecord)
   if (!p.ok) return p.response
-  const { prompt, response, model, temperature, system_prompt, tool, metadata, tags } = p.data
+  const { prompt, response, model, temperature, system_prompt, tool, metadata, tags, environmentId } = p.data
   try {
     const id         = newId()
     const created_at = now()
     await env.DB.prepare(
-      `INSERT INTO vault_records (id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO vault_records (id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, environment_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id, prompt, response, model, temperature, system_prompt, tool,
-      JSON.stringify(metadata), JSON.stringify(tags), created_at,
+      JSON.stringify(metadata), JSON.stringify(tags), environmentId ?? null, created_at,
     ).run()
     if (env.AI_SEARCH) {
-      const aiMeta: Record<string, string> = { tool, model }
+      const aiMeta: Record<string, string> = { tool, model, ...(environmentId ? { environment_id: environmentId } : {}) }
       void env.AI_SEARCH.upsert([{ id, content: prompt, metadata: aiMeta }])
     }
-    return json(ok({ id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, created_at }))
+    return json(ok({ id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, environment_id: environmentId ?? null, created_at }))
   } catch (e) {
     return json(err('Failed to create vault record', String(e)), 500)
   }
@@ -107,10 +109,11 @@ const create: Handler = async (req: Request, env: Env) => {
 // GET /api/vault
 const list: Handler = async (req: Request, env: Env) => {
   try {
-    const url    = new URL(req.url)
-    const model  = url.searchParams.get('model')  ?? null
-    const tool   = url.searchParams.get('tool')   ?? null
-    const tag    = url.searchParams.get('tag')    ?? null
+    const url           = new URL(req.url)
+    const model         = url.searchParams.get('model')          ?? null
+    const tool          = url.searchParams.get('tool')           ?? null
+    const tag           = url.searchParams.get('tag')            ?? null
+    const environmentId = url.searchParams.get('environment_id') ?? null
     const since  = parseQueryInt(url.searchParams, 'since', 0)
     const until  = parseQueryInt(url.searchParams, 'until', now())
     const limit  = parseQueryInt(url.searchParams, 'limit', LIST_LIMIT_DEFAULT, 1, LIST_LIMIT_MAX)
@@ -120,10 +123,11 @@ const list: Handler = async (req: Request, env: Env) => {
     const conditions: string[] = ['created_at >= ?', 'created_at <= ?']
     const params: unknown[]    = [since, until]
 
-    if (model) { conditions.push('model = ?');                                                                           params.push(model) }
-    if (tool)  { conditions.push('tool = ?');                                                                            params.push(tool)  }
-    if (tag)   { conditions.push('EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)');                              params.push(tag)   }
-    if (q)     { conditions.push('(prompt LIKE ? OR response LIKE ?)'); params.push(`%${q}%`); params.push(`%${q}%`) }
+    if (model)         { conditions.push('model = ?');                                                                           params.push(model)         }
+    if (tool)          { conditions.push('tool = ?');                                                                            params.push(tool)          }
+    if (tag)           { conditions.push('EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)');                              params.push(tag)           }
+    if (environmentId) { conditions.push('environment_id = ?');                                                                  params.push(environmentId) }
+    if (q)             { conditions.push('(prompt LIKE ? OR response LIKE ?)'); params.push(`%${q}%`); params.push(`%${q}%`) }
 
     const where      = conditions.join(' AND ')
     const dataQuery  = `SELECT id, prompt, response, model, temperature, system_prompt, tool, metadata, tags, created_at

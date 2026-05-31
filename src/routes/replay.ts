@@ -3,6 +3,7 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { newId, isUUID, now } from '../lib/utils'
+import { stub, doFetch } from './sandbox'
 import { REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW } from '../lib/constants'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ interface ReplayRequest {
   messages: ReplayMessage[]
   targetConfig: ReplayConfig
   batchConfigs?: ReplayConfig[]
+  batchEnvIds?: string[]  // resolve configs from environment IDs and run as batch
 }
 
 interface ReplayTurn {
@@ -69,10 +71,17 @@ function parseReplayRequest(body: unknown): ReplayRequest {
     if (b.batchConfigs.length > 5) throw new Error('batchConfigs may have at most 5 items')
   }
 
+  if (b.batchEnvIds !== undefined) {
+    if (!Array.isArray(b.batchEnvIds)) throw new Error('batchEnvIds must be an array')
+    if (b.batchEnvIds.length > 5) throw new Error('batchEnvIds may have at most 5 items')
+    if (!b.batchEnvIds.every((id: unknown) => typeof id === 'string')) throw new Error('batchEnvIds must be strings')
+  }
+
   return {
-    messages: b.messages as ReplayMessage[],
+    messages:     b.messages     as ReplayMessage[],
     targetConfig: b.targetConfig as ReplayConfig,
     batchConfigs: b.batchConfigs as ReplayConfig[] | undefined,
+    batchEnvIds:  b.batchEnvIds  as string[]       | undefined,
   }
 }
 
@@ -163,8 +172,31 @@ const postReplay: Handler = async (req, env) => {
   const p = await parseBody(req, parseReplayRequest)
   if (!p.ok) return p.response
 
-  const { messages, targetConfig, batchConfigs } = p.data
+  const { messages, targetConfig, batchConfigs: explicitBatch, batchEnvIds } = p.data
   const replayId = newId()
+
+  // Resolve environment configs into ReplayConfigs when batchEnvIds is provided
+  let resolvedEnvConfigs: ReplayConfig[] = []
+  if (batchEnvIds && batchEnvIds.length > 0) {
+    resolvedEnvConfigs = (await Promise.all(
+      batchEnvIds.map(async (envId) => {
+        if (!isUUID(envId)) return null
+        try {
+          const res  = await doFetch(stub(env, envId), 'config', 'GET')
+          const body = await res.json() as { ok: boolean; data?: { model?: string; systemPrompt?: string; temperature?: number; maxTokens?: number } }
+          if (!body.ok || !body.data) return null
+          return {
+            model:        body.data.model,
+            systemPrompt: body.data.systemPrompt,
+            temperature:  body.data.temperature,
+            maxTokens:    body.data.maxTokens,
+          } as ReplayConfig
+        } catch { return null }
+      }),
+    )).filter((c): c is ReplayConfig => c !== null)
+  }
+
+  const batchConfigs = [...(explicitBatch ?? []), ...resolvedEnvConfigs]
 
   try {
     if (batchConfigs && batchConfigs.length > 0) {

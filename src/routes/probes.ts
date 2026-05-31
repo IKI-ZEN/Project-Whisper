@@ -42,10 +42,11 @@ interface ProbeRow {
   model:       string
   schedule:    ProbeSchedule
   threshold:   string  // JSON
-  sandbox_id:  string | null
-  created_at:  number
-  last_run_at: number | null
-  webhook_url: string | null
+  sandbox_id:     string | null
+  environment_id: string | null
+  created_at:     number
+  last_run_at:    number | null
+  webhook_url:    string | null
 }
 
 interface ProbeRunRow {
@@ -69,8 +70,9 @@ function parseCreateProbe(body: unknown): {
   model: string
   schedule: ProbeSchedule
   threshold: Record<string, unknown>
-  sandboxId: string | null
-  webhookUrl: string | undefined
+  sandboxId:     string | null
+  environmentId: string | null
+  webhookUrl:    string | undefined
 } {
   if (typeof body !== 'object' || body === null) throw new Error('Body must be an object')
   const b = body as Record<string, unknown>
@@ -109,6 +111,10 @@ function parseCreateProbe(body: unknown): {
     ? b.sandboxId
     : null
 
+  const environmentId = typeof b.environmentId === 'string' && isUUID(b.environmentId)
+    ? b.environmentId
+    : null
+
   const webhookUrl = parseWebhookUrl(b.webhookUrl)
 
   return {
@@ -121,6 +127,7 @@ function parseCreateProbe(body: unknown): {
     schedule: schedule as ProbeSchedule,
     threshold,
     sandboxId,
+    environmentId,
     webhookUrl,
   }
 }
@@ -320,19 +327,20 @@ function dispatchWebhook(
 
 function shapeProbe(row: ProbeRow & { run_count?: number }): Record<string, unknown> {
   return {
-    id:          row.id,
-    name:        row.name,
-    description: row.description,
-    prompt:      row.prompt,
-    tool:        row.tool,
-    params:      (() => { try { return JSON.parse(row.params) as Record<string, unknown> } catch { return {} } })(),
-    model:       row.model,
-    schedule:    row.schedule,
-    threshold:   (() => { try { return JSON.parse(row.threshold) as Record<string, unknown> } catch { return {} } })(),
-    sandbox_id:  row.sandbox_id  ?? null,
-    webhook_url: row.webhook_url ?? null,
-    created_at:  row.created_at,
-    last_run_at: row.last_run_at ?? null,
+    id:             row.id,
+    name:           row.name,
+    description:    row.description,
+    prompt:         row.prompt,
+    tool:           row.tool,
+    params:         (() => { try { return JSON.parse(row.params) as Record<string, unknown> } catch { return {} } })(),
+    model:          row.model,
+    schedule:       row.schedule,
+    threshold:      (() => { try { return JSON.parse(row.threshold) as Record<string, unknown> } catch { return {} } })(),
+    sandbox_id:     row.sandbox_id     ?? null,
+    environment_id: row.environment_id ?? null,
+    webhook_url:    row.webhook_url    ?? null,
+    created_at:     row.created_at,
+    last_run_at:    row.last_run_at    ?? null,
     ...(row.run_count !== undefined ? { run_count: row.run_count } : {}),
   }
 }
@@ -342,27 +350,30 @@ function shapeProbe(row: ProbeRow & { run_count?: number }): Record<string, unkn
 const createProbe: Handler = async (req: Request, env: Env) => {
   const p = await parseBody(req, parseCreateProbe)
   if (!p.ok) return p.response
-  const { name, description, prompt, tool, params, model, schedule, threshold, sandboxId, webhookUrl } = p.data
+  const { name, description, prompt, tool, params, model, schedule, threshold, sandboxId, environmentId, webhookUrl } = p.data
   const id = newId()
   const created_at = now()
   try {
     await env.DB.prepare(
-      'INSERT INTO probes (id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, name, description, prompt, tool, JSON.stringify(params), model, schedule, JSON.stringify(threshold), sandboxId ?? null, webhookUrl ?? null, created_at).run()
-    return json(ok({ id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id: sandboxId ?? null, webhook_url: webhookUrl ?? null, created_at, last_run_at: null }))
+      'INSERT INTO probes (id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id, environment_id, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, name, description, prompt, tool, JSON.stringify(params), model, schedule, JSON.stringify(threshold), sandboxId ?? null, environmentId ?? null, webhookUrl ?? null, created_at).run()
+    return json(ok({ id, name, description, prompt, tool, params, model, schedule, threshold, sandbox_id: sandboxId ?? null, environment_id: environmentId ?? null, webhook_url: webhookUrl ?? null, created_at, last_run_at: null }))
   } catch (e) {
     return json(err('Failed to create probe', String(e)), 500)
   }
 }
 
 const listProbes: Handler = async (req: Request, env: Env) => {
-  const url       = new URL(req.url)
-  const sandboxId = url.searchParams.get('sandboxId') ?? null
+  const url           = new URL(req.url)
+  const sandboxId     = url.searchParams.get('sandboxId')     ?? null
+  const environmentId = url.searchParams.get('environmentId') ?? null
   try {
     const base = 'SELECT p.*, (SELECT COUNT(*) FROM probe_runs WHERE probe_id = p.id) as run_count FROM probes p'
-    const result = sandboxId
-      ? await env.DB.prepare(`${base} WHERE p.sandbox_id = ? ORDER BY created_at DESC LIMIT 100`).bind(sandboxId).all<ProbeRow & { run_count: number }>()
-      : await env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT 100`).all<ProbeRow & { run_count: number }>()
+    let q: D1PreparedStatement
+    if (sandboxId)     { q = env.DB.prepare(`${base} WHERE p.sandbox_id = ? ORDER BY created_at DESC LIMIT 100`).bind(sandboxId) }
+    else if (environmentId) { q = env.DB.prepare(`${base} WHERE p.environment_id = ? ORDER BY created_at DESC LIMIT 100`).bind(environmentId) }
+    else               { q = env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT 100`) }
+    const result = await q.all<ProbeRow & { run_count: number }>()
     const probes = (result.results ?? []).map(r => shapeProbe(r))
     return json(ok({ probes, total: probes.length }))
   } catch (e) {

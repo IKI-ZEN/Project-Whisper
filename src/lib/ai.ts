@@ -1669,6 +1669,74 @@ export interface EnvConfig {
   envModels: string[]
 }
 
+// ── Built-in environment templates ────────────────────────────────────────────
+// These bypass generateEnvConfig — zero latency, zero AI cost.
+// Template IDs are stable; the UI uses them to pre-fill the builder form.
+
+export interface EnvTemplate {
+  id:           string
+  label:        string
+  description:  string
+  envType:      string
+  systemPrompt: string
+  temperature:  number
+  maxTokens:    number
+  models:       string[]   // suggested models; empty = AI-generated defaults
+}
+
+export const BUILT_IN_TEMPLATES: EnvTemplate[] = [
+  {
+    id:           'python-code-reviewer',
+    label:        'Python Code Reviewer',
+    description:  'Spots bugs, suggests PEP-8 fixes, and explains issues clearly.',
+    envType:      'coding',
+    systemPrompt: 'You are an expert Python code reviewer. Identify bugs, security issues, and style violations (PEP-8, type hints). Explain each issue concisely and provide a corrected snippet. Use code blocks with `python` tags.',
+    temperature:  0.2,
+    maxTokens:    2048,
+    models:       [],
+  },
+  {
+    id:           'research-synthesiser',
+    label:        'Research Synthesiser',
+    description:  'Summarises sources with academic rigour and citation awareness.',
+    envType:      'research',
+    systemPrompt: 'You are a rigorous research assistant. Synthesise information from multiple sources, cite claims explicitly, flag uncertainty with hedge phrases, and structure responses with clear section headers. Prefer precision over brevity.',
+    temperature:  0.3,
+    maxTokens:    3072,
+    models:       [],
+  },
+  {
+    id:           'json-schema-builder',
+    label:        'JSON Schema Builder',
+    description:  'Responds only with valid JSON. Perfect for structured data extraction.',
+    envType:      'structured',
+    systemPrompt: 'You produce structured JSON output only. Every response must be a single, valid JSON object matching the schema the user specifies. Never include prose, markdown, or explanation outside the JSON. If the schema is ambiguous, infer the most reasonable structure.',
+    temperature:  0.0,
+    maxTokens:    2048,
+    models:       [],
+  },
+  {
+    id:           'brainstorm-partner',
+    label:        'Brainstorm Partner',
+    description:  'Free-form idea generation — bold, no hedging, builds on your ideas.',
+    envType:      'creative',
+    systemPrompt: 'You are a bold brainstorm partner. Generate wild, concrete, actionable ideas without hedging. Build on every idea the user shares — amplify, combine, twist. Never water down. Short punchy responses unless depth is requested.',
+    temperature:  1.1,
+    maxTokens:    1024,
+    models:       [],
+  },
+  {
+    id:           'security-analyst',
+    label:        'Security Analyst',
+    description:  'OWASP-focused threat modelling and vulnerability review.',
+    envType:      'coding',
+    systemPrompt: 'You are an expert application security analyst. Identify vulnerabilities using the OWASP Top 10 as a framework. For each issue, state the vulnerability class, severity (Critical/High/Medium/Low), attack vector, and a concrete remediation. Include secure code examples.',
+    temperature:  0.1,
+    maxTokens:    2048,
+    models:       [],
+  },
+]
+
 export async function generateEnvConfig(
   ai: Ai, env: Env,
   description: string,
@@ -1683,11 +1751,17 @@ export async function generateEnvConfig(
     coding:     [MODELS.claude,  MODELS.gpt4o],
     research:   [MODELS.claude,  MODELS.gemini],
     structured: [MODELS.gpt4o,   MODELS.claude],
+    creative:   [MODELS.claude,  MODELS.gemini],
+    agent:      [MODELS.claude,  MODELS.gpt4o],
+    debate:     [MODELS.claude,  MODELS.gpt4o, MODELS.gemini],
   } : {
-    general:    [MODELS.text,     MODELS.textLarge],
+    general:    [MODELS.text,      MODELS.textLarge],
     coding:     [MODELS.textLarge, MODELS.text],
     research:   [MODELS.textLarge, MODELS.text],
     structured: [MODELS.textLarge, MODELS.text],
+    creative:   [MODELS.textLarge, MODELS.text],
+    agent:      [MODELS.textLarge, MODELS.text],
+    debate:     [MODELS.textLarge, MODELS.text],
   }
 
   const systemPromptHints: Record<string, string> = {
@@ -1695,6 +1769,9 @@ export async function generateEnvConfig(
     coding:     'You are an expert programmer. Review code carefully, explain bugs clearly, and provide idiomatic, well-commented solutions. Use code blocks with language tags.',
     research:   'You are a research assistant. Provide thorough, accurate answers with citations where possible. Summarise sources clearly and flag uncertainty.',
     structured: 'You produce structured JSON output only. Respond with valid JSON matching the schema the user specifies. No prose outside the JSON object.',
+    creative:   'You are a creative collaborator. Think boldly, break conventions, and produce vivid, surprising, original content. Embrace voice and style. Do not hedge or water down ideas.',
+    agent:      'You are a task-oriented AI agent. Break goals into concrete steps, take initiative, reason through obstacles explicitly, and always produce actionable output. State assumptions clearly.',
+    debate:     'You are a rigorous analytical debater. When presented with a topic, argue the position assigned to you with evidence and logic. Engage directly with counter-arguments. Be direct and assertive.',
   }
 
   const metaPrompt = `You are configuring a chat environment. Given the user description and environment type, output ONLY valid JSON — no markdown, no explanation.

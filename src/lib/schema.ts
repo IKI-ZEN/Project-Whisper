@@ -437,7 +437,7 @@ export interface PipelineRoute {
 
 export interface PipelineNode {
   id: string
-  type: 'complete' | 'classify' | 'guard' | 'transform' | 'parallel'
+  type: 'complete' | 'classify' | 'guard' | 'transform' | 'parallel' | 'env_resolve'
   model?: string
   systemPrompt?: string
   temperature?: number
@@ -445,6 +445,7 @@ export interface PipelineNode {
   template?: string
   branches?: string[]
   select?: 'first' | 'best' | 'all'
+  envId?: string  // for env_resolve: resolves environment config and outputs it as JSON
   routes: PipelineRoute[]
 }
 

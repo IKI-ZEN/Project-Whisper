@@ -101,7 +101,8 @@ const createEnvironment: Handler = async (req, env) => {
 // ── Patch ─────────────────────────────────────────────────────────────────────
 
 const patchEnvironment: Handler = async (req, env, params: Params) => {
-  const id = params.id ?? ''
+  const id       = params.id ?? ''
+  const identity = req.headers.get('X-Whisper-Identity')
   if (!isUUID(id)) return json(err('Invalid environment id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Environment not found'), 404)
 
@@ -132,9 +133,19 @@ const patchEnvironment: Handler = async (req, env, params: Params) => {
 
   const res = await doFetch(stub(env, id), 'config', 'PATCH', configPatch, identityHeader(req))
 
-  if (res.ok && patch.envModels !== undefined && metadata) {
-    const updatedMeta = { ...metadata, envModels: patch.envModels, model: patch.envModels[0] }
-    void env.SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${id}`, id, { expirationTtl: SANDBOX_TTL, metadata: updatedMeta })
+  if (res.ok) {
+    if (patch.envModels !== undefined && metadata) {
+      const updatedMeta = { ...metadata, envModels: patch.envModels, model: patch.envModels[0] }
+      void env.SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${id}`, id, { expirationTtl: SANDBOX_TTL, metadata: updatedMeta })
+    }
+    const eventMeta: Record<string, unknown> = {}
+    if (patch.envModels    !== undefined) eventMeta.envModels    = patch.envModels
+    if (patch.systemPrompt !== undefined) eventMeta.systemPrompt = true
+    if (patch.temperature  !== undefined) eventMeta.temperature  = patch.temperature
+    if (patch.maxTokens    !== undefined) eventMeta.maxTokens    = patch.maxTokens
+    void env.DB.prepare(
+      'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).bind(id, 'env_config_update', JSON.stringify(eventMeta), identity, now()).run()
   }
 
   return res

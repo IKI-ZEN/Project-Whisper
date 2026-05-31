@@ -6,6 +6,24 @@
 <title>Whisper — Environments</title>
 <link rel="stylesheet" href="/whisper-base.css"/>
 <link rel="stylesheet" href="/environments.css"/>
+<style>
+.tpl-gallery{margin-bottom:16px}
+.tpl-gallery-header{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-bottom:8px}
+.tpl-gallery-header label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);cursor:pointer}
+.tpl-gallery-toggle{font-size:10px;color:var(--muted);margin-left:auto;cursor:pointer;transition:transform .2s}
+.tpl-gallery-toggle.open{transform:rotate(180deg)}
+.tpl-cards{display:none;flex-direction:column;gap:6px}
+.tpl-cards.open{display:flex}
+.tpl-card{padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer;transition:border-color .15s}
+.tpl-card:hover{border-color:var(--accent)}
+.tpl-card-name{font-size:12px;font-weight:600;margin-bottom:2px}
+.tpl-card-desc{font-size:11px;color:var(--muted);line-height:1.4}
+.tpl-card-type{font-size:10px;padding:1px 6px;border-radius:99px;font-family:var(--mono);display:inline-block;margin-top:4px}
+.tpl-type-coding{background:#6366f133;color:var(--accent)}
+.tpl-type-research{background:#14b8a622;color:var(--teal)}
+.tpl-type-structured{background:#f59e0b22;color:#f59e0b}
+.tpl-type-creative{background:#ec489922;color:#ec4899}
+</style>
 </head>
 <body>
   <nav class="topnav" role="navigation" aria-label="Main">
@@ -26,14 +44,52 @@
         <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">New Environment</h2>
         <p style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5">Describe your AI workspace — the environment type defines how models behave and what the UI optimises for.</p>
 
+        <!-- Templates -->
+        <div class="tpl-gallery" id="tpl-gallery">
+          <div class="tpl-gallery-header" id="tpl-gallery-header">
+            <label>Quick templates</label>
+            <span class="tpl-gallery-toggle" id="tpl-toggle">▼</span>
+          </div>
+          <div class="tpl-cards" id="tpl-cards">
+            <div class="tpl-card" data-tpl="python-code-reviewer" data-type="coding" data-desc="A Python code review workspace that spots bugs, suggests PEP-8 fixes, and explains issues clearly.">
+              <div class="tpl-card-name">Python Code Reviewer</div>
+              <div class="tpl-card-desc">Spots bugs, suggests PEP-8 fixes, and explains issues clearly.</div>
+              <span class="tpl-card-type tpl-type-coding">coding</span>
+            </div>
+            <div class="tpl-card" data-tpl="research-synthesiser" data-type="research" data-desc="A research synthesis workspace that summarises sources with academic rigour and citation awareness.">
+              <div class="tpl-card-name">Research Synthesiser</div>
+              <div class="tpl-card-desc">Summarises sources with academic rigour and citation awareness.</div>
+              <span class="tpl-card-type tpl-type-research">research</span>
+            </div>
+            <div class="tpl-card" data-tpl="json-schema-builder" data-type="structured" data-desc="A structured data extraction workspace that responds only with valid JSON.">
+              <div class="tpl-card-name">JSON Schema Builder</div>
+              <div class="tpl-card-desc">Responds only with valid JSON. Perfect for structured data extraction.</div>
+              <span class="tpl-card-type tpl-type-structured">structured</span>
+            </div>
+            <div class="tpl-card" data-tpl="brainstorm-partner" data-type="creative" data-desc="A creative brainstorm workspace — bold, no hedging, builds on your ideas without filtering.">
+              <div class="tpl-card-name">Brainstorm Partner</div>
+              <div class="tpl-card-desc">Free-form idea generation — bold, no hedging, builds on your ideas.</div>
+              <span class="tpl-card-type tpl-type-creative">creative</span>
+            </div>
+            <div class="tpl-card" data-tpl="security-analyst" data-type="coding" data-desc="An application security workspace focused on OWASP threat modelling and vulnerability review.">
+              <div class="tpl-card-name">Security Analyst</div>
+              <div class="tpl-card-desc">OWASP-focused threat modelling and vulnerability review.</div>
+              <span class="tpl-card-type tpl-type-coding">coding</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Environment type -->
         <div class="field">
           <label>Environment type</label>
           <div class="tpl-chips" id="type-chips" role="group" aria-label="Environment type">
-            <button class="tpl-chip active" data-type="general" aria-pressed="true">General</button>
-            <button class="tpl-chip" data-type="coding" aria-pressed="false">Coding</button>
-            <button class="tpl-chip" data-type="research" aria-pressed="false">Research</button>
-            <button class="tpl-chip" data-type="structured" aria-pressed="false">Structured</button>
+            <button class="tpl-chip active" data-type="general"    aria-pressed="true">General</button>
+            <button class="tpl-chip"        data-type="coding"     aria-pressed="false">Coding</button>
+            <button class="tpl-chip"        data-type="research"   aria-pressed="false">Research</button>
+            <button class="tpl-chip"        data-type="structured" aria-pressed="false">Structured</button>
+            <button class="tpl-chip"        data-type="creative"   aria-pressed="false">Creative</button>
+            <button class="tpl-chip"        data-type="agent"      aria-pressed="false">Agent</button>
+            <button class="tpl-chip"        data-type="debate"     aria-pressed="false">Debate</button>
           </div>
           <div id="type-hint" style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:-8px"></div>
         </div>
@@ -101,6 +157,9 @@ const TYPE_HINTS = {
   coding:     'Expert programmer mode. Code review focus, monospace input, syntax-aware responses with code blocks.',
   research:   'Research assistant mode. Enables document upload and retrieval (RAG). Cites sources, flags uncertainty.',
   structured: 'JSON-only output mode. All responses are structured JSON. Use when you need machine-readable output.',
+  creative:   'Creative collaboration mode. High temperature, bold output, no hedging. Ideal for writing, brainstorming, and ideation.',
+  agent:      'Task-oriented agent mode. Step-by-step reasoning, action-oriented output, explicit assumptions. Built for goal completion.',
+  debate:     'Adversarial analysis mode. Models argue assigned positions with evidence. Ideal for exploring multiple perspectives on a topic.',
 }
 
 let selectedType   = 'general'
@@ -108,16 +167,38 @@ let selectedModels = []
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 
+// ── Template gallery ────────────────────────────────────────────────────────
+document.getElementById('tpl-gallery-header').onclick = function(){
+  const cards  = document.getElementById('tpl-cards')
+  const toggle = document.getElementById('tpl-toggle')
+  const open   = cards.classList.toggle('open')
+  toggle.classList.toggle('open', open)
+}
+document.getElementById('tpl-cards').addEventListener('click', function(e){
+  const card = e.target.closest('[data-tpl]')
+  if(!card) return
+  const type = card.dataset.type
+  const desc = card.dataset.desc
+  if(type) selectType(type)
+  if(desc) document.getElementById('env-desc').value = desc
+  document.getElementById('tpl-cards').classList.remove('open')
+  document.getElementById('tpl-toggle').classList.remove('open')
+  document.getElementById('env-desc').focus()
+})
+
 // ── Type chips ──────────────────────────────────────────────────────────────
+function selectType(type){
+  selectedType = type
+  document.querySelectorAll('[data-type]').forEach(function(b){
+    b.classList.toggle('active', b.dataset.type === type)
+    b.setAttribute('aria-pressed', b.dataset.type === type ? 'true' : 'false')
+  })
+  document.getElementById('type-hint').textContent = TYPE_HINTS[type] || ''
+}
 document.getElementById('type-chips').addEventListener('click', function(e){
   const btn = e.target.closest('[data-type]')
   if(!btn) return
-  selectedType = btn.dataset.type
-  document.querySelectorAll('[data-type]').forEach(function(b){
-    b.classList.toggle('active', b===btn)
-    b.setAttribute('aria-pressed', b===btn ? 'true' : 'false')
-  })
-  document.getElementById('type-hint').textContent = TYPE_HINTS[selectedType] || ''
+  selectType(btn.dataset.type)
 })
 document.getElementById('type-hint').textContent = TYPE_HINTS.general
 
