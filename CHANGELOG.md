@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **RAG context sanitization (indirect-injection guard)** — retrieved document chunks are scanned before injection (`filterRagChunks` in `src/lib/ai/sandbox.ts`); in strict mode, chunks carrying blocked-level injection patterns are dropped (sanitize-and-continue) and an `rag_flag` event is logged with matched pattern names only.
 - **Tool-result guard** — `run_code` output is masked for leaked secrets and withheld on blocked-level patterns (strict mode) before re-entering the model's context (`guardToolOutput` in `src/lib/guard.ts`); logs `tool_result_flag`.
 - **Audit-log redaction** — flagged-input previews stored in `sandbox_events` are now run through `redactForLog` (mask secrets + redact PII) so the security trail never persists raw secrets or personal data. The research vault (`saveToVault`) is intentionally left raw.
+- **Sandbox import guard** — `POST /api/sandbox/import` now scans the imported `systemPrompt` before storage; in strict mode a blocked-level pattern rejects the import with `422` and logs an `import_flag` event. HMAC signature verification confirms the payload was not tampered in transit but cannot screen injections baked into the original export — this closes that gap.
 
 ### Research-traversal note
 

@@ -11,7 +11,7 @@ npm run deploy        # wrangler deploy
 npm run type-check    # tsc --noEmit  ← run after every non-trivial change
 ```
 
-Run `npm test` (184 unit tests) and `npm run type-check` — both must exit 0 before every commit.
+Run `npm test` (290 unit tests) and `npm run type-check` — both must exit 0 before every commit.
 
 ## Request flow
 

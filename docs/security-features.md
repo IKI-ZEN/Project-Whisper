@@ -96,6 +96,20 @@ Optionally reject timestamps outside an acceptable skew window to limit replay.
 
 ---
 
+## Sandbox import guard
+
+`POST /api/sandbox/import` scans the imported `systemPrompt` before storage. HMAC signature verification (when `SIGNING_SECRET` is configured) confirms the payload was not tampered in transit — but it does not screen injections baked into the original export. An injected system prompt is persistent: it fires on every subsequent turn without the per-message input guard ever seeing it.
+
+| Condition | Behaviour |
+|-----------|-----------|
+| Blocked-level pattern + `guardMode: strict` (default) | `422` — import rejected |
+| Any pattern fires | `import_flag` event logged (patterns only, never raw text) |
+| Clean prompt | Import proceeds normally |
+
+`guardMode` is read from the imported config and defaults to `strict` when absent. The scan runs after HMAC verification and schema validation, so only structurally valid configs reach it.
+
+---
+
 ## Email content scanning
 
 `POST /api/app/:id/email` always scans subject + text + html before sending

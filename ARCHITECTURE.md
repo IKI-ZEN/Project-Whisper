@@ -472,6 +472,31 @@ Pattern tables:
 
 Guard is also applied to outbound model replies (response flag) and to document text during the RAG indexing pipeline before vectors are stored.
 
+### Output guard (sandbox chat path)
+
+`SandboxDO` (`src/durable/SandboxDO.ts`) applies a per-sandbox `guardOutput` policy to every model reply:
+
+- **`applyOutputGuard(reply, config, identity)`** — run path. Evaluates `guardOutput` (`off` / `audit` / `block` / `redact`). In `block` mode, a reply containing a blocked-level pattern is replaced with a withheld notice. In `redact` mode, `maskSecrets()` strips leaked API-key spans. `redactPiiOutput` flag additionally runs `redactPII()` over the reply.
+- **`wrapStreamWithOutputGuard(stream, config, identity)`** — stream path. Wraps the SSE `ReadableStream` in a `TransformStream`; SSE bytes pass through unchanged (never mutated mid-stream); accumulated text is scanned at stream end. `block`/`redact` degrade to audit on the stream path (`streamLimitation: true` in the logged event).
+
+### RAG context sanitization
+
+`filterRagChunks(texts, mode)` in `src/lib/ai/sandbox.ts` — pure, testable function. Scans retrieved Vectorize chunks before they are concatenated into the context prompt. In strict mode, chunks with blocked-level patterns are dropped (sanitize-and-continue) and an `rag_flag` event is logged with pattern names only (never the raw injected text). Audit mode keeps all chunks but still logs. Off mode skips scanning.
+
+`assembleRagContext(env, config, matches)` wraps `filterRagChunks` with a fire-and-forget `logSandboxEvent` call and returns the assembled context string.
+
+### Tool-output guard
+
+`guardToolOutput(text, mode)` in `src/lib/guard.ts` — pure function. Applied to `run_code` results in `runWithToolLoop` before they re-enter `currentMemory`. Always calls `maskSecrets()` so leaked keys never propagate into the model's next turn. In strict mode, blocked-level patterns cause the result to be replaced with a withheld notice; a `tool_result_flag` event is logged.
+
+### Audit-log redaction
+
+`redactForLog(text, maxLen)` in `src/lib/pii.ts` — applies `maskSecrets()` then `redactPII()`, then truncates to `maxLen`. Used by `safePreview(text)` in `SandboxDO` to sanitise `flaggedInput` values before they are stored in `sandbox_events`. Scope: security event previews only. `saveToVault` in `src/lib/analysis.ts` is intentionally left raw for researcher use.
+
+### Sandbox import guard
+
+`importConfig` in `src/routes/sandbox.ts` scans the imported `systemPrompt` with `scan()` after HMAC verification and schema validation. A blocked-level result in strict mode returns 422 (`import_flag` event always logged when patterns fire). Rationale: HMAC confirms a payload was not tampered in transit but cannot screen injections baked into the original export; an injected system prompt is persistent and would fire on every subsequent turn without the per-message guard ever seeing it.
+
 ### Integrity hashing
 
 `src/lib/integrity.ts` — `computeConfigHash(config): Promise<string>`. SHA-256 over:
