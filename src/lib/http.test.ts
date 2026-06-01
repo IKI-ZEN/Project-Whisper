@@ -123,6 +123,21 @@ describe('checkRateLimit', () => {
     assert.ok(typeof body.error === 'string')
   })
 
+  it('includes Retry-After and X-RateLimit headers on 429', async () => {
+    const kv  = makeMockKV()
+    const env = makeEnv(kv)
+    const key = 'rl:test:headers'
+    await checkRateLimit(key, 1, 60_000, env)
+    const res = await checkRateLimit(key, 1, 60_000, env)
+    assert.ok(res instanceof Response)
+    assert.strictEqual(res.status, 429)
+    const retry = res.headers.get('Retry-After')
+    assert.ok(retry !== null && Number(retry) >= 1)
+    assert.strictEqual(res.headers.get('X-RateLimit-Limit'), '1')
+    assert.strictEqual(res.headers.get('X-RateLimit-Remaining'), '0')
+    assert.ok(res.headers.get('X-RateLimit-Reset') !== null)
+  })
+
   it('uses custom message in 429 body', async () => {
     const kv  = makeMockKV()
     const env = makeEnv(kv)

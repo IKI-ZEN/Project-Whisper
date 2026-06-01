@@ -7,8 +7,9 @@ import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
   parseEntropyRequest, parseArchaeologyRequest, parsePipelineRequest, parseThinkRequest,
   parseGuardProbeRequest, parseConsistencyRequest, parseAblationRequest, parseDriftRequest,
-  parseContextStressRequest, parseEvaluateRequest,
+  parseContextStressRequest, parseEvaluateRequest, parsePiiScanRequest,
 } from '../lib/schema'
+import { scanPII, redactPII, PII_DESCRIPTIONS, type PiiType } from '../lib/pii'
 import {
   embed, complete, computeSimilarityMatrix, kMeansClusters,
   generatePromptVariants, runCoTProbe, estimateEntropy, reverseEngineerPrompts, think as thinkAi,
@@ -408,6 +409,34 @@ const guardLab: Handler = async (req: Request, env: Env) => {
   }
 }
 
+// POST /api/ai/pii-scan — detect (and optionally redact) PII in arbitrary text.
+// A user-facing data-protection tool; never applied automatically to research
+// output. Returns matches with type + position and, when redact:true, the
+// redacted text. Match previews contain the raw PII — callers handle with care.
+const piiScan: Handler = async (req: Request, env: Env) => {
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  if (rl) return rl
+  const p = await parseBody(req, parsePiiScanRequest)
+  if (!p.ok) return p.response
+  const { text, redact, types } = p.data
+  try {
+    const piiTypes = types as PiiType[] | undefined
+    const matches = scanPII(text, piiTypes).map(m => ({
+      type: m.type, start: m.start, end: m.end,
+      description: PII_DESCRIPTIONS[m.type],
+    }))
+    const result: Record<string, unknown> = { matches, count: matches.length }
+    if (redact) {
+      const { redacted, counts } = redactPII(text, piiTypes)
+      result.redacted = redacted
+      result.counts = counts
+    }
+    return json(ok(result))
+  } catch (e) {
+    return json(err('PII scan failed', String(e)), 500)
+  }
+}
+
 export const whispererRoutes: Array<[string, string, Handler]> = [
   ['POST', '/api/ai/think',        think],
   ['POST', '/api/ai/sensitivity',  sensitivity],
@@ -422,4 +451,5 @@ export const whispererRoutes: Array<[string, string, Handler]> = [
   ['POST', '/api/ai/ablation',     ablation],
   ['POST', '/api/ai/consistency',  consistency],
   ['POST', '/api/ai/guard-probe',  guardLab],
+  ['POST', '/api/ai/pii-scan',     piiScan],
 ]

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { scan, scanVerbose } from './guard.ts'
+import { scan, scanVerbose, maskSecrets } from './guard.ts'
 
 describe('scan — clean text', () => {
   it('returns clean for innocuous text', () => {
@@ -158,5 +158,20 @@ describe('scanVerbose', () => {
     const r = scanVerbose('safe text')
     const names = r.layers.map(l => l.name)
     assert.ok(names.includes('normalised'))
+  })
+})
+
+describe('maskSecrets', () => {
+  it('masks a leaked OpenAI-style key', () => {
+    const { masked, count } = maskSecrets('here is sk-abcdefghijklmnopqrstuvwx for you')
+    assert.ok(!masked.includes('sk-abcdefghijklmnopqrstuvwx'))
+    assert.ok(masked.includes('[REDACTED:secret]'))
+    assert.strictEqual(count, 1)
+  })
+
+  it('leaves clean text unchanged with zero count', () => {
+    const { masked, count } = maskSecrets('no secrets in this sentence')
+    assert.strictEqual(masked, 'no secrets in this sentence')
+    assert.strictEqual(count, 0)
   })
 })

@@ -1,12 +1,13 @@
-import type { ThinkRequest, SensitivityRequest, ClusterRequest, CotRequest, EntropyRequest, ArchaeologyRequest, PipelineRequest, PipelineNode, VibeRequest, EnvironmentRequest } from './types'
-import { isObj, str, num, type Obj } from './helpers'
+import type { ThinkRequest, SensitivityRequest, ClusterRequest, CotRequest, EntropyRequest, ArchaeologyRequest, PipelineRequest, PipelineNode, VibeRequest, EnvironmentRequest, PiiScanRequest } from './types'
+import { isObj, str, num, bool, type Obj } from './helpers'
 import {
   DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, DEFAULT_MODEL,
   MAX_SENSITIVITY_VARIANTS, MAX_ENTROPY_SAMPLES, MAX_ARCHAEOLOGY_CANDIDATES,
   MAX_CLUSTER_TEXTS, MAX_PIPELINE_NODES, MAX_PIPELINE_DEPTH,
   MAX_NAME_LEN, MAX_VIBE_DESCRIPTION, MAX_SYSTEM_PROMPT_LEN,
-  MAX_ENV_MODELS, ENV_TYPES,
+  MAX_ENV_MODELS, ENV_TYPES, MAX_PII_SCAN_CHARS,
 } from '../constants'
+import { PII_TYPES } from '../pii'
 
 export function parseThinkRequest(body: unknown): ThinkRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
@@ -78,6 +79,23 @@ export function parseArchaeologyRequest(body: unknown): ArchaeologyRequest {
     candidates:     body.candidates !== undefined ? num(body.candidates, 'candidates', 4, 1, MAX_ARCHAEOLOGY_CANDIDATES) : 4,
     maxTokens:      body.maxTokens  !== undefined ? num(body.maxTokens,  'maxTokens',  DEFAULT_MAX_TOKENS, 1, 8192) : undefined,
   }
+}
+
+export function parsePiiScanRequest(body: unknown): PiiScanRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const text = str(body.text, 'text')
+  if (text.length === 0) throw new Error('text must be a non-empty string')
+  if (text.length > MAX_PII_SCAN_CHARS) throw new Error(`text must be <= ${MAX_PII_SCAN_CHARS} characters`)
+  let types: string[] | undefined
+  if (body.types !== undefined) {
+    if (!Array.isArray(body.types) || !body.types.every(t => typeof t === 'string'))
+      throw new Error('types must be an array of strings')
+    const allowed = new Set<string>(PII_TYPES)
+    const invalid = (body.types as string[]).filter(t => !allowed.has(t))
+    if (invalid.length > 0) throw new Error(`unknown PII types: ${invalid.join(', ')}`)
+    types = body.types as string[]
+  }
+  return { text, redact: bool(body, 'redact', false), types }
 }
 
 export function parsePipelineRequest(body: unknown): PipelineRequest {

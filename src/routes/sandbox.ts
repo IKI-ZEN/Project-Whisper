@@ -3,7 +3,7 @@ import type { Handler, Params } from '../lib/http'
 import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV, rateLimitByIp, readIdentity } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, parsePatchSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
-import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
+import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, SECURITY_REPORT_WINDOW_MS } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
 import { saveToVault } from '../lib/analysis'
@@ -154,6 +154,47 @@ const fingerprint: Handler = async (_req, env, params: Params) => {
   const body = await res.json() as { ok: boolean; data: { integrityHash?: string; tampered: boolean } }
   if (!body.ok) return json(err('Failed to load config'), 500)
   return json(ok({ integrityHash: body.data.integrityHash ?? null, tampered: body.data.tampered }))
+}
+
+// GET /api/sandbox/:id/security — read-only security posture report for a sandbox:
+// integrity status, guard configuration, encryption-at-rest, and recent security
+// event counts. Aggregates existing data only — no new storage.
+const securityReport: Handler = async (_req, env, params: Params) => {
+  const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
+  if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+
+  const res = await doFetch(stub(env, id), 'config', 'GET')
+  const body = await res.json() as { ok: boolean; data?: {
+    integrityHash?: string; tampered?: boolean
+    guardMode?: string; guardOutput?: string; redactPiiOutput?: boolean
+  } }
+  if (!body.ok || !body.data) return json(err('Failed to load config'), 500)
+  const cfg = body.data
+
+  const since = now() - SECURITY_REPORT_WINDOW_MS
+  const events: Record<string, number> = {}
+  try {
+    const rows = await env.DB.prepare(
+      'SELECT event_type, COUNT(*) AS n FROM sandbox_events WHERE sandbox_id = ? AND created_at > ? GROUP BY event_type',
+    ).bind(id, since).all<{ event_type: string; n: number }>()
+    for (const r of rows.results ?? []) events[r.event_type] = r.n
+  } catch { /* audit aggregation is best-effort — never fail the report */ }
+
+  return json(ok({
+    integrity: {
+      hashPresent: !!cfg.integrityHash,
+      tampered:    cfg.tampered ?? false,
+    },
+    guard: {
+      input:       cfg.guardMode ?? 'strict',
+      output:      cfg.guardOutput ?? 'audit',
+      redactPii:   cfg.redactPiiOutput ?? false,
+    },
+    encryptionAtRest: !!env.SIGNING_SECRET,
+    events,
+    windowMs: SECURITY_REPORT_WINDOW_MS,
+  }))
 }
 
 const patchConfig: Handler = async (req, env, params: Params) => {
@@ -442,6 +483,7 @@ export const sandboxRoutes: Array<[string, string, Handler]> = [
   ['GET',    '/api/sandbox/:id/export',             exportConfig],
   ['GET',    '/api/sandbox/:id/export-session',     exportSession],
   ['GET',    '/api/sandbox/:id/fingerprint',        fingerprint],
+  ['GET',    '/api/sandbox/:id/security',           securityReport],
   ['GET',    '/api/sandbox/:id/metrics',            metrics],
   ['PATCH',  '/api/sandbox/:id',                    patchConfig],
   ['POST',   '/api/sandbox/:id/run',                run],

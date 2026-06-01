@@ -121,7 +121,18 @@ export async function checkRateLimit(
   const ts     = now()
   const stored = await env.RATE_LIMITS.get(key, 'json') as number[] | null
   const window = (stored ?? []).filter(t => t > ts - windowMs)
-  if (window.length >= max) return json(err(message), 429)
+  if (window.length >= max) {
+    // The oldest in-window request frees a slot once it ages out → reset time.
+    const oldest    = Math.min(...window)
+    const resetMs   = oldest + windowMs
+    const retrySec  = Math.max(1, Math.ceil((resetMs - ts) / 1000))
+    const res = json(err(message), 429)
+    res.headers.set('Retry-After',           String(retrySec))
+    res.headers.set('X-RateLimit-Limit',     String(max))
+    res.headers.set('X-RateLimit-Remaining', '0')
+    res.headers.set('X-RateLimit-Reset',     String(Math.ceil(resetMs / 1000)))
+    return res
+  }
   window.push(ts)
   await env.RATE_LIMITS.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
   return null

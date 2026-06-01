@@ -94,6 +94,7 @@ export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
   if (description.length  > MAX_DESCRIPTION_LEN)   throw new Error(`description must be <= ${MAX_DESCRIPTION_LEN} characters`)
   if (systemPrompt.length > MAX_SYSTEM_PROMPT_LEN) throw new Error(`systemPrompt must be <= ${MAX_SYSTEM_PROMPT_LEN} characters`)
   const gm = body.guardMode
+  const go = body.guardOutput
   const rawTools = body.tools
   const tools = Array.isArray(rawTools) ? rawTools.slice(0, 20).map((t, i) => parseTool(t, i)) : []
   return {
@@ -105,6 +106,8 @@ export function parseCreateSandboxRequest(body: unknown): CreateSandboxRequest {
     temperature: num(body.temperature, 'temperature', DEFAULT_TEMPERATURE, 0, 2),
     maxTokens:   num(body.maxTokens,   'maxTokens',   DEFAULT_MAX_TOKENS,  1, 8192),
     guardMode:   gm === 'audit' || gm === 'off' ? gm : 'strict',
+    guardOutput: go === 'off' || go === 'block' || go === 'redact' ? go : 'audit',
+    redactPiiOutput: bool(body, 'redactPiiOutput', false),
     ragEnabled:  bool(body, 'ragEnabled', false),
     appHtml:     body.appHtml !== undefined
       ? (() => {

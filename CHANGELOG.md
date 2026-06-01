@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Output guard on the sandbox chat path** — new per-sandbox `guardOutput` policy (`off` | `audit` | `block` | `redact`, default `audit`) applied to model replies. `block` withholds a reply containing blocked-level patterns; `redact` masks leaked API-secret spans (`maskSecrets()` in `src/lib/guard.ts`). The streaming path scans accumulated text at stream end and logs (SSE bytes are never mutated; `block`/`redact` degrade to audit with `streamLimitation: true`). Default preserves the historical scan-and-log behaviour exactly.
+- **PII detection & redaction** — new `src/lib/pii.ts` (`scanPII`/`redactPII`) detects email, Luhn-validated payment cards, US SSN, phone, and IPv4. Exposed as `POST /api/ai/pii-scan` (opt-in, never applied to research output) and an optional per-sandbox `redactPiiOutput` flag.
+- **Outbound webhook signing** — probe breach alerts are signed when `SIGNING_SECRET` is set: `X-Whisper-Timestamp` + `X-Whisper-Signature: v1,sha256=<hmac>` over `${timestamp}.${body}` (Stripe/GitHub-style). See `docs/security-features.md` for the verification recipe.
+- **Email content scanning** — `POST /api/app/:id/email` now runs the guard scanner over subject/text/html before send; blocked content returns `422` and logs `email_blocked`, suspicious content sends and logs `email_flagged`.
+- **Security posture report** — `GET /api/sandbox/:id/security` returns a read-only summary: integrity (hash present + tampered), guard config (input/output/PII), encryption-at-rest status, and recent security-event counts over a 7-day window.
+- **Rate-limit response headers** — `429` responses now include `Retry-After` and `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset`.
+
+### Research-traversal note
+
+All new scanning/redaction controls are opt-in and non-blocking by default. The Whisperer/research suite (`/api/ai/think`, `archaeology`, `entropy`, `guard-probe`, …) and the raw AI primitives (`/api/ai/complete`, `/stream`, …) are never force-scanned — adversarial research traversal is preserved.
+
 ## [0.3.0] — 2026-05-31
 
 ### Added

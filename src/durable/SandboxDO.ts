@@ -7,12 +7,14 @@ import { logSandboxEvent } from '../lib/events'
 import { now } from '../lib/utils'
 import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS, GUARD_FLAG_INPUT_PREVIEW_CHARS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
-import { scan, type ScanResult } from '../lib/guard'
+import { scan, maskSecrets, type ScanResult } from '../lib/guard'
+import { redactPII } from '../lib/pii'
 import { sealPrompt, openPrompt, signPayload } from '../lib/vault'
 import { estimateCost } from '../lib/pricing'
 
 const RL_STORAGE_KEY = 'rlState'
 const MAX_TOOL_LOOPS = 10
+const OUTPUT_BLOCKED_MESSAGE = '[Response withheld: the model output was flagged by the sandbox output guard.]'
 
 export class SandboxDO extends DurableObject<Env> {
   private config: SandboxConfig | null = null
@@ -22,6 +24,86 @@ export class SandboxDO extends DurableObject<Env> {
   private guardedScan(text: string, mode?: string): ScanResult | null {
     if (mode === 'off') return null
     return scan(text)
+  }
+
+  // ── Output guard ──────────────────────────────────────────────────────────
+  // Applies the per-sandbox guardOutput policy + optional PII redaction to a
+  // *complete* model reply (the /run path). Returns the reply to send.
+  //   off    → no scan
+  //   audit  → scan + log only (historical default behaviour)
+  //   block  → replace the whole reply when a blocked-level pattern fires
+  //   redact → mask leaked secret spans in the reply
+  // PII redaction (redactPiiOutput) is independent and runs after the guard.
+  // Research endpoints never call this — it is sandbox-config-scoped only.
+  private applyOutputGuard(reply: string, config: SandboxConfig, identity: string | null): string {
+    const mode = config.guardOutput ?? 'audit'
+    let out = reply
+
+    if (mode !== 'off') {
+      const result = scan(reply)
+      if (result.riskLevel !== 'clean') {
+        if (mode === 'block' && result.riskLevel === 'blocked') {
+          out = OUTPUT_BLOCKED_MESSAGE
+        } else if (mode === 'redact') {
+          out = maskSecrets(out).masked
+        }
+        void logSandboxEvent(this.env, {
+          sandboxId: config.id, type: 'response_flag',
+          metadata: { patterns: result.patterns, action: mode }, identity,
+        })
+      }
+    }
+
+    if (config.redactPiiOutput) {
+      const { redacted, counts } = redactPII(out)
+      if (Object.keys(counts).length > 0) {
+        out = redacted
+        void logSandboxEvent(this.env, {
+          sandboxId: config.id, type: 'pii_redacted', metadata: { counts }, identity,
+        })
+      }
+    }
+
+    return out
+  }
+
+  // Audit-only output guard for the streaming path. SSE token bytes are never
+  // mutated (mid-stream redaction is impractical), so block/redact degrade to
+  // audit: the accumulated text is scanned at stream end and a response_flag is
+  // logged with streamLimitation:true so the asymmetry is visible in the trail.
+  private wrapStreamWithOutputGuard(stream: ReadableStream, config: SandboxConfig, identity: string | null): ReadableStream {
+    const mode = config.guardOutput ?? 'audit'
+    if (mode === 'off' && !config.redactPiiOutput) return stream
+
+    const decoder = new TextDecoder()
+    let acc = ''
+    const env = this.env
+    return stream.pipeThrough(new TransformStream({
+      transform(chunk, controller) {
+        acc += decoder.decode(chunk instanceof Uint8Array ? chunk : new Uint8Array(), { stream: true })
+        controller.enqueue(chunk)
+      },
+      flush() {
+        acc += decoder.decode()
+        const findings: Record<string, unknown> = {}
+        if (mode !== 'off') {
+          const result = scan(acc)
+          if (result.riskLevel !== 'clean') findings.patterns = result.patterns
+        }
+        if (config.redactPiiOutput) {
+          const { counts } = redactPII(acc)
+          if (Object.keys(counts).length > 0) findings.piiCounts = counts
+        }
+        if (Object.keys(findings).length > 0) {
+          const streamLimitation = mode === 'block' || mode === 'redact' || !!config.redactPiiOutput
+          void logSandboxEvent(env, {
+            sandboxId: config.id, type: 'response_flag',
+            metadata: { source: 'stream', ...findings, ...(streamLimitation ? { streamLimitation: true } : {}) },
+            identity,
+          })
+        }
+      },
+    }))
   }
 
   // ── Hydration ─────────────────────────────────────────────────────────────
@@ -368,20 +450,24 @@ export class SandboxDO extends DurableObject<Env> {
       'INSERT INTO usage_metrics (sandbox_id, model, tokens_in, tokens_out, latency_ms, identity, created_at, provider, call_type, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).bind(config.id, config.model, tokensIn, tokensOut, latencyMs, identity, now(), provider, 'complete', costUsd).run()
 
-    const replyGuard = this.guardedScan(reply, gMode)
-    if (replyGuard && replyGuard.riskLevel !== 'clean') {
-      void logSandboxEvent(this.env, { sandboxId: config.id, type: 'response_flag', metadata: { patterns: replyGuard.patterns }, identity })
+    // Output guard: scan/block/redact the reply per the sandbox policy (default
+    // 'audit' preserves the historical scan-and-log behaviour). When the reply is
+    // modified, mirror the change into stored memory so secrets do not persist.
+    const safeReply = this.applyOutputGuard(reply, config, identity)
+    if (safeReply !== reply && updatedMemory.length > 0) {
+      const last = updatedMemory[updatedMemory.length - 1]
+      if (last.role === 'assistant') last.content = safeReply
     }
 
     const trimmed = updatedMemory.slice(-MAX_MESSAGES)
     await this.saveSessionMemory(sessionId, trimmed, config)
 
     // Signal E: HMAC over the response so clients can verify provenance.
-    const resData    = { ok: true, data: { reply, turns: Math.floor(trimmed.length / 2), ...(loopLimitHit ? { loopLimitHit: true } : {}) } }
+    const resData    = { ok: true, data: { reply: safeReply, turns: Math.floor(trimmed.length / 2), ...(loopLimitHit ? { loopLimitHit: true } : {}) } }
     const resHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
     if (this.env.SIGNING_SECRET) {
       resHeaders['X-Response-Sig'] = await signPayload(
-        JSON.stringify({ response: reply, messageCount: trimmed.length, sandboxId: config.id }),
+        JSON.stringify({ response: safeReply, messageCount: trimmed.length, sandboxId: config.id }),
         this.env.SIGNING_SECRET,
       )
     }
@@ -409,7 +495,8 @@ export class SandboxDO extends DurableObject<Env> {
       }
     }
 
-    return sseResponse(streamInSandboxWithRAG(this.env.AI, this.env, config, message))
+    const stream = streamInSandboxWithRAG(this.env.AI, this.env, config, message)
+    return sseResponse(this.wrapStreamWithOutputGuard(stream, config, identity))
   }
 
   private async handleHistory(req: Request): Promise<Response> {

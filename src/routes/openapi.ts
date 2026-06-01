@@ -256,6 +256,22 @@ const getSpec: Handler = async (_req: Request, _env: Env) => {
           responses: { '200': { description: 'New sandbox config' } },
         },
       },
+      '/sandbox/{id}/security': {
+        get: {
+          summary: 'Security posture report (integrity, guard config, encryption, recent events)',
+          tags: ['Sandbox'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '200': { description: 'Security posture summary' } },
+        },
+      },
+      '/ai/pii-scan': {
+        post: {
+          summary: 'Detect (and optionally redact) PII in text',
+          tags: ['AI'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, redact: { type: 'boolean' }, types: { type: 'array', items: { type: 'string', enum: ['email', 'credit_card', 'ssn', 'phone', 'ipv4'] } } } } } } },
+          responses: { '200': { description: 'PII matches and optional redacted text' } },
+        },
+      },
       '/environments': {
         post: {
           summary: 'Create AI-configured chat environment',

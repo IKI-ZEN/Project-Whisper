@@ -2,7 +2,8 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp, parseQueryInt } from '../lib/http'
 import { newId, isUUID, now } from '../lib/utils'
-import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
+import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, WEBHOOK_SIGNATURE_VERSION } from '../lib/constants'
+import { signPayload } from '../lib/vault'
 import {
   complete, embed, estimateEntropy, runCoTProbe,
   generatePromptVariants, computeSimilarityMatrix,
@@ -311,14 +312,28 @@ function isThresholdBreached(threshold: Record<string, unknown>, metrics: Record
   return false
 }
 
-function dispatchWebhook(
+// Fire-and-forget POST of a breach alert. When SIGNING_SECRET is configured the
+// payload is signed (HMAC-SHA256 over `${timestamp}.${body}`) so receivers can
+// verify the alert genuinely came from this platform — the standard
+// Stripe/GitHub webhook scheme. Verify with:
+//   sig === `${WEBHOOK_SIGNATURE_VERSION},sha256=` + HMAC(secret, `${X-Whisper-Timestamp}.${rawBody}`)
+async function dispatchWebhook(
+  env: Env,
   webhookUrl: string,
   payload: { probeId: string; probeName: string; metricValue: number | null; metrics: Record<string, number>; breachedAt: number },
-): void {
-  void fetch(webhookUrl, {
+): Promise<void> {
+  const body = JSON.stringify(payload)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (env.SIGNING_SECRET) {
+    const ts  = now()
+    const sig = await signPayload(`${ts}.${body}`, env.SIGNING_SECRET)
+    headers['X-Whisper-Timestamp'] = String(ts)
+    headers['X-Whisper-Signature'] = `${WEBHOOK_SIGNATURE_VERSION},sha256=${sig}`
+  }
+  await fetch(webhookUrl, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload),
+    headers,
+    body,
     signal:  AbortSignal.timeout(PROBE_WEBHOOK_TIMEOUT_MS),
   }).catch(() => { /* fire-and-forget — failure must not affect probe result */ })
 }
@@ -492,7 +507,7 @@ const runProbe: Handler = async (req: Request, env: Env, params) => {
 
     const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
     if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
-      dispatchWebhook(probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
+      void dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
     }
 
     return json(ok({ runId, metricValue, metrics: metricsJson, result }))
@@ -567,7 +582,7 @@ export async function runProbeById(id: string, env: Env): Promise<void> {
 
   const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
   if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
-    dispatchWebhook(probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
+    void dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
   }
 }
 

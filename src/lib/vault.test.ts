@@ -23,6 +23,24 @@ describe('signPayload + verifySignature — round trip', () => {
   })
 })
 
+describe('webhook signature scheme — `${timestamp}.${body}`', () => {
+  it('a receiver can verify the signed payload', async () => {
+    const ts   = 1_700_000_000_000
+    const body = JSON.stringify({ probeId: 'p1', metricValue: 0.9 })
+    const sig  = await signPayload(`${ts}.${body}`, SECRET)
+    // Receiver recomputes over `${X-Whisper-Timestamp}.${rawBody}`
+    assert.equal(await verifySignature(`${ts}.${body}`, sig, SECRET), true)
+  })
+
+  it('rejects when the body is altered in transit', async () => {
+    const ts   = 1_700_000_000_000
+    const body = JSON.stringify({ probeId: 'p1', metricValue: 0.9 })
+    const sig  = await signPayload(`${ts}.${body}`, SECRET)
+    const tampered = JSON.stringify({ probeId: 'p1', metricValue: 0.1 })
+    assert.equal(await verifySignature(`${ts}.${tampered}`, sig, SECRET), false)
+  })
+})
+
 describe('verifySignature — rejections', () => {
   it('rejects a tampered payload', async () => {
     const sig = await signPayload('original', SECRET)
