@@ -14,9 +14,12 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 - **Pages deploy** — deploy any generated app to `{project}.pages.dev` via the Cloudflare Pages Direct Upload API (`POST /api/v2/build/:id/deploy`)
 - **Whisper SDK** — a zero-dep browser ES module (`/vibe-sdk.js`) and `<whisper-chat>` web component for embedding any sandbox anywhere (alias `VibeClient` kept for backwards compat)
 - **Apps platform** — each sandbox gets a shareable `/app/:id` page, a stable short API at `/s/:id/run`, and appears in the `/apps` gallery
-- **Prompt injection guard** — per-sandbox `guardMode` (`strict` / `audit` / `off`); pattern-based scanner with Unicode normalisation and base64 decode-and-rescan
+- **Prompt injection guard** — per-sandbox `guardMode` (`strict` / `audit` / `off`); pattern-based scanner with Unicode normalisation and base64 decode-and-rescan; applied to user messages, RAG chunks at retrieval, tool outputs, and imported system prompts
+- **Output guard** — per-sandbox `guardOutput` policy (`off` / `audit` / `block` / `redact`) applied to model replies; `redact` masks leaked API-secret spans; `block` withholds flagged replies; stream path scans accumulated text at end
+- **PII detection & redaction** — `POST /api/ai/pii-scan` detects email, Luhn-validated cards, SSN, phone, and IPv4; opt-in `redactPiiOutput` per sandbox
 - **Integrity verification** — SHA-256 fingerprint of every sandbox config stored in the Durable Object; `tampered: true` signals out-of-band modification
 - **HMAC-signed exports** — optional `SIGNING_SECRET` enables cryptographic provenance on config export/import
+- **Security posture report** — `GET /api/sandbox/:id/security` returns a read-only summary: guard config, encryption-at-rest, integrity status, and recent security-event counts
 
 ### AI Whisperer Suite
 
@@ -65,6 +68,7 @@ POST /api/ai/drift             multi-turn semantic drift measurement
 POST /api/ai/ablation          prompt ablation — isolate clause contribution to response
 POST /api/ai/consistency       variant consistency — measure factual stability across rephrased prompts
 POST /api/ai/guard-probe       guard laboratory — scan arbitrary text, inspect matched patterns
+POST /api/ai/pii-scan          PII detection & redaction — email, card (Luhn), SSN, phone, IPv4; optional redact + type filter
 GET  /api/usage                aggregate cost/token usage across models and providers
 
 GET  /api/vibes                starter templates
@@ -82,6 +86,7 @@ GET  /api/sandbox/:id/history  full conversation history; ?sessionId= for a spec
 WS   /api/sandbox/:id/ws       bidirectional WebSocket with tool call support; ?sessionId= supported
 GET  /api/sandbox/:id/export   portable config JSON — includes HMAC signature if SIGNING_SECRET set
 GET  /api/sandbox/:id/fingerprint  integrity check only (no config fields exposed)
+GET  /api/sandbox/:id/security  security posture: guard config, encryption-at-rest, integrity, recent event counts
 GET  /api/sandbox/:id/metrics  usage totals: runs, tokens in/out, avg latency, per-model breakdown
 DELETE /api/sandbox/:id        delete sandbox + KV entry
 
@@ -221,9 +226,28 @@ Set on creation or patch at any time: `PATCH /api/sandbox/:id` with `{ "guardMod
 
 Every `GET /api/sandbox/:id` returns `integrityHash` (SHA-256 of config + message count) and `tampered: true` if the stored hash doesn't match the live config. Use `GET /api/sandbox/:id/fingerprint` to check integrity without exposing config fields.
 
+### Output guard
+
+Each sandbox has a `guardOutput` policy applied to the model's reply:
+
+| Mode | Behaviour |
+|------|-----------|
+| `off` | No output scan |
+| `audit` *(default)* | Scan and log a `response_flag` event; reply unchanged |
+| `block` | Withholds the reply if a blocked-level pattern fires |
+| `redact` | Masks leaked API-secret spans with `[REDACTED:secret]` |
+
+Set at create time or via `PATCH /api/sandbox/:id`. On the `/stream` path, `block`/`redact` degrade to audit (SSE bytes are never mutated mid-stream); the accumulated text is scanned at stream end and logged with `streamLimitation: true`. Use `/run` when you need the reply to be actually blocked or redacted.
+
+`redactPiiOutput: true` additionally redacts PII (email, card, SSN, phone, IPv4) from replies. Off by default so researchers keep raw output.
+
+### PII detection
+
+`POST /api/ai/pii-scan` scans text for personal data. Pass `"redact": true` to get a redacted copy. Use `"types": ["email", "ssn"]` to restrict the scan. Supported types: `email`, `credit_card` (Luhn-validated), `ssn`, `phone`, `ipv4`.
+
 ### HMAC-signed exports
 
-Set `SIGNING_SECRET` in `.dev.vars` (or the production secret store) to enable cryptographic signing on config exports. `POST /api/sandbox/import` will verify and reject tampered configs with 422.
+Set `SIGNING_SECRET` in `.dev.vars` (or the production secret store) to enable cryptographic signing on config exports. `POST /api/sandbox/import` will verify and reject tampered configs with 422. The imported system prompt is additionally scanned for injections — blocked patterns are rejected in strict mode regardless of signature validity.
 
 ### Cloudflare Access (Zero Trust)
 
