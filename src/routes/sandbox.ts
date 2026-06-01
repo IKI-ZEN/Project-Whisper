@@ -8,6 +8,7 @@ import { signPayload, verifySignature } from '../lib/vault'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
 import { saveToVault } from '../lib/analysis'
 import { logSandboxEvent } from '../lib/events'
+import { scan } from '../lib/guard'
 
 // ── KV metadata shape (stored with each sandbox key) ─────────────────────────
 
@@ -379,6 +380,24 @@ const importConfig: Handler = async (req, env) => {
 
   const p = await parseBody(new Request(req.url, { method: 'POST', body: JSON.stringify(raw), headers: { 'Content-Type': 'application/json' } }), parseCreateSandboxRequest)
   if (!p.ok) return p.response
+
+  // Scan the system prompt for injections. HMAC confirms the payload wasn't
+  // tampered in transit but doesn't screen content baked into the export.
+  // A poisoned system prompt is persistent — it fires on every subsequent turn.
+  const promptScan = scan(p.data.systemPrompt ?? '')
+  const guardMode  = p.data.guardMode ?? 'strict'
+  if (promptScan.riskLevel !== 'clean') {
+    const identity = readIdentity(req)
+    void logSandboxEvent(env, {
+      sandboxId: 'import',
+      type: 'import_flag',
+      metadata: { patterns: promptScan.patterns, riskLevel: promptScan.riskLevel },
+      identity,
+    })
+    if (promptScan.riskLevel === 'blocked' && guardMode === 'strict') {
+      return json(err('Import rejected: system prompt flagged by input guard'), 422)
+    }
+  }
 
   const id = newId()
   const ts = now()
