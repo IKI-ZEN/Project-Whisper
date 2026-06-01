@@ -520,14 +520,21 @@ requireAccess(req, env)
   → return null (allow) or 401 Response
 ```
 
-JWKS is module-scope cached for 1 hour. `isProtectedRequest(method, pathname)` is a pure boolean function — it is called once per request in `Router.handle()` before dispatch. When `CF_ACCESS_AUD` is not set, `requireAccess` is a no-op returning `null`.
+JWKS is module-scope cached for 1 hour. `isProtectedRequest(method, pathname)` is a pure boolean function — it is called once per request in `Router.handle()` before dispatch.
 
-Protected paths (all state-mutation, none of the read/inference paths):
-- `POST/PATCH/DELETE /api/sandbox/*`
-- `POST/DELETE /api/v2/build/*`
-- `PUT/DELETE /api/app/:id/state*`
-- `DELETE /api/app/:id/images/:imageId`
-- `POST /api/vibes`
+**Fail-closed by default.** `src/index.ts` checks for `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` before the router runs — if either is missing every request returns `503` immediately. `requireAccess` itself returns `{ deny: null }` when unconfigured (no-op), but that path is unreachable in normal operation because the upstream gate fires first.
+
+**`isProtectedRequest` uses a deny-list, not an allowlist.** All `POST`, `PATCH`, `DELETE`, and `PUT` requests under `/api/` require a valid Access JWT. The following paths are explicitly carved out as public:
+
+| Carve-out | Reason |
+|-----------|--------|
+| `GET *` (all read-only) | No state mutation |
+| `POST /api/sandbox/:id/run` and `/stream` | Core run API, used by embeds and integrations |
+| `POST /s/:id/run` and `/stream` | Short public API aliases |
+| `POST /api/app/:id/images` and `/email` | Generated-app public endpoints |
+| `POST /api/csp-report` | Browser reporting sink (no auth possible) |
+
+Everything else — including `/api/ai/*`, `/api/vault/*`, `/api/probes/*`, `/api/pipelines/*`, `/api/atlas/*`, `/api/replay/*`, `/api/assertions/*`, `/api/vibes`, and all sandbox/build/app-state mutations — requires a valid CF Access JWT. Programmatic clients may use `Authorization: Bearer <token>`; app-scoped HMAC tokens bypass Access for their own app's paths.
 
 ### CSP and secure headers
 

@@ -348,7 +348,7 @@ These apply to both setup tracks.
 
 ## Required: Cloudflare Access (Zero Trust)
 
-The Worker will not serve any requests without this. `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` must be set or every HTTP request returns `503`. Once configured, all state-mutation endpoints (create/update/delete sandbox, build, upload) require a valid Access JWT. Read-only and run/stream endpoints remain public.
+The Worker will not serve any requests without this. `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` must be set or every HTTP request returns `503`. Once configured, all `POST`/`PATCH`/`DELETE` endpoints under `/api/` require a valid Access JWT — including the raw AI inference routes. Explicitly public carve-outs: `GET` (read-only) routes, `/api/sandbox/:id/run|stream`, `/s/:id/run|stream`, `/api/app/:id/images|email`, and `/api/csp-report`.
 
 ### Via Dashboard
 

@@ -393,6 +393,13 @@ export function parsePatchSandboxRequest(body: unknown): PatchSandboxRequest {
       throw new Error("guardMode must be 'strict', 'audit', or 'off'")
     out.guardMode = gm
   }
+  if (body.guardOutput  !== undefined) {
+    const go = str(body.guardOutput, 'guardOutput')
+    if (go !== 'off' && go !== 'audit' && go !== 'block' && go !== 'redact')
+      throw new Error("guardOutput must be 'off', 'audit', 'block', or 'redact'")
+    out.guardOutput = go
+  }
+  if (body.redactPiiOutput !== undefined) out.redactPiiOutput = bool(body, 'redactPiiOutput', false)
   if (body.tools !== undefined) {
     if (!Array.isArray(body.tools)) throw new Error('tools must be an array')
     out.tools = (body.tools as unknown[]).slice(0, 20).map((t, i) => parseTool(t, i))

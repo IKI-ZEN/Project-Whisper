@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCompleteRequest, parseCreateSandboxRequest, parsePatchEnvironmentRequest, parsePipelineRequest, parseWebhookUrl } from './schema.ts'
+import { parseCompleteRequest, parseCreateSandboxRequest, parsePatchSandboxRequest, parsePatchEnvironmentRequest, parsePipelineRequest, parseWebhookUrl, parsePiiScanRequest } from './schema.ts'
 
 // bool() is private — tested indirectly via parsers that use it (zdr, groundingEnabled,
 // collectLogPayload, ragEnabled).
@@ -123,6 +123,72 @@ describe('parseCreateSandboxRequest — bool() on ragEnabled', () => {
       () => parseCreateSandboxRequest({ ...base, ragEnabled: 'yes' }),
       /ragEnabled must be a boolean/,
     )
+  })
+})
+
+describe('parseCreateSandboxRequest — guardOutput / redactPiiOutput', () => {
+  const base = {
+    name: 'Test', description: 'desc', systemPrompt: 'sp',
+    tools: [], model: '@cf/meta/llama-3.1-8b-instruct',
+    temperature: 0.7, maxTokens: 1024,
+  }
+
+  it('defaults guardOutput to audit and redactPiiOutput to false', () => {
+    const r = parseCreateSandboxRequest(base)
+    assert.strictEqual(r.guardOutput, 'audit')
+    assert.strictEqual(r.redactPiiOutput, false)
+  })
+
+  it('accepts a valid guardOutput value', () => {
+    const r = parseCreateSandboxRequest({ ...base, guardOutput: 'block' })
+    assert.strictEqual(r.guardOutput, 'block')
+  })
+
+  it('falls back to audit for an unknown guardOutput value', () => {
+    const r = parseCreateSandboxRequest({ ...base, guardOutput: 'nonsense' })
+    assert.strictEqual(r.guardOutput, 'audit')
+  })
+})
+
+describe('parsePatchSandboxRequest — guardOutput validation', () => {
+  it('accepts a valid guardOutput', () => {
+    const r = parsePatchSandboxRequest({ guardOutput: 'redact' })
+    assert.strictEqual(r.guardOutput, 'redact')
+  })
+
+  it('throws on an invalid guardOutput', () => {
+    assert.throws(
+      () => parsePatchSandboxRequest({ guardOutput: 'loud' }),
+      /guardOutput must be/,
+    )
+  })
+
+  it('accepts redactPiiOutput boolean', () => {
+    const r = parsePatchSandboxRequest({ redactPiiOutput: true })
+    assert.strictEqual(r.redactPiiOutput, true)
+  })
+})
+
+describe('parsePiiScanRequest', () => {
+  it('parses text with default redact=false', () => {
+    const r = parsePiiScanRequest({ text: 'hello' })
+    assert.strictEqual(r.text, 'hello')
+    assert.strictEqual(r.redact, false)
+    assert.strictEqual(r.types, undefined)
+  })
+
+  it('accepts a valid types filter and redact flag', () => {
+    const r = parsePiiScanRequest({ text: 'hi', redact: true, types: ['email', 'ssn'] })
+    assert.deepStrictEqual(r.types, ['email', 'ssn'])
+    assert.strictEqual(r.redact, true)
+  })
+
+  it('throws on an unknown PII type', () => {
+    assert.throws(() => parsePiiScanRequest({ text: 'hi', types: ['passport'] }), /unknown PII types/)
+  })
+
+  it('throws on empty text', () => {
+    assert.throws(() => parsePiiScanRequest({ text: '' }), /non-empty/)
   })
 })
 

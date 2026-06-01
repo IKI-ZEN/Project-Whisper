@@ -3,11 +3,14 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
 import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'
 import { doFetch } from './sandbox'
+import { scan } from '../lib/guard'
+import { logSandboxEvent } from '../lib/events'
 import { newId, isUUID, now } from '../lib/utils'
 import {
   IMAGE_MAX_BYTES, ALLOWED_IMAGE_TYPES,
   IMAGE_RATE_LIMIT_WINDOW_MS, IMAGE_RATE_LIMIT_MAX,
   EMAIL_RATE_LIMIT_WINDOW_MS, EMAIL_RATE_LIMIT_MAX,
+  MAX_EMAIL_SCAN_CHARS,
 } from '../lib/constants'
 
 // ── AppStateDO helpers ────────────────────────────────────────────────────────
@@ -149,6 +152,19 @@ const sendEmail: Handler = async (req, env, params) => {
   const parsed = await parseBody(req, parseEmailRequest)
   if (!parsed.ok) return parsed.response
   const { to, subject, text, html } = parsed.data
+
+  // Content scan — email is an abuse vector (phishing / leaked secrets), so this
+  // always runs (it is not a research path). Blocked content is rejected;
+  // suspicious content is sent but flagged for the audit trail.
+  const emailBody = `${subject}\n${text}\n${html ?? ''}`.slice(0, MAX_EMAIL_SCAN_CHARS)
+  const emailScan = scan(emailBody)
+  if (emailScan.riskLevel === 'blocked') {
+    void logSandboxEvent(env, { sandboxId: id, type: 'email_blocked', metadata: { patterns: emailScan.patterns } })
+    return json(err('Email blocked: flagged content detected', emailScan.patterns), 422)
+  }
+  if (emailScan.riskLevel === 'suspicious') {
+    void logSandboxEvent(env, { sandboxId: id, type: 'email_flagged', metadata: { patterns: emailScan.patterns } })
+  }
 
   if (!env.EMAIL_FROM_ADDRESS) {
     return json(err('EMAIL_FROM_ADDRESS is not configured'), 503)

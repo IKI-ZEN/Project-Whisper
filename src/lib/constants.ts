@@ -222,3 +222,22 @@ export const JWKS_CACHE_TTL_MS = 3_600_000   // 1 hour
 
 // Max accepted CSP violation report body size
 export const MAX_CSP_REPORT_BYTES = 65536    // 64 KB
+
+// ── Security features ─────────────────────────────────────────────────────────
+
+// Output-guard policy applied to model replies on the sandbox chat path.
+// 'audit' (default) preserves the historical behaviour: scan + log only.
+export const GUARD_OUTPUT_MODES = ['off', 'audit', 'block', 'redact'] as const
+
+// PII detection & redaction
+export const MAX_PII_SCAN_CHARS   = 100_000           // max chars accepted by /api/ai/pii-scan
+export const PII_REDACTION_FORMAT = (type: string): string => `[REDACTED:${type}]`
+
+// Outbound webhook signing (probe alerts). Bump when the signing scheme changes.
+export const WEBHOOK_SIGNATURE_VERSION = 'v1'
+
+// Email content scanning (abuse-surface hardening)
+export const MAX_EMAIL_SCAN_CHARS = 50_000            // max chars of email body fed to the guard scan
+
+// Per-sandbox security posture report — event-count lookback window
+export const SECURITY_REPORT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000   // 7 days
