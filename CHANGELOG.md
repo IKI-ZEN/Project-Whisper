@@ -14,6 +14,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Email content scanning** — `POST /api/app/:id/email` now runs the guard scanner over subject/text/html before send; blocked content returns `422` and logs `email_blocked`, suspicious content sends and logs `email_flagged`.
 - **Security posture report** — `GET /api/sandbox/:id/security` returns a read-only summary: integrity (hash present + tampered), guard config (input/output/PII), encryption-at-rest status, and recent security-event counts over a 7-day window.
 - **Rate-limit response headers** — `429` responses now include `Retry-After` and `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset`.
+- **RAG context sanitization (indirect-injection guard)** — retrieved document chunks are scanned before injection (`filterRagChunks` in `src/lib/ai/sandbox.ts`); in strict mode, chunks carrying blocked-level injection patterns are dropped (sanitize-and-continue) and an `rag_flag` event is logged with matched pattern names only.
+- **Tool-result guard** — `run_code` output is masked for leaked secrets and withheld on blocked-level patterns (strict mode) before re-entering the model's context (`guardToolOutput` in `src/lib/guard.ts`); logs `tool_result_flag`.
+- **Audit-log redaction** — flagged-input previews stored in `sandbox_events` are now run through `redactForLog` (mask secrets + redact PII) so the security trail never persists raw secrets or personal data. The research vault (`saveToVault`) is intentionally left raw.
 
 ### Research-traversal note
 

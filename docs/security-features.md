@@ -135,3 +135,36 @@ last 7 days.
 `429` responses include `Retry-After` (seconds) plus `X-RateLimit-Limit`,
 `X-RateLimit-Remaining`, and `X-RateLimit-Reset` (unix seconds) so clients can
 back off precisely.
+
+---
+
+## Indirect injection & residual risks
+
+Defense-in-depth on the sandbox chat path for vectors the LLM call itself can't
+see. All of these are scoped to sandbox chat — the research suite and the vault
+are never affected.
+
+- **RAG context sanitization.** Retrieved document chunks are untrusted: a doc
+  indexed earlier can carry an injection that only fires on retrieval. Chunks are
+  scanned before being concatenated into the prompt. In strict mode a chunk with
+  a blocked-level pattern is dropped (the turn still proceeds with the remaining
+  context); in audit it is kept but recorded. An `rag_flag` event logs matched
+  pattern names only — never the raw injected text.
+- **Tool-output guard.** `run_code` results are masked for leaked secrets and, on
+  blocked-level patterns in strict mode, withheld before they re-enter the model's
+  context — so a tool can't smuggle an injection or a credential into the next
+  turn. Logs `tool_result_flag`.
+- **Audit-log redaction.** The flagged-input previews stored in `sandbox_events`
+  are the content most likely to contain a secret or PII. They are masked and
+  redacted before storage. The research vault is deliberately left raw.
+
+### Known limits (honest scope)
+
+- **Multi-turn jailbreaks.** The guard scans each message independently; a
+  slow-burn attack that is benign per message can still get through. The
+  `drift` and `consistency` research tools are the intended detection signal for
+  trajectory-level manipulation — the guard does not claim to cover it.
+- **Semantic / novel injection.** The guard is pattern-based and will miss
+  paraphrased attacks. A future option is to layer the Cloudflare AI Gateway's
+  Llama Guard as a semantic second opinion in front of the regex guard; it would
+  be opt-in and disabled for research endpoints to preserve adversarial traversal.

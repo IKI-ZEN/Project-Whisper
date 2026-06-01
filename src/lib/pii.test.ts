@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { scanPII, redactPII, PII_TYPES } from './pii'
+import { scanPII, redactPII, redactForLog, PII_TYPES } from './pii'
 
 describe('scanPII — email', () => {
   it('detects an email address', () => {
@@ -78,6 +78,21 @@ describe('redactPII', () => {
     const { redacted, counts } = redactPII('nothing to see here')
     assert.equal(redacted, 'nothing to see here')
     assert.equal(Object.keys(counts).length, 0)
+  })
+})
+
+describe('redactForLog', () => {
+  it('masks both a secret and PII, then truncates', () => {
+    const out = redactForLog('email a@b.com key sk-abcdefghijklmnopqrstuvwx', 200)
+    assert.ok(!out.includes('a@b.com'))
+    assert.ok(!out.includes('sk-abcdefghijklmnopqrstuvwx'))
+    assert.ok(out.includes('[REDACTED:email]'))
+    assert.ok(out.includes('[REDACTED:secret]'))
+  })
+
+  it('truncates to the requested maximum length', () => {
+    const out = redactForLog('x'.repeat(500), 50)
+    assert.strictEqual(out.length, 50)
   })
 })
 

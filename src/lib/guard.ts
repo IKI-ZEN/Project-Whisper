@@ -89,6 +89,23 @@ export function maskSecrets(text: string): { masked: string; count: number } {
   return { masked, count }
 }
 
+/**
+ * Guard a tool/agent output before it re-enters a model's context. Leaked
+ * secrets are always masked so they cannot propagate into the next turn; when a
+ * blocked-level injection pattern is present and the mode is not 'audit', the
+ * output is marked withheld so the caller can substitute a safe placeholder.
+ * Pure — the caller owns logging and the placeholder text.
+ */
+export function guardToolOutput(
+  text: string, mode?: string,
+): { out: string; secretsMasked: number; patterns: string[]; withheld: boolean } {
+  if (mode === 'off') return { out: text, secretsMasked: 0, patterns: [], withheld: false }
+  const { masked, count } = maskSecrets(text)
+  const scanned = scan(masked)
+  const withheld = scanned.riskLevel === 'blocked' && mode !== 'audit'
+  return { out: masked, secretsMasked: count, patterns: scanned.patterns, withheld }
+}
+
 function stripInvisible(text: string): string {
   return text.replace(INVISIBLE_RE, '')
 }

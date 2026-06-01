@@ -7,14 +7,15 @@ import { logSandboxEvent } from '../lib/events'
 import { now } from '../lib/utils'
 import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS, GUARD_FLAG_INPUT_PREVIEW_CHARS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
-import { scan, maskSecrets, type ScanResult } from '../lib/guard'
-import { redactPII } from '../lib/pii'
+import { scan, maskSecrets, guardToolOutput, type ScanResult } from '../lib/guard'
+import { redactPII, redactForLog } from '../lib/pii'
 import { sealPrompt, openPrompt, signPayload } from '../lib/vault'
 import { estimateCost } from '../lib/pricing'
 
 const RL_STORAGE_KEY = 'rlState'
 const MAX_TOOL_LOOPS = 10
 const OUTPUT_BLOCKED_MESSAGE = '[Response withheld: the model output was flagged by the sandbox output guard.]'
+const TOOL_OUTPUT_WITHHELD_MESSAGE = '[Tool output withheld: flagged by the sandbox guard.]'
 
 export class SandboxDO extends DurableObject<Env> {
   private config: SandboxConfig | null = null
@@ -24,6 +25,28 @@ export class SandboxDO extends DurableObject<Env> {
   private guardedScan(text: string, mode?: string): ScanResult | null {
     if (mode === 'off') return null
     return scan(text)
+  }
+
+  // Mask leaked secrets and redact PII from a string before it is persisted in a
+  // security audit log. Scoped to event previews only — research vault stays raw.
+  private safePreview(text: string): string {
+    return redactForLog(text, GUARD_FLAG_INPUT_PREVIEW_CHARS)
+  }
+
+  // Guard a server-side tool (run_code) result before it re-enters the model's
+  // context. Leaked secrets are always masked so they cannot propagate into the
+  // next turn; blocked-level injection in the tool output is withheld under strict
+  // mode (sanitize-and-continue). Returns the result text to feed back.
+  private guardToolResult(result: string, config: SandboxConfig): string {
+    const mode = config.guardMode ?? 'strict'
+    const r = guardToolOutput(result, mode)
+    if (r.secretsMasked > 0 || r.patterns.length > 0) {
+      void logSandboxEvent(this.env, {
+        sandboxId: config.id, type: 'tool_result_flag',
+        metadata: { secretsMasked: r.secretsMasked, patterns: r.patterns, action: mode },
+      })
+    }
+    return r.withheld ? TOOL_OUTPUT_WITHHELD_MESSAGE : r.out
   }
 
   // ── Output guard ──────────────────────────────────────────────────────────
@@ -231,7 +254,7 @@ export class SandboxDO extends DurableObject<Env> {
         let result: string
         if (call.name === 'run_code') {
           const code = typeof call.input.code === 'string' ? call.input.code : String(call.input.code ?? '')
-          result = await this.executeCode(code)
+          result = this.guardToolResult(await this.executeCode(code), config)
         } else {
           // Non-built-in tool: return tool_call reply so caller can handle it
           return { reply, memory: currentMemory }
@@ -433,7 +456,7 @@ export class SandboxDO extends DurableObject<Env> {
         return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
       }
       if (guard.riskLevel !== 'clean') {
-        void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'run', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }, identity })
+        void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'run', patterns: guard.patterns, flaggedInput: this.safePreview(message) }, identity })
       }
     }
 
@@ -491,7 +514,7 @@ export class SandboxDO extends DurableObject<Env> {
         return json({ ok: false, error: 'Message blocked: adversarial content detected', patterns: guard.patterns }, 422)
       }
       if (guard.riskLevel !== 'clean') {
-        void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'stream', patterns: guard.patterns, flaggedInput: message.slice(0, GUARD_FLAG_INPUT_PREVIEW_CHARS) }, identity })
+        void logSandboxEvent(this.env, { sandboxId: config.id, type: 'guard_flag', metadata: { source: 'stream', patterns: guard.patterns, flaggedInput: this.safePreview(message) }, identity })
       }
     }
 

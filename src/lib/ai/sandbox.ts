@@ -4,7 +4,57 @@ import type { Env } from '../../types/env'
 import type { SandboxConfig } from '../schema'
 import { sseEvent } from '../http'
 import { now } from '../utils'
+import { scan } from '../guard'
+import { logSandboxEvent } from '../events'
 import { complete, completeStream, embed } from './complete'
+
+// ── RAG context sanitization (indirect-injection guard) ───────────────────────
+// Retrieved document chunks are untrusted: a doc indexed earlier can carry an
+// injection that only fires when retrieved. Split chunks into kept vs flagged
+// based on the sandbox guard mode before they are concatenated into the prompt.
+//   strict → drop chunks with blocked-level patterns (sanitize-and-continue)
+//   audit  → keep all chunks, but report the flagged ones
+//   off    → keep all chunks, no scan
+// Pure and side-effect-free so it can be unit-tested without Vectorize.
+export function filterRagChunks(
+  texts: string[], mode?: string,
+): { kept: string[]; flaggedCount: number; patterns: string[] } {
+  const kept: string[] = []
+  let flaggedCount = 0
+  const patterns = new Set<string>()
+  for (const text of texts) {
+    if (mode === 'off') { kept.push(text); continue }
+    const result = scan(text)
+    if (result.riskLevel === 'blocked') {
+      flaggedCount++
+      for (const p of result.patterns) patterns.add(p)
+      if (mode === 'audit') kept.push(text)   // audit keeps but records
+      // strict: dropped
+    } else {
+      kept.push(text)
+    }
+  }
+  return { kept, flaggedCount, patterns: [...patterns] }
+}
+
+interface VectorMatch { metadata?: unknown }
+
+// Assemble the retrieved chunks into a context string, scanning each for
+// indirect injection first and logging an `rag_flag` event (patterns only — never
+// the raw injected text) when anything is dropped or flagged.
+function assembleRagContext(env: Env, config: SandboxConfig, matches: VectorMatch[]): string {
+  const texts = matches
+    .map(m => ((m.metadata ?? {}) as { text?: string }).text ?? '')
+    .filter(Boolean)
+  const { kept, flaggedCount, patterns } = filterRagChunks(texts, config.guardMode ?? 'strict')
+  if (flaggedCount > 0) {
+    void logSandboxEvent(env, {
+      sandboxId: config.id, type: 'rag_flag',
+      metadata: { flaggedChunks: flaggedCount, totalChunks: texts.length, patterns },
+    })
+  }
+  return kept.join('\n\n')
+}
 
 export async function runInSandbox(ai: Ai, env: Env, config: SandboxConfig, userMessage: string): Promise<string> {
   return complete(ai, env, {
@@ -53,10 +103,7 @@ export async function runInSandboxWithRAG(
     filter: { sandboxId: config.id } as Record<string, string>,
   })
 
-  const context = results.matches
-    .map(m => ((m.metadata ?? {}) as { text?: string }).text ?? '')
-    .filter(Boolean)
-    .join('\n\n')
+  const context = assembleRagContext(env, config, results.matches)
 
   const augmented = context.length > 0
     ? `${userMessage}\n\n--- Relevant context from your documents ---\n${context}`
@@ -82,10 +129,7 @@ export function streamInSandboxWithRAG(ai: Ai, env: Env, config: SandboxConfig, 
             returnMetadata: 'all',
             filter: { sandboxId: config.id } as Record<string, string>,
           })
-          const context = results.matches
-            .map(m => ((m.metadata ?? {}) as { text?: string }).text ?? '')
-            .filter(Boolean)
-            .join('\n\n')
+          const context = assembleRagContext(env, config, results.matches)
           if (context.length > 0) {
             augmented = `${userMessage}\n\n--- Relevant context from your documents ---\n${context}`
           }

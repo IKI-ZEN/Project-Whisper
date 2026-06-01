@@ -1,4 +1,5 @@
 import { PII_REDACTION_FORMAT } from './constants'
+import { maskSecrets } from './guard'
 
 // ── PII detection & redaction ────────────────────────────────────────────────
 // Pattern-based scanner for personally identifiable information. Mirrors the
@@ -101,6 +102,17 @@ export function scanPII(text: string, types?: PiiType[]): PiiMatch[] {
     lastEnd = match.end
   }
   return kept
+}
+
+/**
+ * Sanitize a string for storage in a security audit log: mask leaked secrets,
+ * redact PII, then truncate. Used for event previews so the audit trail never
+ * persists raw secrets or personal data. Research data (the vault) is not run
+ * through this — researchers keep raw content.
+ */
+export function redactForLog(text: string, maxLen: number): string {
+  const masked = maskSecrets(text).masked
+  return redactPII(masked).redacted.slice(0, maxLen)
 }
 
 export interface RedactionResult {
