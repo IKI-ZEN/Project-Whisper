@@ -227,7 +227,7 @@ Set `SIGNING_SECRET` in `.dev.vars` (or the production secret store) to enable c
 
 ### Cloudflare Access (Zero Trust)
 
-`CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` are **required** — the Worker returns `503` and refuses all requests if either is missing. All state-mutation endpoints require a valid Cloudflare Access JWT (RS256, validated with Web Crypto against JWKS). Read-only routes, all `/api/ai/*` routes, and all run/stream endpoints remain public once Access is configured.
+`CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` are **required** — the Worker returns `503` and refuses all requests if either is missing. All `POST`/`PATCH`/`DELETE` endpoints under `/api/` require a valid Cloudflare Access JWT (RS256, validated with Web Crypto against JWKS). Explicitly public carve-outs: `GET` (read-only) routes, `/api/sandbox/:id/run`, `/api/sandbox/:id/stream`, `/s/:id/run`, `/s/:id/stream`, `/api/app/:id/images`, `/api/app/:id/email`, and `/api/csp-report`. Programmatic clients may use `Authorization: Bearer <token>` instead of the `Cf-Access-Jwt-Assertion` header; app-scoped HMAC tokens bypass Access for their own app's routes.
 
 Token resolution order: `Cf-Access-Jwt-Assertion` header (set automatically by the Access proxy) → `Authorization: Bearer <token>` (for programmatic clients).
 
