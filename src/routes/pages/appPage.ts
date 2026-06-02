@@ -2,7 +2,7 @@ import type { Env } from '../../types/env'
 import type { Handler, Params } from '../../lib/http'
 import type { SandboxConfig } from '../../lib/schema'
 import { sandboxExists, stub, doFetch } from '../sandbox'
-import { genNonce, htmlHeaders, injectAppToken } from './shared'
+import { genNonce, htmlHeaders, injectAppToken, sharedCss } from './shared'
 
 // ── Standalone app page ───────────────────────────────────────────────────────
 
@@ -18,22 +18,15 @@ export function appPageHtml(sandboxId: string, nonce: string): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="robots" content="noindex"/>
 <title>Loading…</title>
+${sharedCss()}
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
-.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
-.navlink:hover{color:var(--text)}
-.navlink.active{background:var(--accent);color:#fff}
 #app-name{font-size:13px;font-weight:600;color:var(--accent2);margin-left:auto}
 #app-desc{display:none}
 .badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono);flex-shrink:0}
 .hbtn{font-size:12px;padding:8px 14px;min-height:36px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
 .hbtn:hover{border-color:var(--accent2);color:var(--accent2)}
 .hbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 #messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55;animation:msgIn .15s ease-out both}
 .msg.user{align-self:flex-end;background:#6366f128;border:1px solid #6366f144}
@@ -61,7 +54,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .input-row button:disabled{opacity:.45;cursor:not-allowed}
 .input-row button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 @media(max-width:600px){#messages{padding:12px}.input-row{padding:8px 12px}.input-row textarea{font-size:16px}}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 .embed-panel{position:fixed;inset:0;background:#00000088;z-index:100;display:flex;align-items:center;justify-content:center;visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}
 .embed-panel.open{visibility:visible;opacity:1}
 .embed-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;width:480px;max-width:90vw;display:flex;flex-direction:column;gap:12px;transform:translateY(10px);transition:transform .2s}
@@ -71,7 +63,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .embed-box .row{display:flex;gap:8px}
 .embed-box button{flex:1;padding:8px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;cursor:pointer}
 .embed-box button.outline{background:none;border:1px solid var(--border);color:var(--text)}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 </style>
 </head>
 <body>

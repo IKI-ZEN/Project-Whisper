@@ -1,5 +1,5 @@
 import type { Handler } from '../../lib/http'
-import { genNonce, htmlHeaders } from './shared'
+import { genNonce, htmlHeaders, sharedCss } from './shared'
 
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
@@ -9,21 +9,16 @@ export function dashboardHtml(nonce: string): string { return `<!DOCTYPE html>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Whisper — Dashboard</title>
+${sharedCss()}
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--green:#10b981;--red:#f87171;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
-.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;overflow-x:auto}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
-.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
-.navlink:hover{color:var(--text)}
-.navlink.active{background:var(--accent);color:#fff}
+.topnav{position:sticky;top:0;z-index:10}
 main{max-width:1200px;margin:0 auto;padding:32px 24px}
 h2{font-size:20px;font-weight:700;margin-bottom:4px}
 .sub{color:var(--muted);font-size:13px;margin-bottom:24px}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:24px}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
-.stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
 .stat-value{font-size:26px;font-weight:700;color:var(--text);font-family:var(--mono);line-height:1}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px}
@@ -33,22 +28,18 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
 .item-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #ffffff08;font-size:12px}
 .item-row:last-child{border-bottom:none}
 .item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.item-meta{font-size:10px;color:var(--muted);flex-shrink:0;font-family:var(--mono)}
+.item-meta{font-size:11px;color:var(--muted);flex-shrink:0;font-family:var(--mono)}
 .tbl{width:100%;border-collapse:collapse;font-size:12px}
-.tbl th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.tbl th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
 .tbl td{padding:7px 8px;border-bottom:1px solid #ffffff08}
 .tbl tr:last-child td{border-bottom:none}
 .tbl tr:hover td{background:#ffffff04}
-.badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono)}
 .empty-note{color:var(--muted);font-size:12px;font-style:italic;padding:8px 0}
 .health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
 .health-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
 .health-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
 .health-dot.green{background:var(--green)}.health-dot.yellow{background:#f59e0b}.health-dot.grey{background:var(--border)}
-@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
-.sk{background:var(--border);border-radius:4px;animation:pulse 1.4s ease-in-out infinite}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
-@media(max-width:760px){.two-col{grid-template-columns:1fr}.stats-grid{grid-template-columns:1fr 1fr}main{padding:16px}}
+@media(max-width:900px){.two-col{grid-template-columns:1fr}.stats-grid{grid-template-columns:1fr 1fr}main{padding:16px}}
 </style>
 </head>
 <body>
