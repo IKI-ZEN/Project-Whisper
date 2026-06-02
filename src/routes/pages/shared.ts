@@ -15,6 +15,31 @@ export function genNonce(): string {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
 }
 
+export function sharedCss(): string {
+  return `<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--green:#10b981;--red:#f87171;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
+.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto}
+.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px;white-space:nowrap}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s;white-space:nowrap;align-self:stretch;display:flex;align-items:center}
+.navlink:hover{color:var(--text)}
+.navlink.active{color:var(--accent2);position:relative}
+.navlink.active::after{content:'';position:absolute;bottom:0;left:8px;right:8px;height:2px;background:var(--accent2);border-radius:2px 2px 0 0}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
+@keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.badge{font-size:10px;padding:2px 7px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono)}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px;color:var(--muted)}
+.empty h3{font-size:18px;margin-bottom:8px;color:var(--text)}
+.empty-cta{display:inline-block;margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500}
+.empty-cta:hover{background:#4f46e5}
+.sk{background:var(--border);border-radius:4px;animation:pulse 1.4s ease-in-out infinite}
+.sk-line{height:12px;background:var(--border);border-radius:4px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>`
+}
+
 export function htmlHeaders(nonce: string, allowFrame = false): Record<string, string> {
   return {
     'Content-Type':            'text/html; charset=utf-8',

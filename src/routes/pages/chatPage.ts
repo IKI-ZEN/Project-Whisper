@@ -1,5 +1,5 @@
 import type { Handler } from '../../lib/http'
-import { genNonce, htmlHeaders } from './shared'
+import { genNonce, htmlHeaders, sharedCss } from './shared'
 
 // ── Chat page (root) ──────────────────────────────────────────────────────────
 
@@ -9,15 +9,9 @@ export function chatPageHtml(nonce: string): string { return `<!DOCTYPE html>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Whisper — Chat</title>
+${sharedCss()}
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
-.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
-.navlink:hover{color:var(--text)}
-.navlink.active{background:var(--accent);color:#fff}
 .layout{display:flex;flex:1;overflow:hidden}
 .sidebar{width:240px;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;flex-shrink:0}
 .sidebar-top{padding:12px}
@@ -28,7 +22,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .thread-item:hover{background:var(--surface);color:var(--text)}
 .thread-item.active{background:#6366f122;color:var(--accent2)}
 .config-section{padding:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
-.cfg-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.cfg-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .cfg-select{width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:11px;outline:none;cursor:pointer}
 .cfg-select:focus{border-color:var(--accent)}
 .slider-row{display:flex;align-items:center;gap:8px}
@@ -39,7 +33,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .save-btn{width:100%;padding:7px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--text);font-size:11px;cursor:pointer;transition:all .15s;opacity:.7}
 .save-btn:hover{border-color:var(--accent2);color:var(--accent2);opacity:1}
 .chat-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-@keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 #messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:80%;padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.55;animation:msgIn .15s ease-out both}
 .msg.user{align-self:flex-end;background:#6366f128;border:1px solid #6366f144}
@@ -69,11 +62,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .input-row button{padding:10px 18px;min-height:40px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
 .input-row button:hover:not(:disabled){background:#4f46e5}
 .input-row button:disabled{opacity:.45;cursor:not-allowed}
-@media(max-width:768px){.sidebar{display:none}}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+.menu-btn{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:2px 8px;line-height:1}
+#sidebar-backdrop{display:none;position:fixed;inset:0;top:48px;background:#00000055;z-index:19}
+@media(max-width:768px){
+  .menu-btn{display:flex;align-items:center;align-self:center}
+  .sidebar{position:fixed;left:0;top:48px;bottom:0;z-index:20;transform:translateX(-100%);transition:transform .2s ease;background:var(--bg);box-shadow:4px 0 24px #00000044}
+  .sidebar.open{transform:translateX(0)}
+  #sidebar-backdrop.open{display:block}
+}
 .guard-seg{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:calc(var(--radius)+2px);padding:2px;gap:2px}
-.guard-btn{flex:1;padding:4px 4px;border-radius:var(--radius);border:none;background:none;color:var(--muted);font-size:10px;font-weight:500;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;text-align:center}
+.guard-btn{flex:1;padding:4px;border-radius:var(--radius);border:none;background:none;color:var(--muted);font-size:11px;font-weight:500;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;text-align:center}
 .guard-btn.g-strict{background:var(--accent);color:#fff}
 .guard-btn.g-audit{background:#f59e0b22;color:#f59e0b}
 .guard-btn.g-off{background:#f8717122;color:#f87171}
@@ -81,15 +79,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .kb-section.kb-collapsed .kb-body{display:none}
 .kb-section.kb-collapsed .kb-arrow{transform:rotate(-90deg)}
 .kb-head{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;cursor:pointer;user-select:none}
-.kb-head>span:first-child{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kb-head>span:first-child{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .kb-arrow{font-size:9px;color:var(--muted);transition:transform .15s;flex-shrink:0}
 .kb-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px}
 .kb-drop{border:1px dashed var(--border);border-radius:var(--radius);padding:9px;text-align:center;font-size:11px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s}
 .kb-drop:hover,.kb-drop.drag-over{border-color:var(--accent2);color:var(--accent2)}
 .doc-list{display:flex;flex-direction:column;gap:3px;max-height:88px;overflow-y:auto}
 .doc-item{display:flex;align-items:center;gap:5px;padding:3px 6px;background:var(--surface);border-radius:4px}
-.doc-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--text)}
-.doc-st{font-size:9px;padding:1px 5px;border-radius:99px;flex-shrink:0}
+.doc-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text)}
+.doc-st{font-size:11px;padding:1px 5px;border-radius:99px;flex-shrink:0}
 .doc-st.processing{background:#f59e0b22;color:#f59e0b}
 .doc-st.indexed{background:#34d39922;color:#34d399}
 .doc-st.error,.doc-st.blocked{background:#f8717122;color:#f87171}
@@ -114,6 +112,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
   <a href="/" class="brand">Whisper</a>
+  <button id="sidebar-toggle" class="menu-btn" aria-label="Open sidebar" aria-expanded="false">☰</button>
   <a href="/" class="navlink active" aria-current="page">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink">Apps</a>
@@ -122,6 +121,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <a href="/dashboard" class="navlink">Dashboard</a>
   <a id="nav-whisper-this" href="/tools.html" class="navlink" style="margin-left:auto;color:var(--accent2)">Whisper this →</a>
 </nav>
+<div id="sidebar-backdrop" aria-hidden="true"></div>
 <div class="layout">
   <aside class="sidebar" aria-label="Sidebar">
     <div class="sidebar-top">
@@ -609,6 +609,16 @@ document.getElementById('ctx-delete').onclick=function(){
   renderThreadList()
 }
 document.addEventListener('click',function(e){if(!document.getElementById('ctx-menu').contains(e.target))closeCtxMenu()})
+document.getElementById('sidebar-toggle').onclick=function(){
+  const open=document.querySelector('.sidebar').classList.toggle('open')
+  document.getElementById('sidebar-backdrop').classList.toggle('open',open)
+  this.setAttribute('aria-expanded',String(open))
+}
+document.getElementById('sidebar-backdrop').onclick=function(){
+  document.querySelector('.sidebar').classList.remove('open')
+  this.classList.remove('open')
+  document.getElementById('sidebar-toggle').setAttribute('aria-expanded','false')
+}
 document.getElementById('user-input').onkeydown=function(e){
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
 }

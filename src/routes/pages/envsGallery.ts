@@ -1,5 +1,5 @@
 import type { Handler } from '../../lib/http'
-import { genNonce, htmlHeaders } from './shared'
+import { genNonce, htmlHeaders, sharedCss } from './shared'
 
 // ── Environments gallery page ─────────────────────────────────────────────────
 
@@ -9,15 +9,10 @@ export function envsGalleryHtml(nonce: string): string { return `<!DOCTYPE html>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Whisper — Environments</title>
+${sharedCss()}
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#080c14;--surface:#0e1521;--border:#1c2a40;--muted:#4d6480;--text:#cdd9e5;--accent:#6366f1;--accent2:#818cf8;--teal:#14b8a6;--radius:6px;--mono:"JetBrains Mono",ui-monospace,monospace}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
-.topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;flex-shrink:0;overflow-x:auto}
-.brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px;white-space:nowrap}
-.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
-.navlink:hover{color:var(--text)}
-.navlink.active{background:var(--accent);color:#fff}
+.topnav{position:sticky;top:0;z-index:10}
 .new-env{margin-left:auto}
 main{max-width:1100px;margin:0 auto;padding:32px 24px;min-height:calc(100dvh - 48px);display:flex;flex-direction:column}
 h2{font-size:22px;font-weight:700;margin-bottom:6px}
@@ -33,8 +28,8 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .type-coding{background:#6366f133;color:var(--accent)}
 .type-research{background:#14b8a622;color:var(--teal)}
 .type-structured{background:#f59e0b22;color:#f59e0b}
-.model-count{font-size:10px;color:var(--muted);font-family:var(--mono)}
-.card-date{font-size:10px;color:var(--muted);margin-left:auto}
+.model-count{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.card-date{font-size:11px;color:var(--muted);margin-left:auto}
 .open-btn{padding:8px 16px;min-height:36px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .open-btn:hover{background:#4f46e5}
 .open-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
@@ -42,17 +37,8 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .act-btn:hover{border-color:var(--accent2);color:var(--text)}
 .act-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 .act-btn:disabled{opacity:.5;cursor:not-allowed}
-.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px;color:var(--muted)}
-.empty h3{font-size:18px;margin-bottom:8px;color:var(--text)}
-.empty-cta{display:inline-block;margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);text-decoration:none;font-size:13px;font-weight:500}
-.empty-cta:hover{background:#4f46e5}
-@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
-@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .skeleton{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;animation:pulse 1.4s ease-in-out infinite}
-.sk-line{height:12px;background:var(--border);border-radius:4px}
 @media(max-width:480px){.card{padding:14px}}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 </style>
 </head>
 <body>
