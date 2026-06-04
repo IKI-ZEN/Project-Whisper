@@ -2,10 +2,10 @@ import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../types/env'
 import type { SandboxConfig, Message } from '../lib/schema'
 import { runInSandboxWithRAG, streamInSandboxWithRAG, isToolCallReply, decodeToolCalls, encodeToolResult, contentToText } from '../lib/ai'
-import { json, sseResponse, readIdentity } from '../lib/http'
+import { json, sseResponse, readIdentity, listAllR2 } from '../lib/http'
 import { logSandboxEvent } from '../lib/events'
 import { now } from '../lib/utils'
-import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS, GUARD_FLAG_INPUT_PREVIEW_CHARS } from '../lib/constants'
+import { DO_STORAGE_KEY, MAX_MESSAGES, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, CODE_EXEC_TIMEOUT_MS, GUARD_FLAG_INPUT_PREVIEW_CHARS, MAX_VECTOR_CHUNKS } from '../lib/constants'
 import { computeConfigHash } from '../lib/integrity'
 import { scan, maskSecrets, guardToolOutput, type ScanResult } from '../lib/guard'
 import { redactPII, redactForLog } from '../lib/pii'
@@ -535,11 +535,11 @@ export class SandboxDO extends DurableObject<Env> {
     try {
       const config = await this.load()
       const sandboxId = config.id
-      void this.env.FILES.list({ prefix: `sandboxes/${sandboxId}/documents/` }).then(async listed => {
-        for (const obj of listed.objects) {
+      void listAllR2(this.env.FILES, `sandboxes/${sandboxId}/documents/`).then(async objects => {
+        for (const obj of objects) {
           const docId = obj.key.split('/').pop() ?? ''
           if (docId) {
-            const ids = Array.from({ length: 500 }, (_, i) => `${sandboxId}_${docId}_${i}`)
+            const ids = Array.from({ length: MAX_VECTOR_CHUNKS }, (_, i) => `${sandboxId}_${docId}_${i}`)
             void this.env.VECTORS.deleteByIds(ids).catch(() => {})
           }
           void this.env.FILES.delete(obj.key).catch(() => {})

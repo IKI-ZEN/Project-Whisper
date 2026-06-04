@@ -185,6 +185,19 @@ export async function listAllKV<T>(ns: KVNamespace, prefix: string): Promise<KVN
   return keys
 }
 
+// Exhaust all pages of an R2 list() call and return every object. R2 caps each
+// page at 1000 keys, so a single list() silently drops objects past the first
+// page — always use this when completeness matters (listing, deletion cleanup).
+export async function listAllR2(bucket: R2Bucket, prefix: string): Promise<R2Object[]> {
+  let result = await bucket.list({ prefix })
+  const objects = [...result.objects]
+  while (result.truncated) {
+    result = await bucket.list({ prefix, cursor: result.cursor })
+    objects.push(...result.objects)
+  }
+  return objects
+}
+
 export class Router {
   private readonly routes: Route[] = []
 
