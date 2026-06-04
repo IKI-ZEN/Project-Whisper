@@ -96,7 +96,7 @@ export function stripTrustHeaders(req: Request): Request {
 }
 
 function corsHeaders(req: Request, env: Env): Record<string, string> {
-  const allowed = (env.ALLOWED_ORIGINS ?? '*').split(',').map(s => s.trim())
+  const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean)
   const origin  = req.headers.get('Origin') ?? ''
   const allow   = allowed.includes('*') ? '*'
     : allowed.includes(origin) ? origin
@@ -280,8 +280,8 @@ export class Router {
     for (const [k, v] of Object.entries(cors)) headers.set(k, v)
     headers.set('X-Request-ID',          requestId)
     headers.set('X-Content-Type-Options', 'nosniff')
-    headers.set('X-Frame-Options',        'DENY')
-    headers.set('Referrer-Policy',        'strict-origin-when-cross-origin')
+    if (!headers.has('X-Frame-Options')) headers.set('X-Frame-Options', 'DENY')
+    if (!headers.has('Referrer-Policy'))  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
     headers.set('Permissions-Policy',     'camera=(), microphone=(), geolocation=()')
     headers.set('X-XSS-Protection',       '0')
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers })

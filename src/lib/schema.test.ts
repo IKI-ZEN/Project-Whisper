@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCompleteRequest, parseCreateSandboxRequest, parsePatchSandboxRequest, parsePatchEnvironmentRequest, parsePipelineRequest, parseWebhookUrl, parsePiiScanRequest } from './schema.ts'
+import { parseCompleteRequest, parseCreateSandboxRequest, parsePatchSandboxRequest, parsePatchEnvironmentRequest, parsePipelineRequest, parseWebhookUrl, parsePiiScanRequest, parseEmailRequest } from './schema.ts'
 
 // bool() is private — tested indirectly via parsers that use it (zdr, groundingEnabled,
 // collectLogPayload, ragEnabled).
@@ -395,5 +395,55 @@ describe('parseWebhookUrl — rejected (SSRF / scheme)', () => {
   it('rejects a non-string value', () => {
     rejects(42)
     rejects({})
+  })
+
+  it('rejects full 127.0.0.0/8 loopback range, not just 127.0.0.1', () => {
+    rejects('https://127.0.0.2/x')
+    rejects('https://127.1.2.3/x')
+    rejects('https://127.255.255.254/x')
+  })
+
+  it('rejects 0.0.0.0/8 "this network" range', () => {
+    rejects('https://0.0.0.1/x')
+    rejects('https://0.1.2.3/x')
+  })
+
+  it('rejects 100.64.0.0/10 CGNAT range', () => {
+    rejects('https://100.64.0.1/x')
+    rejects('https://100.127.255.255/x')
+  })
+
+  it('accepts 100.128.0.1 which is outside the CGNAT range', () => {
+    assert.strictEqual(parseWebhookUrl('https://100.128.0.1/notify'), 'https://100.128.0.1/notify')
+  })
+})
+
+describe('parseEmailRequest — CRLF injection guard', () => {
+  const base = { to: 'user@example.test', text: 'Hello.' }
+
+  it('accepts a normal subject', () => {
+    const r = parseEmailRequest({ ...base, subject: 'Your order is ready' })
+    assert.strictEqual(r.subject, 'Your order is ready')
+  })
+
+  it('rejects a subject containing \\n', () => {
+    assert.throws(
+      () => parseEmailRequest({ ...base, subject: 'Hi\nBcc: evil@example.com' }),
+      /line breaks/,
+    )
+  })
+
+  it('rejects a subject containing \\r\\n', () => {
+    assert.throws(
+      () => parseEmailRequest({ ...base, subject: 'Hi\r\nBcc: evil@example.com' }),
+      /line breaks/,
+    )
+  })
+
+  it('rejects a subject containing a bare \\r', () => {
+    assert.throws(
+      () => parseEmailRequest({ ...base, subject: 'Hi\rworld' }),
+      /line breaks/,
+    )
   })
 })

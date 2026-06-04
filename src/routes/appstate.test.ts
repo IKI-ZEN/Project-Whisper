@@ -98,3 +98,23 @@ describe('appstate email gating', () => {
     assert.equal(res.status, 503)
   })
 })
+
+describe('appstate email — CRLF injection guard', () => {
+  const sendEmail = findHandler(appstateRoutes, 'POST', '/api/app/:id/email')
+  const configuredEnv = makeEnv({ SEND_EMAIL: { send: async () => {} }, EMAIL_FROM_ADDRESS: 'noreply@example.test' })
+
+  const post = (body: unknown) => sendEmail(
+    req('https://x', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+    configuredEnv, { id: GOOD_ID },
+  )
+
+  it('rejects a subject with \\n with 422', async () => {
+    const res = await post({ to: 'user@example.test', subject: 'Hi\nBcc: evil@example.com', text: 'body' })
+    assert.equal(res.status, 422)
+  })
+
+  it('rejects a subject with \\r\\n with 422', async () => {
+    const res = await post({ to: 'user@example.test', subject: 'Hi\r\nX-Injected: yes', text: 'body' })
+    assert.equal(res.status, 422)
+  })
+})
