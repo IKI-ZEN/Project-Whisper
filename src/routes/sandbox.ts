@@ -5,6 +5,7 @@ import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, pa
 import { newId, now, isUUID } from '../lib/utils'
 import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, SECURITY_REPORT_WINDOW_MS, SESSION_TOKEN_TTL_MS } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
+import { requireAccess } from '../lib/access'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
 import { saveToVault } from '../lib/analysis'
 import { logSandboxEvent } from '../lib/events'
@@ -327,8 +328,16 @@ const history: Handler = async (req, env, params: Params) => {
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   const sessionId = new URL(req.url).searchParams.get('sessionId') ?? undefined
 
+  // Read gate (fail-closed when signing is configured). Reading a conversation
+  // requires EITHER a valid session token — the capability the app client holds —
+  // OR a valid Cloudflare Access identity (operators/dashboards). Without this,
+  // GET history is unauthenticated in-worker and would expose the default thread.
   const tokenDeny = await validateSessionToken(id, sessionId, req, env)
   if (tokenDeny) return tokenDeny
+  if (env.SIGNING_SECRET && !req.headers.get('X-Session-Token')) {
+    const { deny } = await requireAccess(req, env)
+    if (deny) return deny
+  }
 
   const doUrl = sessionId ? `history?sessionId=${encodeURIComponent(sessionId)}` : 'history'
   return doFetch(stub(env, id), doUrl, 'GET')

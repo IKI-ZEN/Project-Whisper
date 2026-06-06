@@ -92,8 +92,10 @@ describe('session token issuance', () => {
   })
 })
 
+// Env where signing is set but Cloudflare Access is NOT configured — requireAccess
+// is a no-op, so the read gate falls back to token-only (token still optional).
 describe('session token validation on GET /history (header, not URL)', () => {
-  it('fail-open: a request with no token is allowed through to the DO', async () => {
+  it('no token + Access not configured → allowed through to the DO', async () => {
     const res = await history(histReq(), sessionEnv(), { id: SID })
     assert.equal(res.status, 200)
   })
@@ -118,6 +120,34 @@ describe('session token validation on GET /history (header, not URL)', () => {
 
   it('accepts a freshly issued token and reaches the DO (200)', async () => {
     const env = sessionEnv()
+    const issued = await issue(
+      new Request(`https://x/api/sandbox/${SID}/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 's1' }) }),
+      env, { id: SID },
+    )
+    const { data } = await issued.json() as { data: { token: string } }
+    const res = await history(histReq(data.token), env, { id: SID })
+    assert.equal(res.status, 200)
+  })
+})
+
+// With Cloudflare Access configured, GET /history is fail-closed: a request with
+// neither a session token nor an Access identity (no Cf-Access-Jwt-Assertion) is
+// rejected, closing the unauthenticated default-thread read.
+describe('GET /history read gate when Cloudflare Access is configured', () => {
+  function accessEnv() {
+    const env = sessionEnv() as unknown as Record<string, unknown>
+    env.CF_ACCESS_AUD         = 'test-aud'
+    env.CF_ACCESS_TEAM_DOMAIN = 'team.cloudflareaccess.test'
+    return env as unknown as Parameters<typeof history>[1]
+  }
+
+  it('no token and no Access identity → 401', async () => {
+    const res = await history(histReq(), accessEnv(), { id: SID })
+    assert.equal(res.status, 401)
+  })
+
+  it('a valid session token bypasses the Access requirement → 200', async () => {
+    const env = accessEnv()
     const issued = await issue(
       new Request(`https://x/api/sandbox/${SID}/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 's1' }) }),
       env, { id: SID },
