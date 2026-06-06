@@ -332,8 +332,8 @@ async function send(){
   const el=addMsg('assistant','')
   el.classList.add('typing')
   try{
-    const streamUrl='/api/sandbox/'+sandboxId+'/stream?sessionId='+encodeURIComponent(activeSession)
-    const doStream=function(){return fetch(streamUrl,{method:'POST',headers:sessHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:text})})}
+    const streamUrl='/api/sandbox/'+sandboxId+'/stream'
+    const doStream=function(){return fetch(streamUrl,{method:'POST',headers:sessHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:text,sessionId:activeSession})})}
     let res=await doStream()
     if(res.status===401){await issueSessionToken(activeSession);res=await doStream()}
     const reader=res.body.getReader()

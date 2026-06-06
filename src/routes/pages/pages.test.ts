@@ -43,6 +43,15 @@ describe('chatPageHtml', () => {
     assert.ok(!html.includes('&token='),   'token must not appear in a query string')
     assert.ok(html.includes('X-Session-Token'), 'token must be sent as a request header')
   })
+
+  it('sends sessionId in the stream request body, not the URL', () => {
+    // run/stream read sessionId from the request body (parseRunSandboxRequest).
+    // Putting it in the URL both leaks it into logs and silently routes every
+    // streamed message to the default thread (the query param is ignored).
+    const html = chatPageHtml(NONCE)
+    assert.ok(!html.includes("/stream?sessionId="), 'sessionId must not be in the stream URL')
+    assert.ok(html.includes('sessionId:activeSession'), 'sessionId must be sent in the POST body')
+  })
 })
 
 describe('dashboardHtml', () => {
