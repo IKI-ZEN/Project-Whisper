@@ -263,6 +263,14 @@ async function issueSessionToken(sessId){
   }catch{}
 }
 
+// Build request headers carrying the current session token (header, never URL).
+function sessHeaders(base){
+  const h=Object.assign({},base||{})
+  const tok=sessionTokens[activeSession]
+  if(tok)h['X-Session-Token']=tok
+  return h
+}
+
 async function newThread(){
   const id='sess-'+Date.now()
   const name='Thread '+(sessions.length+1)
@@ -278,9 +286,9 @@ async function newThread(){
 async function loadHistory(){
   if(!sandboxId)return
   try{
-    const tok=sessionTokens[activeSession]
-    const histUrl='/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(activeSession)+(tok?'&token='+encodeURIComponent(tok):'')
-    const r=await fetch(histUrl)
+    const histUrl='/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(activeSession)
+    let r=await fetch(histUrl,{headers:sessHeaders()})
+    if(r.status===401){await issueSessionToken(activeSession);r=await fetch(histUrl,{headers:sessHeaders()})}
     const d=await r.json()
     if(!d.ok)return
     const msgs=document.getElementById('messages')
@@ -324,13 +332,10 @@ async function send(){
   const el=addMsg('assistant','')
   el.classList.add('typing')
   try{
-    const tok=sessionTokens[activeSession]
-    const streamUrl='/api/sandbox/'+sandboxId+'/stream?sessionId='+encodeURIComponent(activeSession)+(tok?'&token='+encodeURIComponent(tok):'')
-    const res=await fetch(streamUrl,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:text})
-    })
+    const streamUrl='/api/sandbox/'+sandboxId+'/stream?sessionId='+encodeURIComponent(activeSession)
+    const doStream=function(){return fetch(streamUrl,{method:'POST',headers:sessHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:text})})}
+    let res=await doStream()
+    if(res.status===401){await issueSessionToken(activeSession);res=await doStream()}
     const reader=res.body.getReader()
     const dec=new TextDecoder()
     let buf=''

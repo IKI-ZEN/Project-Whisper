@@ -34,6 +34,15 @@ describe('chatPageHtml', () => {
     assert.ok(html.includes('<!DOCTYPE html>'))
     assert.ok(html.includes(NONCE))
   })
+
+  it('never puts the session token in a URL query string (CWE-598)', () => {
+    // Session tokens must travel in the X-Session-Token header, not the URL,
+    // so they cannot leak into browser history or access logs.
+    const html = chatPageHtml(NONCE)
+    assert.ok(!html.includes("'&token='"), 'token must not be appended to any URL')
+    assert.ok(!html.includes('&token='),   'token must not appear in a query string')
+    assert.ok(html.includes('X-Session-Token'), 'token must be sent as a request header')
+  })
 })
 
 describe('dashboardHtml', () => {
