@@ -84,7 +84,7 @@ export interface Env {
   IDEOGRAM_API_KEY?: string
   CARTESIA_API_KEY?: string
   SIGNING_SECRET?: string
-  ALLOWED_ORIGINS?: string   // comma-separated origins, or '*' (default)
+  ALLOWED_ORIGINS?: string   // comma-separated origins; required for browser API clients (no default — omitting blocks all cross-origin requests)
 
   // AI Search — managed semantic search (optional; provisioned in CF dashboard)
   AI_SEARCH?: {

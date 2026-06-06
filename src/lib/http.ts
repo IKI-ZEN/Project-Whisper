@@ -96,7 +96,7 @@ export function stripTrustHeaders(req: Request): Request {
 }
 
 function corsHeaders(req: Request, env: Env): Record<string, string> {
-  const allowed = (env.ALLOWED_ORIGINS ?? '*').split(',').map(s => s.trim())
+  const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean)
   const origin  = req.headers.get('Origin') ?? ''
   const allow   = allowed.includes('*') ? '*'
     : allowed.includes(origin) ? origin
@@ -185,6 +185,19 @@ export async function listAllKV<T>(ns: KVNamespace, prefix: string): Promise<KVN
   return keys
 }
 
+// Exhaust all pages of an R2 list() call and return every object. R2 caps each
+// page at 1000 keys, so a single list() silently drops objects past the first
+// page — always use this when completeness matters (listing, deletion cleanup).
+export async function listAllR2(bucket: R2Bucket, prefix: string): Promise<R2Object[]> {
+  let result = await bucket.list({ prefix })
+  const objects = [...result.objects]
+  while (result.truncated) {
+    result = await bucket.list({ prefix, cursor: result.cursor })
+    objects.push(...result.objects)
+  }
+  return objects
+}
+
 export class Router {
   private readonly routes: Route[] = []
 
@@ -267,8 +280,8 @@ export class Router {
     for (const [k, v] of Object.entries(cors)) headers.set(k, v)
     headers.set('X-Request-ID',          requestId)
     headers.set('X-Content-Type-Options', 'nosniff')
-    headers.set('X-Frame-Options',        'DENY')
-    headers.set('Referrer-Policy',        'strict-origin-when-cross-origin')
+    if (!headers.has('X-Frame-Options')) headers.set('X-Frame-Options', 'DENY')
+    if (!headers.has('Referrer-Policy'))  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
     headers.set('Permissions-Policy',     'camera=(), microphone=(), geolocation=()')
     headers.set('X-XSS-Protection',       '0')
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers })

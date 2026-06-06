@@ -1,6 +1,6 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit, listAllR2 } from '../lib/http'
 import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'
 import { doFetch } from './sandbox'
 import { scan } from '../lib/guard'
@@ -10,7 +10,7 @@ import {
   IMAGE_MAX_BYTES, ALLOWED_IMAGE_TYPES,
   IMAGE_RATE_LIMIT_WINDOW_MS, IMAGE_RATE_LIMIT_MAX,
   EMAIL_RATE_LIMIT_WINDOW_MS, EMAIL_RATE_LIMIT_MAX,
-  MAX_EMAIL_SCAN_CHARS,
+  MAX_EMAIL_SCAN_CHARS, MAX_EMAIL_SUBJECT_LEN,
 } from '../lib/constants'
 
 // ── AppStateDO helpers ────────────────────────────────────────────────────────
@@ -88,13 +88,7 @@ const listImages: Handler = async (_req, env, params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid app id'), 422)
 
-  const prefix = `apps/${id}/images/`
-  let r2 = await env.FILES.list({ prefix })
-  const objects = [...r2.objects]
-  while (r2.truncated) {
-    r2 = await env.FILES.list({ prefix, cursor: r2.cursor })
-    objects.push(...r2.objects)
-  }
+  const objects = await listAllR2(env.FILES, `apps/${id}/images/`)
   const images = objects.map(o => ({
     imageId:     o.key.split('/').pop() ?? '',
     name:        o.customMetadata?.name        ?? '',
@@ -174,7 +168,7 @@ const sendEmail: Handler = async (req, env, params) => {
     await env.SEND_EMAIL.send({
       from:    env.EMAIL_FROM_ADDRESS,
       to,
-      subject: subject.slice(0, 256),
+      subject: subject.slice(0, MAX_EMAIL_SUBJECT_LEN),
       text,
       ...(html !== undefined ? { html } : {}),
     })

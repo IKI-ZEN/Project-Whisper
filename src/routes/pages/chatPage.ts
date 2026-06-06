@@ -196,30 +196,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <div id="ctx-export" class="ctx-item" role="menuitem" tabindex="-1">Export JSON</div>
   <div id="ctx-delete" class="ctx-item danger" role="menuitem" tabindex="-1">Delete</div>
 </div>
+<script type="module" nonce="${nonce}" src="/md.js"></script>
 <script nonce="${nonce}">
 function _esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function _il(s){
-  s=s.replace(/\`([^\`]+)\`/g,(_,c)=>'<code>'+c+'</code>')
-  s=s.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
-  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-  s=s.replace(/\*([^*\n]+?)\*/g,'<em>$1</em>')
-  s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,(_,t,u)=>'<a href="'+u+'" rel="noopener noreferrer" target="_blank">'+t+'</a>')
-  return s
-}
-function _renderMd(text){
-  const lines=text.split('\\n'),out=[];let i=0
-  while(i<lines.length){
-    const raw=lines[i]
-    if(raw.startsWith('\`\`\`')){const code=[];i++;while(i<lines.length&&!lines[i].startsWith('\`\`\`')){code.push(_esc(lines[i]));i++}i++;out.push('<pre><code>'+code.join('\\n')+'</code></pre>');continue}
-    const hm=raw.match(/^(#{1,3})\s+(.+)/);if(hm){out.push('<h'+hm[1].length+'>'+_il(_esc(hm[2]))+'</h'+hm[1].length+'>');i++;continue}
-    if(raw.startsWith('> ')){out.push('<blockquote>'+_il(_esc(raw.slice(2)))+'</blockquote>');i++;continue}
-    if(raw.startsWith('- ')||raw.startsWith('* ')){const it=[];while(i<lines.length&&(lines[i].startsWith('- ')||lines[i].startsWith('* '))){it.push('<li>'+_il(_esc(lines[i].slice(2)))+'</li>');i++}out.push('<ul>'+it.join('')+'</ul>');continue}
-    if(/^\d+\.\s/.test(raw)){const it=[];while(i<lines.length&&/^\d+\.\s/.test(lines[i])){const m=lines[i].match(/^\d+\.\s+(.+)/);it.push('<li>'+_il(_esc(m?.[1]||''))+'</li>');i++}out.push('<ol>'+it.join('')+'</ol>');continue}
-    if(raw.trim()===''){out.push('');i++;continue}
-    out.push('<p>'+_il(_esc(raw))+'</p>');i++
-  }
-  return out.join('\\n')
-}
+// Markdown rendering is provided by /md.js as window.renderMd (mirrors src/lib/markdown.ts).
 
 const LS_SID='whisper:sandboxId'
 const LS_SESS='whisper:sessions'
@@ -240,7 +220,7 @@ function addMsg(role,text){
   const ce=document.getElementById('empty-chat');if(ce)ce.remove()
   const el=document.createElement('div')
   el.className='msg '+role
-  if(role==='assistant'){el.innerHTML=_renderMd(text)}else{el.textContent=text}
+  if(role==='assistant'){el.innerHTML=window.renderMd(text)}else{el.textContent=text}
   document.getElementById('messages').appendChild(el)
   scroll()
   return el
@@ -283,6 +263,14 @@ async function issueSessionToken(sessId){
   }catch{}
 }
 
+// Build request headers carrying the current session token (header, never URL).
+function sessHeaders(base){
+  const h=Object.assign({},base||{})
+  const tok=sessionTokens[activeSession]
+  if(tok)h['X-Session-Token']=tok
+  return h
+}
+
 async function newThread(){
   const id='sess-'+Date.now()
   const name='Thread '+(sessions.length+1)
@@ -298,9 +286,9 @@ async function newThread(){
 async function loadHistory(){
   if(!sandboxId)return
   try{
-    const tok=sessionTokens[activeSession]
-    const histUrl='/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(activeSession)+(tok?'&token='+encodeURIComponent(tok):'')
-    const r=await fetch(histUrl)
+    const histUrl='/api/sandbox/'+sandboxId+'/history?sessionId='+encodeURIComponent(activeSession)
+    let r=await fetch(histUrl,{headers:sessHeaders()})
+    if(r.status===401){await issueSessionToken(activeSession);r=await fetch(histUrl,{headers:sessHeaders()})}
     const d=await r.json()
     if(!d.ok)return
     const msgs=document.getElementById('messages')
@@ -310,7 +298,7 @@ async function loadHistory(){
       const el=document.createElement('div')
       el.className='msg '+m.role
       const content=typeof m.content==='string'?m.content:''
-      if(m.role==='assistant'){el.innerHTML=_renderMd(content)}else{el.textContent=content}
+      if(m.role==='assistant'){el.innerHTML=window.renderMd(content)}else{el.textContent=content}
       msgs.appendChild(el)
     }
     scroll()
@@ -344,13 +332,10 @@ async function send(){
   const el=addMsg('assistant','')
   el.classList.add('typing')
   try{
-    const tok=sessionTokens[activeSession]
-    const streamUrl='/api/sandbox/'+sandboxId+'/stream?sessionId='+encodeURIComponent(activeSession)+(tok?'&token='+encodeURIComponent(tok):'')
-    const res=await fetch(streamUrl,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:text})
-    })
+    const streamUrl='/api/sandbox/'+sandboxId+'/stream'
+    const doStream=function(){return fetch(streamUrl,{method:'POST',headers:sessHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:text,sessionId:activeSession})})}
+    let res=await doStream()
+    if(res.status===401){await issueSessionToken(activeSession);res=await doStream()}
     const reader=res.body.getReader()
     const dec=new TextDecoder()
     let buf=''
@@ -371,7 +356,7 @@ async function send(){
             if(ev.error){el.textContent+='[Error: '+ev.error+']';break}
             if(typeof ev.response==='string'){
               el._buf=(el._buf||'')+ev.response
-              el.innerHTML=_renderMd(el._buf)
+              el.innerHTML=window.renderMd(el._buf)
               el.classList.remove('typing')
               scroll()
             }

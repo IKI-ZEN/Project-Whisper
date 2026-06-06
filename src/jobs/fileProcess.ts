@@ -1,6 +1,7 @@
 import type { Env, WhisperJob } from '../types/env'
 import { embed } from '../lib/ai'
 import { scan } from '../lib/guard'
+import { listAllR2 } from '../lib/http'
 import { MAX_PDF_INFLATED } from '../lib/constants'
 import { now } from '../lib/utils'
 
@@ -223,11 +224,11 @@ export async function processEmbeddingBatch(job: WhisperJob, env: Env): Promise<
   const { docIds } = (job.payload ?? {}) as EmbeddingBatchPayload
 
   const prefix = `sandboxes/${sandboxId}/documents/`
-  const listed = await env.FILES.list({ prefix })
+  const objects = await listAllR2(env.FILES, prefix)
 
   const targets = docIds
-    ? listed.objects.filter(o => docIds.includes(o.key.slice(prefix.length)))
-    : listed.objects
+    ? objects.filter(o => docIds.includes(o.key.slice(prefix.length)))
+    : objects
 
   for (const obj of targets) {
     const meta = (obj.customMetadata ?? {}) as Record<string, string>

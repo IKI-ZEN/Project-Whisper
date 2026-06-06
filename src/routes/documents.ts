@@ -1,6 +1,6 @@
 import type { Env, WhisperJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
-import { json, ok, err, checkRateLimit, rateLimitByIp, parseBodyOptional } from '../lib/http'
+import { json, ok, err, checkRateLimit, rateLimitByIp, parseBodyOptional, listAllR2 } from '../lib/http'
 import { scan } from '../lib/guard'
 import { newId, now, isUUID } from '../lib/utils'
 import { MAX_DOCUMENT_BYTES, GUARD_SCAN_SLICE_BYTES, MAX_VECTOR_CHUNKS, REINDEX_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, DOCUMENT_UPLOAD_RATE_LIMIT_MAX, DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW } from '../lib/constants'
@@ -108,8 +108,8 @@ const list: Handler = async (_req, env, params: Params) => {
   if (!isUUID(sandboxId)) return json(err('Invalid sandbox id'), 400)
   if (!await sandboxExists(env, sandboxId)) return json(err('Sandbox not found'), 404)
 
-  const listed = await env.FILES.list({ prefix: `sandboxes/${sandboxId}/documents/` })
-  const docs = listed.objects.map(obj => ({
+  const objects = await listAllR2(env.FILES, `sandboxes/${sandboxId}/documents/`)
+  const docs = objects.map(obj => ({
     docId:      obj.key.split('/').pop() ?? obj.key,
     name:       (obj.customMetadata?.name as string | undefined) ?? 'untitled',
     mimeType:   (obj.customMetadata?.mimeType as string | undefined) ?? 'text/plain',

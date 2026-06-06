@@ -1,6 +1,10 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { renderMarkdown } from './markdown.ts'
+// The client renderer served to the browser. It must produce identical output
+// to the server renderer above — this import lets us assert that in CI.
+const { renderMarkdown: renderMarkdownClient } =
+  await import('../../public/md.js') as { renderMarkdown: (s: string) => string }
 
 describe('renderMarkdown — headings', () => {
   test('h1', () => {
@@ -177,4 +181,24 @@ describe('renderMarkdown — paragraph and empty input', () => {
     const out = renderMarkdown('# H\nparagraph')
     assert.equal(out, '<h1>H</h1>\n<p>paragraph</p>')
   })
+})
+
+describe('public/md.js stays identical to the server renderer', () => {
+  // Every input the server renderer is tested against must produce identical
+  // output from the client renderer, so the two can never silently diverge.
+  const fixtures = [
+    '# Hello', '## **Title**', '### Sub',
+    '**bold**', '__bold__', '*italic*', '_italic_', '***bi***', '___bi___',
+    '`code`', '[example](https://example.com)', '[click](javascript:alert(1))',
+    'a & b', 'a < b', '# say "hi"', '<script>alert(1)</script>',
+    '```js\nconsole.log(1)\n```', '```\nhello\n```', '```\n<b>bold</b>\n```',
+    '- alpha\n- beta', '* one\n* two', '1. first\n2. second\n3. third',
+    '> quoted text', '---', '***', '___',
+    'hello world', '', 'a\n\nb', '# H\nparagraph',
+  ]
+  for (const input of fixtures) {
+    test(`matches for ${JSON.stringify(input).slice(0, 40)}`, () => {
+      assert.equal(renderMarkdownClient(input), renderMarkdown(input))
+    })
+  }
 })

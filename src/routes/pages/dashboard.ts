@@ -141,7 +141,7 @@ async function load(){
         const m=md.data
         totalRuns+=m.totalRuns||0;totalTin+=m.totalTokensIn||0;totalTout+=m.totalTokensOut||0
         if(m.avgLatencyMs)latencies.push(m.avgLatencyMs)
-        ;(m.modelBreakdown||[]).forEach(function(b){const k=b.model||'unknown';modelMap[k]=(modelMap[k]||0)+(b.count||0)})
+        ;(m.modelBreakdown||[]).forEach(function(b){const k=b.model||'unknown';modelMap[k]=(modelMap[k]||0)+(b.runs||0)})
       }catch{}
     }))
     document.getElementById('stat-runs').textContent=totalRuns.toLocaleString();document.getElementById('stat-runs').className='stat-value'

@@ -3,8 +3,9 @@ import type { Handler, Params } from '../lib/http'
 import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV, rateLimitByIp, readIdentity } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, parsePatchSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
-import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, SECURITY_REPORT_WINDOW_MS } from '../lib/constants'
+import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, SECURITY_REPORT_WINDOW_MS, SESSION_TOKEN_TTL_MS } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
+import { requireAccess } from '../lib/access'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
 import { saveToVault } from '../lib/analysis'
 import { logSandboxEvent } from '../lib/events'
@@ -51,6 +52,11 @@ export function identityHeader(req: Request): Record<string, string> {
 
 // Validate session token when SIGNING_SECRET is set and a token is supplied.
 // Missing token is always allowed (backwards compatible — token is opt-in).
+// The token is read from the X-Session-Token header (never the URL query string,
+// which would leak into browser history and access logs — CWE-598).
+// Format: "{expiresAt}.{hmac}" over "{sandboxId}:{sessionId}:{expiresAt}". The
+// embedded expiry bounds the replay window of any leaked token (CWE-613). On a
+// 401 the client reissues, so long-lived threads keep working transparently.
 async function validateSessionToken(
   sandboxId: string,
   sessionId: string | undefined,
@@ -58,9 +64,14 @@ async function validateSessionToken(
   env: Env,
 ): Promise<Response | null> {
   if (!env.SIGNING_SECRET || !sessionId) return null
-  const token = new URL(req.url).searchParams.get('token')
+  const token = req.headers.get('X-Session-Token')
   if (!token) return null
-  const valid = await verifySignature(`${sandboxId}:${sessionId}`, token, env.SIGNING_SECRET)
+  const dot = token.indexOf('.')
+  if (dot < 0) return json(err('Invalid session token'), 401)
+  const expiresAt = parseInt(token.slice(0, dot), 10)
+  const sig       = token.slice(dot + 1)
+  if (isNaN(expiresAt) || now() > expiresAt) return json(err('Session token expired'), 401)
+  const valid = await verifySignature(`${sandboxId}:${sessionId}:${expiresAt}`, sig, env.SIGNING_SECRET)
   if (!valid) return json(err('Invalid session token'), 401)
   return null
 }
@@ -317,8 +328,16 @@ const history: Handler = async (req, env, params: Params) => {
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   const sessionId = new URL(req.url).searchParams.get('sessionId') ?? undefined
 
+  // Read gate (fail-closed when signing is configured). Reading a conversation
+  // requires EITHER a valid session token — the capability the app client holds —
+  // OR a valid Cloudflare Access identity (operators/dashboards). Without this,
+  // GET history is unauthenticated in-worker and would expose the default thread.
   const tokenDeny = await validateSessionToken(id, sessionId, req, env)
   if (tokenDeny) return tokenDeny
+  if (env.SIGNING_SECRET && !req.headers.get('X-Session-Token')) {
+    const { deny } = await requireAccess(req, env)
+    if (deny) return deny
+  }
 
   const doUrl = sessionId ? `history?sessionId=${encodeURIComponent(sessionId)}` : 'history'
   return doFetch(stub(env, id), doUrl, 'GET')
@@ -470,7 +489,10 @@ const issueSession: Handler = async (req, env, params: Params) => {
   if (!p.ok) return p.response
   const sessionId = p.data.sessionId ?? newId()
 
-  const token = env.SIGNING_SECRET ? await signPayload(`${id}:${sessionId}`, env.SIGNING_SECRET) : null
+  // Token carries an embedded expiry so a leaked token cannot be replayed forever.
+  const expiresAt = now() + SESSION_TOKEN_TTL_MS
+  const sig   = env.SIGNING_SECRET ? await signPayload(`${id}:${sessionId}:${expiresAt}`, env.SIGNING_SECRET) : null
+  const token = sig ? `${expiresAt}.${sig}` : null
   return json(ok({ sessionId, token }))
 }
 

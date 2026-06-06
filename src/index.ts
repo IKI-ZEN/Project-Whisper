@@ -1,6 +1,6 @@
 import type { Env, WhisperJob } from './types/env'
 import { Router, json, ok } from './lib/http'
-import { now } from './lib/utils'
+import { now, isUUID } from './lib/utils'
 import { logSandboxEvent } from './lib/events'
 import { aiRoutes }              from './routes/ai'
 import { sandboxRoutes, run, stream } from './routes/sandbox'
@@ -75,9 +75,15 @@ export default {
     if (req.headers.get('Upgrade') === 'websocket') {
       const { pathname } = new URL(req.url)
       const sandboxWs = pathname.match(/^\/api\/sandbox\/([^/]+)\/ws$/)
-      if (sandboxWs) return env.SANDBOX.get(env.SANDBOX.idFromName(sandboxWs[1])).fetch(req)
+      if (sandboxWs) {
+        if (!isUUID(sandboxWs[1])) return new Response(JSON.stringify({ ok: false, error: 'Invalid id' }), { status: 422, headers: { 'Content-Type': 'application/json' } })
+        return env.SANDBOX.get(env.SANDBOX.idFromName(sandboxWs[1])).fetch(req)
+      }
       const builderWs = pathname.match(/^\/api\/v2\/build\/([^/]+)\/ws$/)
-      if (builderWs) return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(builderWs[1])).fetch(req)
+      if (builderWs) {
+        if (!isUUID(builderWs[1])) return new Response(JSON.stringify({ ok: false, error: 'Invalid id' }), { status: 422, headers: { 'Content-Type': 'application/json' } })
+        return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(builderWs[1])).fetch(req)
+      }
     }
     return router.handle(req, env)
   },
