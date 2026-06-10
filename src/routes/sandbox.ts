@@ -76,6 +76,23 @@ async function validateSessionToken(
   return null
 }
 
+// Fail-closed read gate for conversation data (GET /history and /export-session).
+// Reading a conversation requires EITHER a valid session token — the capability
+// the app client holds and auto-reissues — OR a valid Cloudflare Access identity
+// (operators / dashboards). Without this, these GETs are unauthenticated in-worker
+// and would expose the default thread to anyone who reaches the worker directly.
+async function conversationReadGate(
+  id: string, sessionId: string | undefined, req: Request, env: Env,
+): Promise<Response | null> {
+  const tokenDeny = await validateSessionToken(id, sessionId, req, env)
+  if (tokenDeny) return tokenDeny
+  if (env.SIGNING_SECRET && !req.headers.get('X-Session-Token')) {
+    const { deny } = await requireAccess(req, env)
+    if (deny) return deny
+  }
+  return null
+}
+
 export async function sandboxExists(env: Env, id: string): Promise<boolean> {
   return (await env.SANDBOX_REGISTRY.get(`${SANDBOX_KEY_PREFIX}${id}`)) !== null
 }
@@ -328,16 +345,8 @@ const history: Handler = async (req, env, params: Params) => {
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
   const sessionId = new URL(req.url).searchParams.get('sessionId') ?? undefined
 
-  // Read gate (fail-closed when signing is configured). Reading a conversation
-  // requires EITHER a valid session token — the capability the app client holds —
-  // OR a valid Cloudflare Access identity (operators/dashboards). Without this,
-  // GET history is unauthenticated in-worker and would expose the default thread.
-  const tokenDeny = await validateSessionToken(id, sessionId, req, env)
-  if (tokenDeny) return tokenDeny
-  if (env.SIGNING_SECRET && !req.headers.get('X-Session-Token')) {
-    const { deny } = await requireAccess(req, env)
-    if (deny) return deny
-  }
+  const gate = await conversationReadGate(id, sessionId, req, env)
+  if (gate) return gate
 
   const doUrl = sessionId ? `history?sessionId=${encodeURIComponent(sessionId)}` : 'history'
   return doFetch(stub(env, id), doUrl, 'GET')
@@ -500,9 +509,15 @@ const issueSession: Handler = async (req, env, params: Params) => {
 
 const exportSession: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
 
   const sessionId = new URL(req.url).searchParams.get('sessionId') ?? 'default'
+
+  // Same fail-closed gate as GET /history — this returns the same conversation data.
+  const gate = await conversationReadGate(id, sessionId, req, env)
+  if (gate) return gate
+
   const doUrl = `history?sessionId=${encodeURIComponent(sessionId)}`
   const res = await doFetch(stub(env, id), doUrl, 'GET')
   const body = await res.json() as { ok: boolean; data: unknown[] }

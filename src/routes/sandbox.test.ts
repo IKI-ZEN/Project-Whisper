@@ -157,3 +157,39 @@ describe('GET /history read gate when Cloudflare Access is configured', () => {
     assert.equal(res.status, 200)
   })
 })
+
+// /export-session returns the same conversation data as /history and must share
+// the same fail-closed gate (regression: it previously had no gate at all).
+describe('GET /export-session shares the conversation read gate', () => {
+  const exportSession = findHandler(sandboxRoutes, 'GET', '/api/sandbox/:id/export-session')
+  function exportAccessEnv() {
+    const env = sessionEnv() as unknown as Record<string, unknown>
+    env.CF_ACCESS_AUD         = 'test-aud'
+    env.CF_ACCESS_TEAM_DOMAIN = 'team.cloudflareaccess.test'
+    return env as unknown as Parameters<typeof exportSession>[1]
+  }
+  const expReq = (token?: string) =>
+    new Request(`https://x/api/sandbox/${SID}/export-session?sessionId=s1`,
+      token ? { headers: { 'X-Session-Token': token } } : undefined)
+
+  it('rejects a non-UUID id with 422', async () => {
+    const res = await exportSession(new Request('https://x/api/sandbox/nope/export-session'), sessionEnv(), { id: 'nope' })
+    assert.equal(res.status, 422)
+  })
+
+  it('no token and no Access identity → 401', async () => {
+    const res = await exportSession(expReq(), exportAccessEnv(), { id: SID })
+    assert.equal(res.status, 401)
+  })
+
+  it('a valid session token is accepted (not 401)', async () => {
+    const env = exportAccessEnv()
+    const issued = await issue(
+      new Request(`https://x/api/sandbox/${SID}/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 's1' }) }),
+      env, { id: SID },
+    )
+    const { data } = await issued.json() as { data: { token: string } }
+    const res = await exportSession(expReq(data.token), env, { id: SID })
+    assert.notEqual(res.status, 401)
+  })
+})
