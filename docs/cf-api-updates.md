@@ -238,4 +238,63 @@ For Project Whisper's use case (inbound email → sandbox runs), the MX/Inline m
 
 ---
 
+## AI Search — Overview (supplements Namespaces entry above)
+
+**Source:** CF AI Search overview doc (supplied 2026-06-11)
+**Affects:** `src/types/env.d.ts`, `src/routes/vault.ts`, `src/jobs/fileProcess.ts`, `docs/cloudflare-ai-search.md`
+**Cross-reference:** The existing `docs/cloudflare-ai-search.md` reference doc is mostly current; update notes are at the bottom of this entry.
+
+### Resolves open questions from the Namespaces entry
+
+| Question | Answer |
+|----------|--------|
+| Available on all plans? | **Yes.** "Available on all plans" — not enterprise-only. |
+| Does `upsert()` / `delete()` still exist? | Not confirmed by this doc. Automated indexing is the promoted pattern for new instances; manual upsert may still exist but is not mentioned in the overview. Needs the instance methods reference doc to confirm. |
+| What are `chatCompletions()` / `items`? | Not addressed in this doc — needs the instance API reference. |
+
+### New information not in the Namespaces entry
+
+**Automated indexing — changes the `upsert()` pattern.**
+The overview describes continuous re-indexing from a configured data source. The current `vault.ts` does `void env.AI_SEARCH.upsert([...])` on every vault record creation. For new instances (post April 16, 2026), the promoted pattern is to configure a data source and let AI Search pull from it automatically, rather than pushing individual records from the Worker.
+
+Implication: the manual upsert at `src/routes/vault.ts:101` may be the wrong long-term pattern. If AI Search can be pointed at a D1 table or R2 bucket as its data source, the Worker no longer needs to maintain index sync at all. Needs the data source configuration docs to confirm whether D1 is a supported source.
+
+**Built-in MCP endpoint per instance — significant architectural opportunity.**
+Every AI Search instance includes a built-in MCP endpoint for AI agents. This is not mentioned in the Namespaces entry and changes the picture considerably for Project Whisper:
+
+- Each sandbox, if given its own AI Search instance (per-namespace approach), automatically gets an MCP endpoint that agents inside the sandbox could call as a tool.
+- The `executePipeline` runner in `src/lib/pipeline.ts` could add an `ai-search` node type that calls the instance's MCP endpoint, making document retrieval a first-class pipeline node.
+- The current document RAG architecture (`embed → Vectorize search → inject chunks → complete`) could be partially replaced by `pipeline node: ai-search-mcp → complete`, with AI Search handling the retrieval internals.
+
+The MCP endpoint also means external agents (outside of Whisper) can query a sandbox's document index directly, which opens a new integration surface.
+
+**Web crawling — new data ingestion path.**
+New instances can index web URLs directly. For Project Whisper's document upload flow (currently R2 + PDF parsing + Vectorize), a URL-based document could skip file upload entirely — just pass a URL to the AI Search instance. Lower-friction for users, and crawling handles re-indexing automatically when the source page updates.
+
+**Hybrid search is available but unused.**
+The current `vault.ts` search calls the old `{ query: string }` shape. Hybrid search (semantic + keyword) is available on the current API and would improve recall for short or specific queries. The `search({ messages })` shape likely exposes hybrid search config — needs the query API docs.
+
+### Current code gaps against the advertised feature set
+
+| Feature | Current state | Gap |
+|---------|--------------|-----|
+| Search API shape | `{ query: string, filters }` (old) | Should be `{ messages: [{ role, content }] }` |
+| Indexing | Manual `upsert()` on write | Automated data source indexing not configured |
+| Hybrid search | Not used | Available, would improve vault search quality |
+| MCP endpoint | Not connected to pipeline or agent tools | Available per-instance, no code to call it |
+| Web crawling | Not used; R2 upload only | Available as alternative ingestion for URL-based docs |
+
+### Notes on `docs/cloudflare-ai-search.md`
+
+The existing reference doc (`docs/cloudflare-ai-search.md:5`) already notes: "Instances created after April 16, 2026 include managed storage, a vector index, and web crawling" — so that fact is current. The doc may not yet cover the MCP endpoint or automated indexing as distinct features. Worth a pass once the full feature set is confirmed by the instance methods reference doc.
+
+### Recommended actions (additions to Namespaces entry)
+
+1. Fetch the AI Search instance methods reference doc to confirm `upsert()`/`delete()` status, `chatCompletions()` signature, and `items` shape.
+2. Fetch the data source configuration docs to confirm whether D1 is a supported automated indexing source.
+3. Once (1) and (2) are confirmed, update `env.d.ts` `AI_SEARCH` type in a single pass covering both the correct search signature and the complete instance methods.
+4. Evaluate adding `ai-search-mcp` node type to `src/lib/pipeline.ts` as a retrieval step — zero-dependency (uses the binding, not an external call).
+
+---
+
 _Entries added in chronological order as docs are supplied._
