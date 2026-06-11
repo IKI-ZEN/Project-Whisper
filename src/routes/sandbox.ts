@@ -172,7 +172,14 @@ const getConfig: Handler = async (_req, env, params: Params) => {
     expirationTtl: SANDBOX_TTL,
     metadata: entry.metadata ?? undefined,
   })
-  return doFetch(stub(env, id), 'config', 'GET')
+  // Never expose the systemPrompt over this ungated GET — it is encrypted at rest
+  // precisely because it is sensitive. Replace it with a presence flag; the signed
+  // /export path (fail-closed) is the gated way to read the prompt itself.
+  const res  = await doFetch(stub(env, id), 'config', 'GET')
+  const body = await res.json() as { ok: boolean; data?: Record<string, unknown> }
+  if (!body.ok || !body.data) return json(body, res.status)
+  const { systemPrompt, ...rest } = body.data
+  return json(ok({ ...rest, hasSystemPrompt: typeof systemPrompt === 'string' && systemPrompt.length > 0 }))
 }
 
 const fingerprint: Handler = async (_req, env, params: Params) => {
