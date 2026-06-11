@@ -1,6 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, sseEvent, sseResponse, parseQueryInt, rateLimitByIp } from '../lib/http'
+import { requireAccess } from '../lib/access'
 import { now } from '../lib/utils'
 import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW } from '../lib/constants'
 
@@ -11,6 +12,8 @@ import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX, MONITOR_RATE_LIMIT_MAX, MONIT
 const stream: Handler = async (req: Request, env: Env) => {
   const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
   if (rl) return rl
+  const { deny } = await requireAccess(req, env)
+  if (deny) return deny
   try {
     const url = new URL(req.url)
     const since         = parseQueryInt(url.searchParams, 'since', now() - 60_000)
@@ -78,6 +81,8 @@ const stream: Handler = async (req: Request, env: Env) => {
 const audit: Handler = async (req: Request, env: Env) => {
   const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
   if (rl) return rl
+  const { deny: auditDeny } = await requireAccess(req, env)
+  if (auditDeny) return auditDeny
   try {
     const url           = new URL(req.url)
     const sandboxId     = url.searchParams.get('sandbox_id') ?? null
@@ -139,6 +144,8 @@ const audit: Handler = async (req: Request, env: Env) => {
 const patterns: Handler = async (req: Request, env: Env) => {
   const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
   if (rl) return rl
+  const { deny: patternsDeny } = await requireAccess(req, env)
+  if (patternsDeny) return patternsDeny
   try {
     const url = new URL(req.url)
     const since      = parseQueryInt(url.searchParams, 'since', now() - 7 * 24 * 60 * 60 * 1000)

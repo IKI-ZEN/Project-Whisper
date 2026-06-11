@@ -370,10 +370,13 @@ const del: Handler = async (req, env, params: Params) => {
   return json(ok({ deleted: true }))
 }
 
-const exportConfig: Handler = async (_req, env, params: Params) => {
+const exportConfig: Handler = async (req, env, params: Params) => {
   const id = params.id ?? ''
   if (!isUUID(id)) return json(err('Invalid sandbox id'), 422)
   if (!await sandboxExists(env, id)) return json(err('Sandbox not found'), 404)
+  // systemPrompt is encrypted at rest and must not be readable without authentication.
+  const { deny } = await requireAccess(req, env)
+  if (deny) return deny
   const res = await doFetch(stub(env, id), 'config', 'GET')
   const body = await res.json() as { ok: boolean; data: Omit<SandboxConfig, 'memory'> }
   if (!body.ok) return json(err('Failed to load config'), 500)
