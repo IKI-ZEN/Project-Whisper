@@ -348,7 +348,11 @@ These apply to both setup tracks.
 
 ## Required: Cloudflare Access (Zero Trust)
 
-The Worker will not serve any requests without this. `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` must be set or every HTTP request returns `503`. Once configured, all `POST`/`PATCH`/`DELETE` endpoints under `/api/` require a valid Access JWT — including the raw AI inference routes. Explicitly public carve-outs: `GET` (read-only) routes, `/api/sandbox/:id/run|stream`, `/s/:id/run|stream`, `/api/app/:id/images|email`, and `/api/csp-report`.
+The Worker will not serve any requests without this. `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` must be set or every HTTP request returns `503`. Once configured, all `POST`/`PATCH`/`DELETE` endpoints under `/api/` require a valid Access JWT — including the raw AI inference routes.
+
+Sensitive `GET` endpoints are also fail-closed behind Access: `GET /api/sandbox/:id/export` (returns the plaintext system prompt), `GET /api/sandbox/:id/history` and `/export-session` (conversation data; a valid session token also satisfies the gate), `GET /api/vault`, `/api/vault/export.jsonl`, `/api/vault/search` (raw prompts/responses and versioned system prompts), and `GET /api/monitor/stream|audit|patterns` (audit trail and guard telemetry).
+
+Explicitly public carve-outs: the remaining `GET` (read-only) routes, `/api/sandbox/:id/run|stream`, `/s/:id/run|stream`, `/api/app/:id/images|email`, and `/api/csp-report`.
 
 ### Via Dashboard
 
