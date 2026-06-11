@@ -17,7 +17,7 @@ import type { PipelineNode } from '../lib/schema'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_DESC_LEN        = MAX_DESCRIPTION_LEN
-const VALID_TOOLS         = ['entropy', 'sweep', 'sensitivity', 'cot', 'pipeline'] as const
+const VALID_TOOLS         = ['entropy', 'sweep', 'sensitivity', 'cot', 'pipeline', 'guard-rate'] as const
 const VALID_SCHEDULES     = ['hourly', 'daily', 'weekly'] as const
 
 type ProbeTool     = typeof VALID_TOOLS[number]
@@ -205,10 +205,11 @@ function parsePatchProbe(body: unknown): Partial<{
 // Backwards-compatible single-scalar extraction (kept for existing probe_runs rows).
 function extractMetricValue(tool: ProbeTool, result: unknown): number | null {
   const metrics = extractMetrics(tool, result)
-  if (tool === 'entropy')     return metrics.entropy     ?? null
+  if (tool === 'entropy')     return metrics.entropy       ?? null
   if (tool === 'sensitivity') return metrics.avgSimilarity ?? null
-  if (tool === 'sweep')       return metrics.latencyMs   ?? null
-  if (tool === 'cot')         return metrics.avgLatencyMs ?? null
+  if (tool === 'sweep')       return metrics.latencyMs     ?? null
+  if (tool === 'cot')         return metrics.avgLatencyMs  ?? null
+  if (tool === 'guard-rate')  return metrics.count         ?? null
   return null
 }
 
@@ -291,6 +292,29 @@ async function runProbeTool(
     return executePipeline(env.AI, env, prompt, nodes, row.entry_id)
   }
 
+  if (tool === 'guard-rate') {
+    // Counts guard events in a time window for the probe's sandbox.
+    // params.windowMs: lookback window in ms (default: 1 hour)
+    // params.eventType: event type filter (default: 'guard_flag')
+    const windowMs   = typeof params.windowMs   === 'number' ? Math.max(60_000, params.windowMs) : 3_600_000
+    const eventType  = typeof params.eventType  === 'string' ? params.eventType : 'guard_flag'
+    const since      = now() - windowMs
+    // Attempt to scope to sandbox_id from probe params; fall back to unscoped count
+    const sandboxId  = typeof params.sandboxId === 'string' ? params.sandboxId : null
+    let countRow: { count: number } | null
+    if (sandboxId) {
+      countRow = await env.DB.prepare(
+        'SELECT COUNT(*) as count FROM sandbox_events WHERE event_type = ? AND sandbox_id = ? AND created_at >= ?',
+      ).bind(eventType, sandboxId, since).first<{ count: number }>()
+    } else {
+      countRow = await env.DB.prepare(
+        'SELECT COUNT(*) as count FROM sandbox_events WHERE event_type = ? AND created_at >= ?',
+      ).bind(eventType, since).first<{ count: number }>()
+    }
+    const count = countRow?.count ?? 0
+    return { count, windowMs, eventType, sandboxId }
+  }
+
   throw new Error(`Unknown tool: ${String(tool)}`)
 }
 
@@ -318,7 +342,7 @@ function isThresholdBreached(threshold: Record<string, unknown>, metrics: Record
 async function dispatchWebhook(
   env: Env,
   webhookUrl: string,
-  payload: { probeId: string; probeName: string; metricValue: number | null; metrics: Record<string, number>; breachedAt: number },
+  payload: { probeId: string; runId?: string; probeName: string; metricValue: number | null; metrics: Record<string, number>; breachedAt: number },
 ): Promise<void> {
   const body = JSON.stringify(payload)
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -328,6 +352,11 @@ async function dispatchWebhook(
     headers['X-Whisper-Timestamp'] = String(ts)
     headers['X-Whisper-Signature'] = `${WEBHOOK_SIGNATURE_VERSION},sha256=${sig}`
   }
+  // Hash the URL before storing — webhook URL may contain embedded secrets.
+  const urlHashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(webhookUrl))
+  const urlHash    = Array.from(new Uint8Array(urlHashBuf)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+  let statusCode: number | null = null
   await fetch(webhookUrl, {
     method:  'POST',
     headers,
@@ -336,7 +365,13 @@ async function dispatchWebhook(
     // The URL was validated against private ranges at creation time; following a
     // redirect would let the receiver bounce the request past that check (SSRF).
     redirect: 'manual',
-  }).catch(() => { /* fire-and-forget — failure must not affect probe result */ })
+  }).then(r => { statusCode = r.status }).catch(() => { /* network error — statusCode stays null */ })
+
+  // Write delivery receipt so operators can see whether alerts reached receivers.
+  env.DB.prepare(
+    'INSERT INTO webhook_deliveries (id, probe_id, run_id, url_hash, status_code, delivered_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).bind(newId(), payload.probeId, payload.runId ?? '', urlHash, statusCode, now()).run()
+    .catch(() => { /* receipt write must not throw */ })
 }
 
 // ── Shape a probe row for API responses ────────────────────────────────────────
@@ -507,14 +542,15 @@ const runProbe: Handler = async (req: Request, env: Env, params) => {
     await env.DB.prepare('UPDATE probes SET last_run_at = ? WHERE id = ?').bind(ts, probe.id).run()
 
     const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
-    if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
+    const passed    = !isThresholdBreached(threshold, metricsJson)
+    if (probe.webhook_url && !passed) {
       // Awaited (not void): an un-awaited promise can be cancelled when the
       // response finalizes, silently dropping the breach alert. The dispatch
       // is bounded by PROBE_WEBHOOK_TIMEOUT_MS and never throws.
-      await dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
+      await dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, runId, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
     }
 
-    return json(ok({ runId, metricValue, metrics: metricsJson, result }))
+    return json(ok({ runId, passed, metricValue, metrics: metricsJson, result }))
   } catch (e) {
     return json(err('Probe run failed', String(e)), 500)
   }
@@ -587,7 +623,7 @@ export async function runProbeById(id: string, env: Env): Promise<void> {
   const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
   if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
     // Awaited for the same reason as the run handler — see dispatchWebhook.
-    await dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
+    await dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, runId, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
   }
 }
 

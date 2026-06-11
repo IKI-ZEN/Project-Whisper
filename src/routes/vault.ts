@@ -189,8 +189,48 @@ const updateTags: Handler = async (req: Request, env: Env, params: Params) => {
   }
 }
 
+// Supported fine-tuning export formats
+const EXPORT_FORMATS = ['openai', 'anthropic', 'hf'] as const
+type ExportFormat = typeof EXPORT_FORMATS[number]
+
+interface VaultExportRow {
+  id:            string
+  prompt:        string
+  response:      string
+  model:         string
+  system_prompt: string
+}
+
+function formatRow(row: VaultExportRow, format: ExportFormat): string {
+  const sys = row.system_prompt || ''
+  if (format === 'openai') {
+    const messages: Array<{ role: string; content: string }> = []
+    if (sys) messages.push({ role: 'system', content: sys })
+    messages.push({ role: 'user',      content: row.prompt   })
+    messages.push({ role: 'assistant', content: row.response })
+    return JSON.stringify({ messages })
+  }
+  if (format === 'anthropic') {
+    const out: Record<string, unknown> = {
+      messages: [
+        { role: 'user',      content: row.prompt   },
+        { role: 'assistant', content: row.response },
+      ],
+    }
+    if (sys)       out.system = sys
+    if (row.model) out.model  = row.model
+    return JSON.stringify(out)
+  }
+  // hf — HuggingFace instruction format
+  const parts: string[] = []
+  if (sys) parts.push(`SYSTEM: ${sys}`)
+  parts.push(`USER: ${row.prompt}`, `ASSISTANT: ${row.response}`)
+  return JSON.stringify({ text: parts.join('\n') })
+}
+
 // GET /api/vault/export.jsonl
 // Streams matching records as newline-delimited JSON (JSONL / NDJSON).
+// ?format=openai|anthropic|hf  (default: openai)
 const exportJsonl: Handler = async (req: Request, env: Env) => {
   // Same sensitivity as the list read — see the gate comment there.
   const { deny } = await requireAccess(req, env)
@@ -203,6 +243,11 @@ const exportJsonl: Handler = async (req: Request, env: Env) => {
     const since  = parseQueryInt(url.searchParams, 'since', 0)
     const until  = parseQueryInt(url.searchParams, 'until', now())
     const q      = url.searchParams.get('q') ?? null
+    const rawFmt = url.searchParams.get('format') ?? 'openai'
+    if (!(EXPORT_FORMATS as readonly string[]).includes(rawFmt)) {
+      return json(err(`format must be one of: ${EXPORT_FORMATS.join(', ')}`), 422)
+    }
+    const format = rawFmt as ExportFormat
 
     const conditions: string[] = ['created_at >= ?', 'created_at <= ?']
     const params: unknown[]    = [since, until]
@@ -226,18 +271,12 @@ const exportJsonl: Handler = async (req: Request, env: Env) => {
 
         while (fetched < MAX_EXPORT_ROWS) {
           const batchLimit = Math.min(batchSize, MAX_EXPORT_ROWS - fetched)
-          const query = `SELECT id, prompt, response FROM vault_records WHERE ${where} ORDER BY created_at ASC LIMIT ? OFFSET ?`
+          const query = `SELECT id, prompt, response, model, system_prompt FROM vault_records WHERE ${where} ORDER BY created_at ASC LIMIT ? OFFSET ?`
           const result = await env.DB.prepare(query).bind(...params, batchLimit, offset).all()
-          const rows = (result.results ?? []) as Array<{ id: string; prompt: string; response: string }>
+          const rows = (result.results ?? []) as unknown as VaultExportRow[]
 
           for (const row of rows) {
-            const line = JSON.stringify({
-              messages: [
-                { role: 'user',      content: row.prompt   },
-                { role: 'assistant', content: row.response },
-              ],
-            })
-            await writer.write(enc.encode(line + '\n'))
+            await writer.write(enc.encode(formatRow(row, format) + '\n'))
           }
 
           fetched += rows.length
@@ -254,7 +293,7 @@ const exportJsonl: Handler = async (req: Request, env: Env) => {
     return new Response(readable, {
       headers: {
         'Content-Type':        'application/x-ndjson',
-        'Content-Disposition': 'attachment; filename="vault-export.jsonl"',
+        'Content-Disposition': `attachment; filename="vault-export-${format}.jsonl"`,
         'Cache-Control':       'no-store',
       },
     })

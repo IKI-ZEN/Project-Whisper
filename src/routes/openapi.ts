@@ -145,7 +145,7 @@ const getSpec: Handler = async (_req: Request, _env: Env) => {
             name:          { type: 'string', maxLength: 128 },
             sandboxId:     { type: 'string', format: 'uuid' },
             environmentId: { type: 'string', format: 'uuid', description: 'Scope probe to an environment' },
-            tool:          { type: 'string', enum: ['entropy', 'sweep', 'sensitivity', 'cot', 'pipeline'] },
+            tool:          { type: 'string', enum: ['entropy', 'sweep', 'sensitivity', 'cot', 'pipeline', 'guard-rate'] },
             params:        { type: 'object' },
             schedule:      { type: 'string', enum: ['hourly', 'daily', 'weekly'] },
             threshold:     { type: 'number' },

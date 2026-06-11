@@ -32,6 +32,14 @@ describe('probe creation validation', () => {
     assert.equal(res.status, 422)
   })
 
+  it('accepts guard-rate as a valid tool', async () => {
+    const DB = mockD1()
+    const res = await createProbe(
+      post({ name: 'n', prompt: 'monitor guard events', tool: 'guard-rate', webhookUrl: 'https://hooks.example.com/x' }),
+      makeEnv({ DB }), {})
+    assert.equal(res.status, 200)
+  })
+
   it('creates a probe and binds the webhook URL', async () => {
     const DB = mockD1()
     const res = await createProbe(
@@ -97,6 +105,7 @@ describe('probe id-validated handlers', () => {
 // validation done at creation time) and the v1 HMAC signature headers.
 
 interface CapturedFetch { url: string; init: RequestInit }
+interface RunResult { status: number; body: Record<string, unknown>; captured: CapturedFetch[] }
 
 function probeRow(threshold: Record<string, unknown>) {
   return {
@@ -118,7 +127,7 @@ const mockAI = {
       : { response: 'stable' },
 } as unknown as Ai
 
-async function runWithCapturedFetch(threshold: Record<string, unknown>): Promise<{ status: number; captured: CapturedFetch[] }> {
+async function runWithCapturedFetch(threshold: Record<string, unknown>): Promise<RunResult> {
   const runProbe = findHandler(probesRoutes, 'POST', '/api/probes/:id/run')
   const DB = mockD1((sql) => (sql.startsWith('SELECT * FROM probes') ? probeRow(threshold) : undefined))
   const env = makeEnv({ DB, AI: mockAI, SIGNING_SECRET: 'test-secret' } as Partial<Parameters<typeof runProbe>[1]>)
@@ -130,31 +139,34 @@ async function runWithCapturedFetch(threshold: Record<string, unknown>): Promise
     return new Response(null, { status: 200 })
   }) as typeof fetch
   try {
-    const res = await runProbe(new Request('https://x', { method: 'POST' }), env, { id: PID })
-    return { status: res.status, captured }
+    const res  = await runProbe(new Request('https://x', { method: 'POST' }), env, { id: PID })
+    const body = await res.json() as Record<string, unknown>
+    return { status: res.status, body, captured }
   } finally {
     globalThis.fetch = realFetch
   }
 }
 
 describe('probe run webhook dispatch', () => {
-  it('breached threshold → signed POST with redirect: manual', async () => {
+  it('breached threshold → passed: false, signed POST with redirect: manual', async () => {
     // entropy of identical samples is 0, so 0 >= 0 breaches
-    const { status, captured } = await runWithCapturedFetch({ metric: 'entropy', op: '>=', value: 0 })
+    const { status, body, captured } = await runWithCapturedFetch({ metric: 'entropy', op: '>=', value: 0 })
     assert.equal(status, 200)
+    assert.equal((body.data as Record<string, unknown>).passed, false)
     assert.equal(captured.length, 1)
     assert.equal(captured[0].url, 'https://hooks.example.com/alert')
     assert.equal(captured[0].init.redirect, 'manual')
     const headers = captured[0].init.headers as Record<string, string>
     assert.match(headers['X-Whisper-Signature'], /^v1,sha256=[0-9a-f]{64}$/)
     assert.match(headers['X-Whisper-Timestamp'], /^\d+$/)
-    const body = JSON.parse(String(captured[0].init.body)) as { probeId: string }
-    assert.equal(body.probeId, PID)
+    const wbody = JSON.parse(String(captured[0].init.body)) as { probeId: string }
+    assert.equal(wbody.probeId, PID)
   })
 
-  it('unbreached threshold → no webhook fired', async () => {
-    const { status, captured } = await runWithCapturedFetch({ metric: 'entropy', op: '>', value: 5 })
+  it('unbreached threshold → passed: true, no webhook fired', async () => {
+    const { status, body, captured } = await runWithCapturedFetch({ metric: 'entropy', op: '>', value: 5 })
     assert.equal(status, 200)
+    assert.equal((body.data as Record<string, unknown>).passed, true)
     assert.equal(captured.length, 0)
   })
 })
