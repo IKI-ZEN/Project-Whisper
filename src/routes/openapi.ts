@@ -408,7 +408,7 @@ const getSpec: Handler = async (_req: Request, _env: Env) => {
           summary: 'Manually trigger a probe run',
           tags: ['Probes'],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: { '200': { description: 'Probe run result and metrics' } },
+          responses: { '200': { description: 'Probe run result. data.passed is false when the threshold was breached.', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, data: { type: 'object', properties: { passed: { type: 'boolean', description: 'false when the probe threshold was breached' }, metrics: { type: 'object' }, threshold: { type: 'object' } } } } } } } } },
         },
       },
       '/assertions': {
@@ -505,6 +505,88 @@ const getSpec: Handler = async (_req: Request, _env: Env) => {
             { name: 'offset',         in: 'query', schema: { type: 'integer', default: 0 } },
           ],
           responses: { '200': { description: 'Paginated audit events' } },
+        },
+      },
+      '/monitor/errors': {
+        get: {
+          summary: 'Paginated structured error log (CF Access required)',
+          tags: ['Monitor'],
+          parameters: [
+            { name: 'context', in: 'query', schema: { type: 'string' }, description: 'Prefix filter on the context field (e.g. "queue", "scheduled")' },
+            { name: 'limit',   in: 'query', schema: { type: 'integer', default: 50, maximum: 500 } },
+            { name: 'offset',  in: 'query', schema: { type: 'integer', default: 0 } },
+          ],
+          responses: {
+            '200': { description: 'Paginated error log entries', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, data: { type: 'object', properties: { errors: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, context: { type: 'string' }, message: { type: 'string' }, stack: { type: 'string' }, created_at: { type: 'integer' } } } }, total: { type: 'integer' }, limit: { type: 'integer' }, offset: { type: 'integer' } } } } } } } },
+            '403': { description: 'CF Access authentication required', content: { 'application/json': { schema: { '$ref': '#/components/schemas/Error' } } } },
+          },
+        },
+      },
+      '/health/live': {
+        get: {
+          summary: 'Liveness check — always 200 if the Worker is running',
+          tags: ['Health'],
+          responses: { '200': { description: 'Worker is alive', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, data: { type: 'object', properties: { status: { type: 'string', enum: ['ok'] } } } } } } } } },
+        },
+      },
+      '/health/ready': {
+        get: {
+          summary: 'Readiness check — probes D1, KV, and R2',
+          tags: ['Health'],
+          responses: {
+            '200': { description: 'All bindings reachable', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, data: { type: 'object', properties: { status: { type: 'string', enum: ['ok'] }, checks: { type: 'object', properties: { db: { type: 'string' }, kv: { type: 'string' }, r2: { type: 'string' } } } } } } } } } },
+            '503': { description: 'One or more bindings degraded — same shape with status: "degraded"' },
+          },
+        },
+      },
+      '/vault/export.jsonl': {
+        get: {
+          summary: 'Export vault records as JSONL for fine-tuning',
+          tags: ['Vault'],
+          parameters: [
+            { name: 'format', in: 'query', schema: { type: 'string', enum: ['openai', 'anthropic', 'hf'], default: 'openai' }, description: 'Output format. openai: {messages:[…]}, anthropic: {system,model,messages:[…]}, hf: {text:"USER:…\\nASSISTANT:…"}' },
+            { name: 'tool',   in: 'query', schema: { type: 'string' }, description: 'Filter by tool' },
+            { name: 'model',  in: 'query', schema: { type: 'string' }, description: 'Filter by model' },
+            { name: 'since',  in: 'query', schema: { type: 'integer' }, description: 'Unix ms lower bound' },
+            { name: 'limit',  in: 'query', schema: { type: 'integer', default: 500 } },
+          ],
+          responses: {
+            '200': { description: 'JSONL stream — one JSON object per line', content: { 'application/x-ndjson': {} } },
+            '422': { description: 'Unknown format value', content: { 'application/json': { schema: { '$ref': '#/components/schemas/Error' } } } },
+          },
+        },
+      },
+      '/ai/image': {
+        post: {
+          summary: 'Generate an image from a text prompt',
+          tags: ['AI'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['prompt'], properties: { prompt: { type: 'string' }, model: { type: 'string' }, width: { type: 'integer', default: 1024 }, height: { type: 'integer', default: 1024 } } } } } },
+          responses: {
+            '200': { description: 'Generated image bytes', content: { 'image/png': {} } },
+            '422': { description: 'Validation error', content: { 'application/json': { schema: { '$ref': '#/components/schemas/Error' } } } },
+          },
+        },
+      },
+      '/ai/transcribe': {
+        post: {
+          summary: 'Transcribe audio to text (Whisper)',
+          tags: ['AI'],
+          requestBody: { required: true, content: { 'multipart/form-data': { schema: { type: 'object', required: ['audio'], properties: { audio: { type: 'string', format: 'binary' }, model: { type: 'string' } } } } } },
+          responses: {
+            '200': { description: 'Transcription result', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, data: { type: 'object', properties: { text: { type: 'string' } } } } } } } },
+            '422': { description: 'Validation error', content: { 'application/json': { schema: { '$ref': '#/components/schemas/Error' } } } },
+          },
+        },
+      },
+      '/ai/tts': {
+        post: {
+          summary: 'Text-to-speech synthesis',
+          tags: ['AI'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, voice: { type: 'string' }, model: { type: 'string' } } } } } },
+          responses: {
+            '200': { description: 'Synthesised audio bytes', content: { 'audio/mpeg': {} } },
+            '422': { description: 'Validation error', content: { 'application/json': { schema: { '$ref': '#/components/schemas/Error' } } } },
+          },
         },
       },
     },
