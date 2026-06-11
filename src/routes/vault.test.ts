@@ -40,6 +40,34 @@ describe('vault list', () => {
   })
 })
 
+// Vault rows carry raw prompts/responses and versioned system prompts, so all
+// three read endpoints are fail-closed behind Cloudflare Access (regression:
+// they previously had no gate at all).
+describe('vault reads require Cloudflare Access', () => {
+  const accessEnv = () => makeEnv({
+    CF_ACCESS_AUD:         'test-aud',
+    CF_ACCESS_TEAM_DOMAIN: 'team.cloudflareaccess.test',
+  })
+
+  it('GET /api/vault without an Access identity → 401', async () => {
+    const list = findHandler(vaultRoutes, 'GET', '/api/vault')
+    const res = await list(get('https://x/api/vault'), accessEnv(), {})
+    assert.equal(res.status, 401)
+  })
+
+  it('GET /api/vault/export.jsonl without an Access identity → 401', async () => {
+    const exportJsonl = findHandler(vaultRoutes, 'GET', '/api/vault/export.jsonl')
+    const res = await exportJsonl(get('https://x/api/vault/export.jsonl'), accessEnv(), {})
+    assert.equal(res.status, 401)
+  })
+
+  it('GET /api/vault/search without an Access identity → 401', async () => {
+    const search = findHandler(vaultRoutes, 'GET', '/api/vault/search')
+    const res = await search(get('https://x/api/vault/search?q=x'), accessEnv(), {})
+    assert.equal(res.status, 401)
+  })
+})
+
 describe('vault id-validated handlers', () => {
   it('DELETE /api/vault/:id rejects a non-UUID with 422', async () => {
     const remove = findHandler(vaultRoutes, 'DELETE', '/api/vault/:id')

@@ -19,6 +19,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Audit-log redaction** — flagged-input previews stored in `sandbox_events` are now run through `redactForLog` (mask secrets + redact PII) so the security trail never persists raw secrets or personal data. The research vault (`saveToVault`) is intentionally left raw.
 - **Sandbox import guard** — `POST /api/sandbox/import` now scans the imported `systemPrompt` before storage; in strict mode a blocked-level pattern rejects the import with `422` and logs an `import_flag` event. HMAC signature verification confirms the payload was not tampered in transit but cannot screen injections baked into the original export — this closes that gap.
 
+### Security
+
+- **`GET /api/sandbox/:id` no longer returns `systemPrompt`** — the ungated config read now strips the prompt (encrypted at rest precisely because it is sensitive) and returns a `hasSystemPrompt` boolean instead.
+- **`GET /api/sandbox/:id/export` requires Cloudflare Access** — previously ungated despite returning the plaintext (unsealed) `systemPrompt`. Returns `401` without a valid Access identity.
+- **`GET /api/monitor/{stream,audit,patterns}` require Cloudflare Access** — previously ungated despite exposing the full audit trail (including operator identities) and guard telemetry.
+- **`GET /api/vault{,/export.jsonl,/search}` require Cloudflare Access** — vault rows carry raw prompts/responses and versioned system prompts (auto-saved by `PATCH /api/sandbox/:id`), so ungated reads were another path to the system prompt.
+- **Webhook dispatch no longer follows redirects** (`redirect: 'manual'`) — a redirecting receiver could bounce the POST past the private-range validation that ran at probe-creation time. Dispatch is also now awaited so a finalizing response cannot cancel the alert in flight.
+- **`Vary: Origin` on all router responses** — the CORS allow-origin value is per-origin, so shared caches must key on it.
+
 ### Research-traversal note
 
 All new scanning/redaction controls are opt-in and non-blocking by default. The Whisperer/research suite (`/api/ai/think`, `archaeology`, `entropy`, `guard-probe`, …) and the raw AI primitives (`/api/ai/complete`, `/stream`, …) are never force-scanned — adversarial research traversal is preserved.

@@ -335,6 +335,9 @@ async function dispatchWebhook(
     headers,
     body,
     signal:  AbortSignal.timeout(PROBE_WEBHOOK_TIMEOUT_MS),
+    // The URL was validated against private ranges at creation time; following a
+    // redirect would let the receiver bounce the request past that check (SSRF).
+    redirect: 'manual',
   }).catch(() => { /* fire-and-forget — failure must not affect probe result */ })
 }
 
@@ -507,7 +510,10 @@ const runProbe: Handler = async (req: Request, env: Env, params) => {
 
     const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
     if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
-      void dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
+      // Awaited (not void): an un-awaited promise can be cancelled when the
+      // response finalizes, silently dropping the breach alert. The dispatch
+      // is bounded by PROBE_WEBHOOK_TIMEOUT_MS and never throws.
+      await dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
     }
 
     return json(ok({ runId, metricValue, metrics: metricsJson, result }))
@@ -582,7 +588,8 @@ export async function runProbeById(id: string, env: Env): Promise<void> {
 
   const threshold = (() => { try { return JSON.parse(probe.threshold) as Record<string, unknown> } catch { return {} } })()
   if (probe.webhook_url && isThresholdBreached(threshold, metricsJson)) {
-    void dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
+    // Awaited for the same reason as the run handler — see dispatchWebhook.
+    await dispatchWebhook(env, probe.webhook_url, { probeId: probe.id, probeName: probe.name, metricValue, metrics: metricsJson, breachedAt: ts })
   }
 }
 
