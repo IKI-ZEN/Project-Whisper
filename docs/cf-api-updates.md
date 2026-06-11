@@ -297,4 +297,72 @@ The existing reference doc (`docs/cloudflare-ai-search.md:5`) already notes: "In
 
 ---
 
+## AI Crawl Control (formerly AI Audit)
+
+**Source:** CF AI Crawl Control overview doc (supplied 2026-06-11)
+**Affects:** `public/` directory (robots.txt gap), `src/routes/pages/` (meta tag coverage). No Workers bindings or wrangler.toml changes.
+
+### What this is
+
+Dashboard-level product — not a Workers binding. Works automatically on all Cloudflare plans with zero configuration once the domain is proxied through CF. Provides:
+- Visibility into which AI crawlers (OpenAI, Anthropic, Google, etc.) are hitting the domain
+- Allow/block rules per crawler
+- robots.txt compliance tracking
+- Pay Per Crawl pricing (private beta)
+
+### Current state in Project Whisper
+
+**No `robots.txt`.** `public/` contains `chart.js`, `environments.html`, `vibe.html`, `tools.html`, and other assets — no `robots.txt`. AI crawlers that check before crawling receive no signal about what is or isn't indexable.
+
+**Partial `<meta name="robots" content="noindex"/>` coverage.** Found in:
+- `src/routes/pages/appPage.ts:19` — app pages are tagged noindex
+- `src/routes/pages/envPage.ts:21` — environment pages are tagged noindex
+
+Not covered: `/` (main chat page), `/vibe.html`, `/tools.html`, `/environments.html`, `/api/openapi.json`. The meta tag approach is also weaker than `robots.txt` — it requires the crawler to fetch and parse the page before seeing the directive, while `robots.txt` prevents the fetch entirely.
+
+### Why it matters for Project Whisper
+
+**Generated content is crawl-worthy.** Whisper generates apps (full HTML), vibes (CSS + layout), environment configs, and pipeline outputs. If deployed at a public domain, AI training crawlers will attempt to index this content. The vault stores raw prompts and model responses — if any of this surfaces in public-facing pages, it could be scraped.
+
+**AI Search web crawling vs AI Crawl Control — potential conflict.**
+The AI Search Overview entry noted that AI Search instances can crawl external URLs. If a Whisper deployment uses AI Search to index its own documentation or knowledge base pages at the same domain, the CF-owned AI Search crawler needs to be on the allow list. AI Crawl Control would otherwise give no visibility into whether CF's own crawler is being handled correctly relative to other crawlers.
+
+**`/api/openapi.json` is a crawl target.** The OpenAPI spec at `GET /api/openapi.json` documents the full API surface. AI training services will discover and index this. It's not sensitive (it describes a public API), but it's worth being intentional: if the spec documents authentication flows or private endpoint shapes, you may not want it in training data.
+
+**robots.txt compliance tracking is the operational signal.**
+The compliance tracking feature shows which crawlers are violating `robots.txt` directives. This is only useful if a `robots.txt` exists. Without it, there is nothing to track.
+
+### Recommended actions
+
+**Immediate (code-adjacent, no dashboard required):**
+
+1. Add `public/robots.txt`. Minimum content to match the existing `<meta noindex>` intent:
+   ```
+   User-agent: *
+   Disallow: /app/
+   Disallow: /build/
+   Disallow: /env/
+
+   # Allow CF AI Search crawler to index docs
+   User-agent: CF-AI-Search
+   Allow: /
+   ```
+   The `[assets]` binding in `wrangler.toml` serves everything in `public/` statically — `robots.txt` will be served at the root with no router changes.
+
+2. Add `<meta name="robots" content="noindex"/>` to the remaining server-rendered pages that don't have it: `src/routes/pages/chatPage.ts`, vibe page (if server-rendered), and any landing page handler.
+
+**Dashboard (operations, no code):**
+
+3. Enable AI Crawl Control monitoring once the domain is proxied through CF — it activates automatically, nothing to install.
+4. After a week of monitoring, create explicit allow/block rules based on observed crawlers.
+5. Register for Pay Per Crawl private beta if the generated app/vibe content is considered a content asset worth monetising.
+
+### Open questions
+
+- Is there a named `User-agent` string for the CF AI Search crawler? If so, an explicit `Allow` rule for it in `robots.txt` prevents accidental blocking when AI Crawl Control's blanket rules are tightened.
+- Does Pay Per Crawl (private beta) apply at the Worker level or the domain level? If domain-level, it would apply to all traffic including legitimate API clients.
+- The dashboard shows crawler activity — does it expose this data via an API or Analytics Engine, or only in the UI? A `guard-rate`-style probe on crawler activity would be more actionable than a dashboard metric.
+
+---
+
 _Entries added in chronological order as docs are supplied._
