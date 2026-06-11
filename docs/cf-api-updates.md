@@ -162,4 +162,80 @@ Currently CF Access handles all auth. An email-based magic link or OTP flow woul
 
 ---
 
+## Cloudflare Email Security (Cloudflare One / Area 1)
+
+**Source:** CF Email Security overview doc (supplied 2026-06-11)
+**Affects:** Architecture / security posture. No Worker bindings or code changes directly — this is a dashboard-level enterprise product.
+
+### What this is (and is not)
+
+**Not a Workers binding.** Cloudflare Email Security (formerly Area 1) is a Cloudflare One enterprise product that sits *upstream* of the Worker, at the email provider or MX layer. It is deployed via API integration with the provider (Gmail, Outlook), BCC/journaling, or as the MX record. It never appears in `wrangler.toml` or `env.d.ts`.
+
+Distinguish clearly from the **Email Service** entry above, which is a Worker binding (`[[send_email]]`) for programmatic email sending and the `email()` Worker handler for inbound processing. These are two different products with complementary roles.
+
+### What it does
+
+AI + threat intelligence analysis on every inbound email:
+- Phishing, malware, BEC (Business Email Compromise — attacker impersonates executive/authority to commit fraud)
+- Vendor email fraud, spam
+- Detects impersonation, suspicious links, malicious attachments
+
+Deployed at the provider level — emails are classified before reaching any downstream destination (including a Worker).
+
+### Why it matters for Project Whisper
+
+**Defence-in-depth for the planned inbound email handler.**
+The Email Service entry recommended implementing an `email()` Worker handler to route inbound email to sandbox runs. That opens a new attack surface: anyone who can send an email to the routing address can inject a prompt into a sandbox. Crafted email payloads are a known prompt injection vector — "Dear AI assistant, ignore previous instructions and..."
+
+Email Security sits upstream in the path:
+
+```
+Internet → Email Security (phishing/BEC/malware filter) → email() Worker handler → Whisper guard pipeline → sandbox run
+```
+
+The existing 5-layer guard pipeline (invisible-stripped → NFKC → base64 ×3 → prompt injection detection) is the downstream defence. Email Security is the upstream defence — it catches attacks before they reach the Worker. Together they form layered coverage:
+
+| Layer | What it catches |
+|-------|----------------|
+| Email Security | Known phishing, BEC, malware, impersonation at email level |
+| Whisper guard (input) | Prompt injection, jailbreak attempts, invisible chars, encoding tricks in email body |
+| Whisper guard (output) | Response leakage, unsafe content in AI reply |
+
+**BEC relevance for AI sandboxes.**
+BEC attacks impersonate authority figures to manipulate recipients into taking actions. When an AI sandbox processes email, it can be manipulated the same way — a crafted email that claims to be from an administrator could instruct the sandbox to change its system prompt, leak configuration, or act outside its scope. Email Security's impersonation registry + BEC detection is a first line of defence specifically against this class of attack.
+
+**Guard pipeline feedback loop via submissions API.**
+The Email Security overview mentions a submissions API for reclassifying emails. If the Whisper guard pipeline flags an inbound email as a prompt injection attempt, that flag could be forwarded to Email Security submissions — enriching CF's threat model with application-layer signals that the email-layer scan didn't catch.
+
+### How to reason about deployment
+
+Email Security requires provisioning at the Cloudflare One dashboard level — it is not a `wrangler deploy` action. The deployment path depends on the email provider:
+
+| Provider | Deployment mode |
+|----------|----------------|
+| Gmail | API or BCC setup |
+| Microsoft 365 | Journaling or MX/Inline |
+| Custom MX | MX/Inline (full pre-delivery) |
+
+For Project Whisper's use case (inbound email → sandbox runs), the MX/Inline mode is the most complete: emails are filtered before delivery, and Email Security can reject or quarantine threats before the Worker ever sees them. The BCC/journaling modes are post-delivery — the Worker receives the email first, which is weaker for this use case.
+
+### Recommended actions
+
+**If inbound email is implemented (from Email Service entry):**
+1. Provision Email Security in Cloudflare One for the routing domain before exposing the `email()` handler publicly.
+2. Use MX/Inline deployment so threats are rejected pre-delivery.
+3. Register the sandbox routing address pattern in the impersonation registry to prevent BEC-style attacks claiming to be the sandbox platform itself.
+4. Add an email-origin guard in the `email()` handler: validate `message.from` domain against a configurable allowlist before passing to the sandbox.
+
+**Independent of email implementation:**
+5. Nothing to add to `wrangler.toml` or Worker code. This is purely an operations/provisioning item.
+
+### Open questions
+
+- Is Email Security available at a plan level that matches Whisper's deployment tier (Paid Workers / Zero Trust Free vs. Enterprise)?
+- The Retro Scan feature (mentioned in the docs note) can scan existing mailbox history — useful for assessing threat baseline before enabling live filtering.
+- Does Email Security's API provide webhook events (e.g., "email quarantined") that could be consumed by a probe or monitor endpoint? If so, a guard-rate probe could monitor quarantine rate as a security signal.
+
+---
+
 _Entries added in chronological order as docs are supplied._
