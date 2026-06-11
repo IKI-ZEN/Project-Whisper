@@ -36,7 +36,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 </head>
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand">Whisper</a>
+  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
   <a href="/" class="navlink">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink active" aria-current="page">Apps</a>

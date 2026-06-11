@@ -15,9 +15,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .brand{font-size:14px;font-weight:600;color:var(--accent2);text-decoration:none;letter-spacing:.02em;border-right:1px solid var(--border);padding-right:16px;margin-right:4px}
 .brand:hover{color:#fff}
-.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap}
+.brand-mark{color:var(--accent);font-size:11px;margin-right:2px}
+.navlink{font-size:12px;padding:5px 12px;border-radius:var(--radius);text-decoration:none;color:var(--muted);transition:color .15s,background .15s;white-space:nowrap;align-self:stretch;display:flex;align-items:center}
 .navlink:hover{color:var(--text)}
-.navlink.active{background:var(--accent);color:#fff}
+.navlink.active{color:var(--accent2);position:relative}
+.navlink.active::after{content:'';position:absolute;bottom:0;left:8px;right:8px;height:2px;background:var(--accent2);border-radius:2px 2px 0 0}
 
 /* ── Scrollbars ── */
 ::-webkit-scrollbar{width:5px;height:5px}
