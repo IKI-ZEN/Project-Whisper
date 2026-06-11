@@ -193,3 +193,28 @@ describe('GET /export-session shares the conversation read gate', () => {
     assert.notEqual(res.status, 401)
   })
 })
+
+// /export returns the plaintext systemPrompt (unsealed by the DO), so it must
+// require an Access identity (regression: it previously had no gate at all,
+// making the at-rest encryption and the getConfig redaction moot).
+describe('GET /export requires Cloudflare Access', () => {
+  const exportConfig = findHandler(sandboxRoutes, 'GET', '/api/sandbox/:id/export')
+  function exportEnv(withAccess: boolean) {
+    const env = sessionEnv() as unknown as Record<string, unknown>
+    if (withAccess) {
+      env.CF_ACCESS_AUD         = 'test-aud'
+      env.CF_ACCESS_TEAM_DOMAIN = 'team.cloudflareaccess.test'
+    }
+    return env as unknown as Parameters<typeof exportConfig>[1]
+  }
+
+  it('no Access identity when Access is configured → 401', async () => {
+    const res = await exportConfig(new Request(`https://x/api/sandbox/${SID}/export`), exportEnv(true), { id: SID })
+    assert.equal(res.status, 401)
+  })
+
+  it('Access not configured → falls through to the DO (200)', async () => {
+    const res = await exportConfig(new Request(`https://x/api/sandbox/${SID}/export`), exportEnv(false), { id: SID })
+    assert.equal(res.status, 200)
+  })
+})

@@ -278,6 +278,10 @@ export class Router {
   private addHeaders(res: Response, cors: Record<string, string>, requestId: string): Response {
     const headers = new Headers(res.headers)
     for (const [k, v] of Object.entries(cors)) headers.set(k, v)
+    // The CORS allow-origin value depends on the request's Origin header, so any
+    // shared cache must key on it — otherwise one origin's response (with its
+    // Access-Control-Allow-Origin) could be served to a different origin.
+    headers.append('Vary', 'Origin')
     headers.set('X-Request-ID',          requestId)
     headers.set('X-Content-Type-Options', 'nosniff')
     if (!headers.has('X-Frame-Options')) headers.set('X-Frame-Options', 'DENY')

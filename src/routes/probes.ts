@@ -335,6 +335,9 @@ async function dispatchWebhook(
     headers,
     body,
     signal:  AbortSignal.timeout(PROBE_WEBHOOK_TIMEOUT_MS),
+    // The URL was validated against private ranges at creation time; following a
+    // redirect would let the receiver bounce the request past that check (SSRF).
+    redirect: 'manual',
   }).catch(() => { /* fire-and-forget — failure must not affect probe result */ })
 }
 
