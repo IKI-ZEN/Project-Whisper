@@ -1,5 +1,5 @@
 import type { Env } from '../types/env'
-import { now } from './utils'
+import { now, newId } from './utils'
 
 // Append a row to the sandbox_events audit table. Returns the D1 promise so callers
 // keep their existing semantics — `void logSandboxEvent(...)` for fire-and-forget
@@ -20,4 +20,21 @@ export function logSandboxEvent(env: Env, e: {
   return env.DB.prepare(
     'INSERT INTO sandbox_events (sandbox_id, event_type, metadata, identity, created_at) VALUES (?, ?, ?, ?, ?)',
   ).bind(e.sandboxId, e.type, metadata, e.identity ?? null, e.at ?? now()).run()
+}
+
+// Write a structured error row to the error_log table and emit to Analytics Engine
+// if bound. Swallows its own failures so it is always safe to call from catch blocks.
+export function reportError(env: Env, context: string, error: unknown): void {
+  const msg   = error instanceof Error ? error.message : String(error)
+  const stack = error instanceof Error ? (error.stack ?? '') : ''
+  const id    = newId()
+  const ts    = now()
+  env.DB.prepare(
+    'INSERT INTO error_log (id, context, message, stack, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).bind(id, context, msg, stack, ts).run().catch(() => { /* must not throw */ })
+  env.ANALYTICS?.writeDataPoint({
+    blobs:   [context, msg],
+    doubles: [ts],
+    indexes: ['error'],
+  })
 }

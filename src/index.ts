@@ -1,7 +1,8 @@
 import type { Env, WhisperJob } from './types/env'
 import { Router, json, ok } from './lib/http'
 import { now, isUUID } from './lib/utils'
-import { logSandboxEvent } from './lib/events'
+import { APP_VERSION, CRON_HOURLY, CRON_WEEKLY } from './lib/constants'
+import { logSandboxEvent, reportError } from './lib/events'
 import { aiRoutes }              from './routes/ai'
 import { sandboxRoutes, run, stream } from './routes/sandbox'
 import { vibeRoutes }            from './routes/vibes'
@@ -31,13 +32,27 @@ export { AppStateDO }    from './durable/AppStateDO'
 
 const router = new Router()
 
-// Health check
-router.get('/api/health', (_req, _env) => Promise.resolve(json(ok({ status: 'ok' }))))
+// Health checks — liveness (no I/O) and readiness (probes bindings)
+router.get('/api/health',       (_req, _env) => Promise.resolve(json(ok({ status: 'ok' }))))
+router.get('/api/health/live',  (_req, _env) => Promise.resolve(json(ok({ status: 'ok' }))))
+router.get('/api/health/ready', async (_req, env) => {
+  const checks: Record<string, 'ok' | 'error'> = {}
+  const results = await Promise.allSettled([
+    env.DB.prepare('SELECT 1').first(),
+    env.SANDBOX_REGISTRY.get('__health_sentinel__'),
+    env.FILES.head('__health_sentinel__'),
+  ])
+  checks.db  = results[0].status === 'fulfilled' ? 'ok' : 'error'
+  checks.kv  = results[1].status === 'fulfilled' ? 'ok' : 'error'
+  checks.r2  = results[2].status === 'fulfilled' ? 'ok' : 'error'
+  const allOk = Object.values(checks).every(v => v === 'ok')
+  return json(ok({ status: allOk ? 'ok' : 'degraded', checks }), allOk ? 200 : 503)
+})
 
 // Discovery (JSON)
 router.get('/api', (_req, _env) => Promise.resolve(json(ok({
   name:    'Project Whisper',
-  version: '0.3.0',
+  version: APP_VERSION,
   status:  'operational',
   api: {
     ai:       { complete: 'POST /api/ai/complete', stream: 'POST /api/ai/stream', embed: 'POST /api/ai/embed', image: 'POST /api/ai/image', transcribe: 'POST /api/ai/transcribe' },
@@ -89,20 +104,22 @@ export default {
   },
 
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const schedule = event.cron === '0 * * * *' ? 'hourly'
-      : event.cron === '0 9 * * 1' ? 'weekly'
+    const schedule = event.cron === CRON_HOURLY ? 'hourly'
+      : event.cron === CRON_WEEKLY ? 'weekly'
       : 'daily'
     try {
       const { results } = await env.DB.prepare(
         'SELECT id FROM probes WHERE schedule = ?',
       ).bind(schedule).all<{ id: string }>()
       for (const row of results ?? []) {
-        await runProbeById(row.id, env).catch(e =>
+        await runProbeById(row.id, env).catch(e => {
           console.error(`[scheduled] probe ${row.id} failed:`, e)
-        )
+          reportError(env, `scheduled:probe:${row.id}`, e)
+        })
       }
     } catch (e) {
       console.error('[scheduled] cron handler failed:', e)
+      reportError(env, 'scheduled:cron', e)
     }
   },
 
@@ -114,6 +131,7 @@ export default {
         msg.ack()
       } catch (e) {
         console.error('[queue] job failed:', msg.body.type, e)
+        reportError(env, `queue:${msg.body.type}`, e)
         try {
           await logSandboxEvent(env, { sandboxId: msg.body.sandboxId ?? '', type: 'job_failed', metadata: { jobType: msg.body.type, error: String(e), attempts: msg.attempts } })
         } catch { /* D1 write must not prevent retry */ }

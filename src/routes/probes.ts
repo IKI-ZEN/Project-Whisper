@@ -2,7 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp, parseQueryInt } from '../lib/http'
 import { newId, isUUID, now } from '../lib/utils'
-import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, WEBHOOK_SIGNATURE_VERSION } from '../lib/constants'
+import { RATE_LIMIT_WINDOW_MS, PROBE_RUN_RATE_LIMIT_MAX, PROBE_WEBHOOK_TIMEOUT_MS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, WEBHOOK_SIGNATURE_VERSION, MAX_NAME_LEN, MAX_DESCRIPTION_LEN, MAX_PROBE_PROMPT_LEN } from '../lib/constants'
 import { signPayload } from '../lib/vault'
 import {
   complete, embed, estimateEntropy, runCoTProbe,
@@ -16,9 +16,7 @@ import type { PipelineNode } from '../lib/schema'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MAX_NAME_LEN        = 128
-const MAX_DESC_LEN        = 512
-const MAX_PROMPT_LEN      = 10_000
+const MAX_DESC_LEN        = MAX_DESCRIPTION_LEN
 const VALID_TOOLS         = ['entropy', 'sweep', 'sensitivity', 'cot', 'pipeline'] as const
 const VALID_SCHEDULES     = ['hourly', 'daily', 'weekly'] as const
 
@@ -86,7 +84,7 @@ function parseCreateProbe(body: unknown): {
 
   const prompt = typeof b.prompt === 'string' ? b.prompt.trim() : ''
   if (!prompt) throw new Error('prompt is required')
-  if (prompt.length > MAX_PROMPT_LEN) throw new Error(`prompt exceeds ${MAX_PROMPT_LEN} characters`)
+  if (prompt.length > MAX_PROBE_PROMPT_LEN) throw new Error(`prompt exceeds ${MAX_PROBE_PROMPT_LEN} characters`)
 
   const tool = typeof b.tool === 'string' ? b.tool : ''
   if (!(VALID_TOOLS as readonly string[]).includes(tool)) {
@@ -161,7 +159,7 @@ function parsePatchProbe(body: unknown): Partial<{
   if (b.prompt !== undefined) {
     const prompt = typeof b.prompt === 'string' ? b.prompt.trim() : ''
     if (!prompt) throw new Error('prompt cannot be empty')
-    if (prompt.length > MAX_PROMPT_LEN) throw new Error(`prompt exceeds ${MAX_PROMPT_LEN} characters`)
+    if (prompt.length > MAX_PROBE_PROMPT_LEN) throw new Error(`prompt exceeds ${MAX_PROBE_PROMPT_LEN} characters`)
     out.prompt = prompt
   }
   if (b.tool !== undefined) {

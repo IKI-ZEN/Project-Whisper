@@ -195,8 +195,48 @@ const patterns: Handler = async (req: Request, env: Env) => {
   }
 }
 
+// GET /api/monitor/errors
+// Paginated error log reader — surfaced by reportError() from catch blocks.
+const errors: Handler = async (req: Request, env: Env) => {
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
+  if (rl) return rl
+  const { deny: errorsDeny } = await requireAccess(req, env)
+  if (errorsDeny) return errorsDeny
+  try {
+    const url     = new URL(req.url)
+    const context = url.searchParams.get('context') ?? null
+    const since   = parseQueryInt(url.searchParams, 'since', 0)
+    const limit   = parseQueryInt(url.searchParams, 'limit', MONITOR_LIMIT_DEFAULT, 1, MONITOR_LIMIT_MAX)
+    const offset  = parseQueryInt(url.searchParams, 'offset', 0)
+
+    const conditions: string[] = ['created_at >= ?']
+    const params: unknown[]    = [since]
+
+    if (context) { conditions.push('context LIKE ?'); params.push(`${context}%`) }
+
+    const where = conditions.join(' AND ')
+
+    const [dataResult, countResult] = await Promise.all([
+      env.DB.prepare(`SELECT id, context, message, stack, created_at FROM error_log WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+        .bind(...params, limit, offset).all(),
+      env.DB.prepare(`SELECT COUNT(*) as total FROM error_log WHERE ${where}`)
+        .bind(...params).first<{ total: number }>(),
+    ])
+
+    return json(ok({
+      errors: dataResult.results ?? [],
+      total:  countResult?.total ?? 0,
+      limit,
+      offset,
+    }))
+  } catch (e) {
+    return json(err('Errors query failed', String(e)), 500)
+  }
+}
+
 export const monitorRoutes: Array<[string, string, Handler]> = [
   ['GET', '/api/monitor/stream',   stream],
   ['GET', '/api/monitor/audit',    audit],
   ['GET', '/api/monitor/patterns', patterns],
+  ['GET', '/api/monitor/errors',   errors],
 ]
