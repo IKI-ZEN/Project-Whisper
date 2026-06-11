@@ -385,14 +385,17 @@ const search: Handler = async (req: Request, env: Env) => {
   const rl = await rateLimitByIp(req, env, 'rl:vault-search', VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW)
   if (rl) return rl
   try {
-    const filters = tool ? { tool } : undefined
-    const { results: hits } = await env.AI_SEARCH.search({ query: q, limit, filters })
+    const { results: hits } = await env.AI_SEARCH.search({ messages: [{ role: 'user', content: q }], limit })
     const ids = hits.map(r => r.id)
     if (ids.length === 0) return json(ok({ query: q, results: [] }))
     const placeholders = ids.map(() => '?').join(',')
+    const whereClause = tool
+      ? `id IN (${placeholders}) AND tool = ?`
+      : `id IN (${placeholders})`
+    const binds = tool ? [...ids, tool] : ids
     const { results: rows } = await env.DB.prepare(
-      `SELECT * FROM vault_records WHERE id IN (${placeholders})`,
-    ).bind(...ids).all<Record<string, unknown>>()
+      `SELECT * FROM vault_records WHERE ${whereClause}`,
+    ).bind(...binds).all<Record<string, unknown>>()
     return json(ok({ query: q, results: (rows ?? []).map(parseRow) }))
   } catch (e) {
     return json(err('Vault search failed', String(e)), 500)

@@ -87,10 +87,15 @@ export interface Env {
   ALLOWED_ORIGINS?: string   // comma-separated origins; required for browser API clients (no default — omitting blocks all cross-origin requests)
 
   // AI Search — managed semantic search (optional; provisioned in CF dashboard)
+  // search() uses the conversation-aware messages shape (CF API updated 2026).
+  // upsert/delete retained pending confirmation from the instance-methods reference doc.
   AI_SEARCH?: {
-    search(opts: { query: string; limit?: number; filters?: Record<string, string> }): Promise<{ results: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> }>
+    search(opts: { messages: Array<{ role: string; content: string }>; limit?: number }): Promise<{ results: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> }>
     upsert(records: Array<{ id: string; content: string; metadata?: Record<string, unknown> }>): Promise<void>
     delete(ids: string[]): Promise<void>
+    chatCompletions(opts: unknown): Promise<unknown>
+    info(): Promise<unknown>
+    stats(): Promise<unknown>
   }
 
   // Cloudflare Access — Zero Trust identity-aware proxy
