@@ -1,6 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp, parseQueryInt } from '../lib/http'
+import { requireAccess } from '../lib/access'
 import { newId, isUUID, now } from '../lib/utils'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { parseVaultAnalyzeRequest } from '../lib/schema'
@@ -107,6 +108,10 @@ const create: Handler = async (req: Request, env: Env) => {
 
 // GET /api/vault
 const list: Handler = async (req: Request, env: Env) => {
+  // Vault rows carry raw prompts/responses and versioned system prompts
+  // (saveToVault from patchConfig) — reads are fail-closed behind Access.
+  const { deny } = await requireAccess(req, env)
+  if (deny) return deny
   try {
     const url           = new URL(req.url)
     const model         = url.searchParams.get('model')          ?? null
@@ -187,6 +192,9 @@ const updateTags: Handler = async (req: Request, env: Env, params: Params) => {
 // GET /api/vault/export.jsonl
 // Streams matching records as newline-delimited JSON (JSONL / NDJSON).
 const exportJsonl: Handler = async (req: Request, env: Env) => {
+  // Same sensitivity as the list read — see the gate comment there.
+  const { deny } = await requireAccess(req, env)
+  if (deny) return deny
   try {
     const url    = new URL(req.url)
     const model  = url.searchParams.get('model')  ?? null
@@ -326,6 +334,9 @@ const analyze: Handler = async (req: Request, env: Env) => {
 
 // GET /api/vault/search — semantic search via Cloudflare AI Search binding
 const search: Handler = async (req: Request, env: Env) => {
+  // Same sensitivity as the list read — see the gate comment there.
+  const { deny } = await requireAccess(req, env)
+  if (deny) return deny
   if (!env.AI_SEARCH) return json(err('AI Search not configured'), 503)
   const url   = new URL(req.url)
   const q     = url.searchParams.get('q') ?? ''

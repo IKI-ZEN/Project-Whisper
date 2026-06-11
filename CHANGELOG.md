@@ -24,6 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`GET /api/sandbox/:id` no longer returns `systemPrompt`** — the ungated config read now strips the prompt (encrypted at rest precisely because it is sensitive) and returns a `hasSystemPrompt` boolean instead.
 - **`GET /api/sandbox/:id/export` requires Cloudflare Access** — previously ungated despite returning the plaintext (unsealed) `systemPrompt`. Returns `401` without a valid Access identity.
 - **`GET /api/monitor/{stream,audit,patterns}` require Cloudflare Access** — previously ungated despite exposing the full audit trail (including operator identities) and guard telemetry.
+- **`GET /api/vault{,/export.jsonl,/search}` require Cloudflare Access** — vault rows carry raw prompts/responses and versioned system prompts (auto-saved by `PATCH /api/sandbox/:id`), so ungated reads were another path to the system prompt.
 - **Webhook dispatch no longer follows redirects** (`redirect: 'manual'`) — a redirecting receiver could bounce the POST past the private-range validation that ran at probe-creation time. Dispatch is also now awaited so a finalizing response cannot cancel the alert in flight.
 - **`Vary: Origin` on all router responses** — the CORS allow-origin value is per-origin, so shared caches must key on it.
 
