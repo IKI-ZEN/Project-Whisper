@@ -431,14 +431,3 @@ export function parsePatchEnvironmentRequest(body: unknown): {
   }
   return out
 }
-
-export function parseVaultSearchRequest(body: unknown): { q: string; limit: number; tool: string | null } {
-  if (!isObj(body)) throw new Error('Request body must be a JSON object')
-  const q = str(body.q, 'q')
-  if (!q.trim()) throw new Error('q must not be empty')
-  return {
-    q,
-    limit: body.limit !== undefined ? num(body.limit, 'limit', 20, 1, AI_SEARCH_MAX_RESULTS) : 20,
-    tool:  body.tool  !== undefined ? str(body.tool, 'tool') : null,
-  }
-}

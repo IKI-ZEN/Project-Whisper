@@ -44,7 +44,6 @@ export const MAX_CLUSTER_TEXTS           = 50
 
 // Per-user session limits
 export const MAX_SESSION_ID_LEN          = 64
-export const MAX_SESSIONS_PER_SANDBOX    = 100
 
 // Code execution (run_code built-in tool)
 export const CODE_EXEC_TIMEOUT_MS        = 5_000
@@ -121,7 +120,6 @@ export const MAX_ASSERTION_REGEX_INPUT   = 50_000
 
 // App tokens — short-lived HMAC-signed credentials injected at page-serve time
 export const APP_TOKEN_TTL_MS            = 3_600_000   // 1 hour
-export const APP_TOKEN_STATE_RATE_LIMIT_MAX = 200      // state mutations per minute per app via token
 
 // Session tokens (Signal B) — HMAC-signed, carry an embedded expiry so a leaked
 // token cannot be replayed indefinitely. The client auto-reissues on 401.
@@ -229,10 +227,6 @@ export const MAX_CSP_REPORT_BYTES = 65536    // 64 KB
 
 // ── Security features ─────────────────────────────────────────────────────────
 
-// Output-guard policy applied to model replies on the sandbox chat path.
-// 'audit' (default) preserves the historical behaviour: scan + log only.
-export const GUARD_OUTPUT_MODES = ['off', 'audit', 'block', 'redact'] as const
-
 // PII detection & redaction
 export const MAX_PII_SCAN_CHARS   = 100_000           // max chars accepted by /api/ai/pii-scan
 export const PII_REDACTION_FORMAT = (type: string): string => `[REDACTED:${type}]`
@@ -254,5 +248,4 @@ export const MAX_PROBE_PROMPT_LEN = 10_000
 
 // Scheduled cron expressions — must match wrangler.toml [[triggers]] crons array
 export const CRON_HOURLY = '0 * * * *'
-export const CRON_DAILY  = '0 9 * * *'
 export const CRON_WEEKLY = '0 9 * * 1'
