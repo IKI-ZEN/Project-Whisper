@@ -245,3 +245,14 @@ export const MAX_EMAIL_SCAN_CHARS = 50_000            // max chars of email body
 
 // Per-sandbox security posture report — event-count lookback window
 export const SECURITY_REPORT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000   // 7 days
+
+// Application version (surfaced in GET /api discovery endpoint)
+export const APP_VERSION = '0.3.0'
+
+// Probe prompt input cap
+export const MAX_PROBE_PROMPT_LEN = 10_000
+
+// Scheduled cron expressions — must match wrangler.toml [[triggers]] crons array
+export const CRON_HOURLY = '0 * * * *'
+export const CRON_DAILY  = '0 9 * * *'
+export const CRON_WEEKLY = '0 9 * * 1'

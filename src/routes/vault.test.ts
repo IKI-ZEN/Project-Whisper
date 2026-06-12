@@ -68,6 +68,60 @@ describe('vault reads require Cloudflare Access', () => {
   })
 })
 
+// ── Fine-tuning export format tests ──────────────────────────────────────────
+
+describe('vault export format', () => {
+  const exportJsonl = findHandler(vaultRoutes, 'GET', '/api/vault/export.jsonl')
+
+  const dbWithRows = (rows: unknown[]) =>
+    mockD1(() => rows)
+
+  it('rejects an unknown format with 422', async () => {
+    const res = await exportJsonl(get('https://x/api/vault/export.jsonl?format=camelot'), makeEnv(), {})
+    assert.equal(res.status, 422)
+  })
+
+  it('default format (openai) emits messages array', async () => {
+    const DB = dbWithRows([{ id: 'a', prompt: 'hello', response: 'world', model: '', system_prompt: '' }])
+    const res = await exportJsonl(get('https://x/api/vault/export.jsonl'), makeEnv({ DB }), {})
+    assert.equal(res.status, 200)
+    const text = await res.text()
+    const row = JSON.parse(text.trim()) as { messages: Array<{ role: string; content: string }> }
+    assert.deepEqual(row.messages, [
+      { role: 'user',      content: 'hello' },
+      { role: 'assistant', content: 'world' },
+    ])
+  })
+
+  it('openai format includes system message when system_prompt is set', async () => {
+    const DB = dbWithRows([{ id: 'a', prompt: 'q', response: 'a', model: '', system_prompt: 'You are a bot.' }])
+    const res = await exportJsonl(get('https://x/api/vault/export.jsonl?format=openai'), makeEnv({ DB }), {})
+    const text = await res.text()
+    const row = JSON.parse(text.trim()) as { messages: Array<{ role: string; content: string }> }
+    assert.equal(row.messages[0].role, 'system')
+    assert.equal(row.messages[0].content, 'You are a bot.')
+  })
+
+  it('anthropic format includes top-level system and model fields', async () => {
+    const DB = dbWithRows([{ id: 'a', prompt: 'q', response: 'a', model: 'claude-3', system_prompt: 'sys' }])
+    const res = await exportJsonl(get('https://x/api/vault/export.jsonl?format=anthropic'), makeEnv({ DB }), {})
+    const text = await res.text()
+    const row = JSON.parse(text.trim()) as { system: string; model: string; messages: unknown[] }
+    assert.equal(row.system, 'sys')
+    assert.equal(row.model, 'claude-3')
+    assert.equal(row.messages.length, 2)
+  })
+
+  it('hf format emits a text field', async () => {
+    const DB = dbWithRows([{ id: 'a', prompt: 'hi', response: 'hey', model: '', system_prompt: '' }])
+    const res = await exportJsonl(get('https://x/api/vault/export.jsonl?format=hf'), makeEnv({ DB }), {})
+    const text = await res.text()
+    const row = JSON.parse(text.trim()) as { text: string }
+    assert.ok(row.text.includes('USER: hi'))
+    assert.ok(row.text.includes('ASSISTANT: hey'))
+  })
+})
+
 describe('vault id-validated handlers', () => {
   it('DELETE /api/vault/:id rejects a non-UUID with 422', async () => {
     const remove = findHandler(vaultRoutes, 'DELETE', '/api/vault/:id')

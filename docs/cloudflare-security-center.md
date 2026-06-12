@@ -12,7 +12,8 @@ Cloudflare Security Center is a unified security intelligence dashboard that map
 2. [Main Features](#2-main-features)
 3. [Availability by Plan](#3-availability-by-plan)
 4. [How It Relates to Project Whisper](#4-how-it-relates-to-project-whisper)
-5. [Further Reading](#5-further-reading)
+5. [Email Security (Cloudflare One / Area 1)](#5-email-security-cloudflare-one--area-1)
+6. [Further Reading](#6-further-reading)
 
 ---
 
@@ -122,8 +123,75 @@ If the Project Whisper platform is deployed as a named product with a public bra
 
 ---
 
-## 5. Further Reading
+## 5. Email Security (Cloudflare One / Area 1)
 
+> **Not a Workers binding.** Cloudflare Email Security is a separate Cloudflare One enterprise product, deployed at the email provider or MX layer. It has no `wrangler.toml` entries and never appears in `env.d.ts`. Document it here because it is part of the same security posture conversation as Security Center.
+
+### What it is
+
+AI-based threat analysis applied to every inbound email before delivery:
+
+- Phishing, malware, spam detection
+- BEC (Business Email Compromise) — attacker impersonates an executive or authority to commit fraud
+- Vendor email fraud, suspicious links, malicious attachments
+- Impersonation and display-name spoofing
+
+Deployed via API integration at the provider (Gmail, Outlook), BCC/journaling, or as the MX record. Emails are classified before the downstream destination ever receives them.
+
+### Why it matters for Project Whisper
+
+Project Whisper's Email Service doc (`docs/cloudflare-email-service.md`) describes implementing an `email()` Worker handler that routes inbound email to sandbox runs. That creates a prompt injection surface: any sender who can reach the routing address can inject an AI prompt via email. Email Security is the upstream layer that neutralises known attacks before the Worker sees them.
+
+```
+Internet
+  → Email Security (phishing / BEC / malware filter)
+  → email() Worker handler
+  → Whisper guard pipeline (injection detection, normalisation)
+  → sandbox run
+```
+
+| Layer | What it catches |
+|-------|----------------|
+| Email Security | Known phishing, BEC, malware, impersonation at email level |
+| Whisper guard (input) | Prompt injection, jailbreak attempts, invisible chars, encoding tricks in email body |
+| Whisper guard (output) | Response leakage, unsafe content in AI reply |
+
+**BEC relevance for AI sandboxes.** BEC attacks impersonate authority figures to manipulate recipients. An AI sandbox processing email is susceptible to the same class of attack — a crafted email claiming to be from an administrator could instruct the sandbox to override its system prompt, leak configuration, or act outside its scope. Email Security's impersonation registry + BEC detection provides first-line defence specifically against this.
+
+### Deployment modes
+
+| Email provider | Recommended mode |
+|---------------|-----------------|
+| Gmail | API or BCC setup |
+| Microsoft 365 | Journaling or MX/Inline |
+| Custom MX (routing domain) | MX/Inline — emails filtered pre-delivery; Worker never sees threats |
+
+For the inbound email handler use case, MX/Inline is the strongest: threats are rejected before delivery, so the Worker's `email()` handler never receives them. BCC/journaling modes are post-delivery — the Worker receives the email first.
+
+### Recommended actions
+
+If inbound email is implemented:
+
+1. Provision Email Security in Cloudflare One for the routing domain before exposing the `email()` handler publicly.
+2. Use MX/Inline deployment so threats are rejected pre-delivery.
+3. Register the sandbox routing address pattern in the impersonation registry to prevent BEC-style attacks claiming to be from the platform itself.
+4. Add an email-origin guard in the `email()` Worker handler: validate `message.from` domain against a configurable allowlist before passing to the sandbox.
+
+Independent of email implementation:
+
+- Nothing to add to `wrangler.toml` or Worker code. This is a Cloudflare One provisioning item.
+
+### Open questions
+
+- Available plan level: Free/Paid Workers vs. Zero Trust Free vs. Enterprise? The overview says Email Routing is "Free and Paid" but Email Security (Area 1) appears to require a Zero Trust or Enterprise subscription.
+- Does the quarantine API emit webhook events (e.g., "email quarantined")? If so, a `guard-rate`-style probe on quarantine rate would be more actionable than a dashboard metric.
+- Retro Scan feature (mentioned in docs) can scan existing mailbox history — useful for establishing a threat baseline before enabling live filtering.
+
+---
+
+## 6. Further Reading
+
+- **Email Security (Cloudflare One)**: `https://developers.cloudflare.com/email-security/`
 - **Security Insights**: `https://developers.cloudflare.com/security/security-insights/`
 - **Infrastructure**: `https://developers.cloudflare.com/security-center/infrastructure/`
 - **Investigate**: `https://developers.cloudflare.com/security-center/investigate/`

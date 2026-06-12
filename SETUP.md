@@ -88,35 +88,13 @@ R2, Queues, Vectorize, and Analytics Engine bindings use names directly — no I
 
 ```bash
 # Production database
-npx wrangler d1 execute whisper --remote --file=./migrations/0001_init.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0002_request_id.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0003_identity.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0004_probes.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0005_vault.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0006_assertions.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0007_atlas.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0008_sandbox_analysis.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0009_usage_cost.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0010_pipelines_webhooks.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0011_env_integration.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0012_assertions_atlas_env.sql
+./scripts/migrate.sh
 
 # Local dev database (only needed if you run `npx wrangler dev --local`)
-npx wrangler d1 execute whisper --local --file=./migrations/0001_init.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0002_request_id.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0003_identity.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0004_probes.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0005_vault.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0006_assertions.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0007_atlas.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0008_sandbox_analysis.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0009_usage_cost.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0010_pipelines_webhooks.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0011_env_integration.sql
-npx wrangler d1 execute whisper --local --file=./migrations/0012_assertions_atlas_env.sql
+./scripts/migrate.sh --local
 ```
 
-All twelve migrations are idempotent — safe to re-run.
+All migrations are idempotent — safe to re-run. New migrations added to `migrations/` are picked up automatically by filename sort order.
 
 ### A6. Configure environment variables
 
@@ -168,7 +146,7 @@ npx wrangler deploy
 #### First deploy checklist
 
 - [ ] `wrangler.toml` has real KV and D1 IDs (not placeholder `000...` values)
-- [ ] Remote D1 migrations have been run (step A5)
+- [ ] Remote D1 migrations have been run: `./scripts/migrate.sh`
 - [ ] Production secrets added:
   ```bash
   npx wrangler secret put SIGNING_SECRET
@@ -263,24 +241,15 @@ database_id = "<whisper database ID>"
 
 ### B4. Run database migrations
 
-The dashboard has a SQL console for D1, but running twelve files one at a time is tedious. Use `npx wrangler` for this step — it reads the local migration files directly:
+The dashboard has a SQL console for D1, but running each file one at a time is tedious. Use the migration runner script instead:
 
 ```bash
-npx wrangler d1 execute whisper --remote --file=./migrations/0001_init.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0002_request_id.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0003_identity.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0004_probes.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0005_vault.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0006_assertions.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0007_atlas.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0008_sandbox_analysis.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0009_usage_cost.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0010_pipelines_webhooks.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0011_env_integration.sql
-npx wrangler d1 execute whisper --remote --file=./migrations/0012_assertions_atlas_env.sql
+./scripts/migrate.sh
 ```
 
-Alternatively, if you prefer the dashboard SQL console: open **D1 → whisper → Console**, paste each migration file's contents, and run it. All twelve must be executed in order.
+This applies every file in `migrations/` in order and is idempotent — safe to re-run.
+
+Alternatively, if you prefer the dashboard SQL console: open **D1 → whisper → Console**, paste each migration file's contents in filename order, and run it.
 
 ### B5. Configure environment variables
 
@@ -348,7 +317,11 @@ These apply to both setup tracks.
 
 ## Required: Cloudflare Access (Zero Trust)
 
-The Worker will not serve any requests without this. `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` must be set or every HTTP request returns `503`. Once configured, all `POST`/`PATCH`/`DELETE` endpoints under `/api/` require a valid Access JWT — including the raw AI inference routes. Explicitly public carve-outs: `GET` (read-only) routes, `/api/sandbox/:id/run|stream`, `/s/:id/run|stream`, `/api/app/:id/images|email`, and `/api/csp-report`.
+The Worker will not serve any requests without this. `CF_ACCESS_AUD` and `CF_ACCESS_TEAM_DOMAIN` must be set or every HTTP request returns `503`. Once configured, all `POST`/`PATCH`/`DELETE` endpoints under `/api/` require a valid Access JWT — including the raw AI inference routes.
+
+Sensitive `GET` endpoints are also fail-closed behind Access: `GET /api/sandbox/:id/export` (returns the plaintext system prompt), `GET /api/sandbox/:id/history` and `/export-session` (conversation data; a valid session token also satisfies the gate), `GET /api/vault`, `/api/vault/export.jsonl`, `/api/vault/search` (raw prompts/responses and versioned system prompts), and `GET /api/monitor/stream|audit|patterns` (audit trail and guard telemetry).
+
+Explicitly public carve-outs: the remaining `GET` (read-only) routes, `/api/sandbox/:id/run|stream`, `/s/:id/run|stream`, `/api/app/:id/images|email`, and `/api/csp-report`.
 
 ### Via Dashboard
 

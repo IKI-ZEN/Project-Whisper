@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { monitorRoutes } from './monitor'
 import { makeEnv, findHandler } from '../test/mockEnv'
+import { reportError } from '../lib/events'
 import type { Env } from '../types/env'
 
 // The monitor endpoints expose the audit trail (including operator identities)
@@ -40,5 +41,13 @@ describe('monitor endpoints require Cloudflare Access', () => {
   it('Access not configured → handlers fall through to the DB (200)', async () => {
     const res = await audit(req('/api/monitor/audit'), makeEnv(), {})
     assert.equal(res.status, 200)
+  })
+})
+
+describe('reportError ANALYTICS binding', () => {
+  it('does not throw when ANALYTICS is absent (optional binding)', () => {
+    const env = makeEnv()
+    assert.equal(env.ANALYTICS, undefined)
+    assert.doesNotThrow(() => reportError(env, 'test-context', new Error('test')))
   })
 })

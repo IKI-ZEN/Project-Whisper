@@ -162,5 +162,12 @@ export function extractMetrics(tool: string, result: unknown): Record<string, nu
     return metrics
   }
 
+  if (tool === 'guard-rate') {
+    const metrics: Record<string, number> = {}
+    if (typeof r.count     === 'number') metrics.count     = r.count
+    if (typeof r.windowMs  === 'number') metrics.windowMs  = r.windowMs
+    return metrics
+  }
+
   return {}
 }

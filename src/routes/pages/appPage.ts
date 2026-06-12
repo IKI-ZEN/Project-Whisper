@@ -67,7 +67,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </head>
 <body>
 <nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand">Whisper</a>
+  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
   <a href="/" class="navlink">Chat</a>
   <a href="/vibe.html" class="navlink">Vibe</a>
   <a href="/apps" class="navlink active" aria-current="page">Apps</a>

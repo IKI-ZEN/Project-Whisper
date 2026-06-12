@@ -1,0 +1,10 @@
+User-agent: *
+Disallow: /app/
+Disallow: /build/
+Disallow: /env/
+Disallow: /api/
+
+# CF AI Search crawler — allow docs indexing if configured as a data source
+# Uncomment once the CF-AI-Search User-agent string is confirmed in CF docs
+# User-agent: CF-AI-Search
+# Allow: /
