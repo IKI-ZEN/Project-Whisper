@@ -53,7 +53,7 @@ export async function openPrompt(sealed: string, secret: string, sandboxId: stri
 // ── HMAC-SHA256 utilities ─────────────────────────────────────────────────────
 // Shared across sandbox.ts, SandboxDO.ts, and any other module needing signing.
 
-export async function importHmacKey(secret: string): Promise<CryptoKey> {
+async function importHmacKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'raw', ENC.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],

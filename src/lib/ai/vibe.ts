@@ -155,7 +155,7 @@ export interface EnvConfig {
 // These bypass generateEnvConfig — zero latency, zero AI cost.
 // Template IDs are stable; the UI uses them to pre-fill the builder form.
 
-export interface EnvTemplate {
+interface EnvTemplate {
   id:           string
   label:        string
   description:  string
@@ -166,7 +166,7 @@ export interface EnvTemplate {
   models:       string[]   // suggested models; empty = AI-generated defaults
 }
 
-export const BUILT_IN_TEMPLATES: EnvTemplate[] = [
+const BUILT_IN_TEMPLATES: EnvTemplate[] = [
   {
     id:           'python-code-reviewer',
     label:        'Python Code Reviewer',

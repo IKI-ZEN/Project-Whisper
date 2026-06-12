@@ -9,7 +9,7 @@ import { sandboxExists } from './sandbox'
 
 // ── Document metadata stored in R2 customMetadata ────────────────────────────
 
-export interface DocumentMeta {
+interface DocumentMeta {
   docId: string
   sandboxId: string
   name: string
