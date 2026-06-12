@@ -56,10 +56,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .chat-empty h3{font-size:15px;font-weight:600;color:var(--text);opacity:.55;margin:0}
 .chat-empty p{font-size:12px;line-height:1.6;max-width:300px;margin:0}
 .thread-empty{font-size:11px;color:var(--muted);padding:16px 12px;text-align:center;opacity:.6}
+.thread-date{font-size:10px;color:var(--muted);display:block;margin-top:1px;font-family:var(--mono);opacity:.7}
 .typing{opacity:.5}
 .input-row{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}
 .input-row textarea{flex:1;resize:none;padding:8px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
 .input-row textarea:focus{border-color:var(--accent)}
+.input-meta{display:flex;align-items:center;justify-content:space-between;padding:2px 18px 6px;font-size:10px;color:var(--muted)}
+.input-model{font-family:var(--mono);color:var(--accent2);opacity:.7}
+.input-hint{opacity:.35}
 .input-row button{padding:10px 18px;min-height:40px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
 .input-row button:hover:not(:disabled){background:#4f46e5}
 .input-row button:disabled{opacity:.45;cursor:not-allowed}
@@ -190,6 +194,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
       <textarea id="user-input" placeholder="Type a message… (Enter to send, Shift+Enter for new line)" rows="2" aria-label="Message input"></textarea>
       <button id="send-btn">Send</button>
     </div>
+    <div class="input-meta">
+      <span id="input-model-lbl" class="input-model"></span>
+      <span class="input-hint">Shift+Enter for new line</span>
+    </div>
   </div>
 </div>
 <div id="ctx-menu" class="ctx-menu" role="menu" aria-label="Thread actions">
@@ -229,6 +237,14 @@ function addMsg(role,text){
 
 function scroll(){const m=document.getElementById('messages');m.scrollTop=m.scrollHeight}
 
+function relDate(ts){
+  if(!ts)return ''
+  const d=new Date(ts),now=new Date()
+  if(d.toDateString()===now.toDateString())return 'Today'
+  const y=new Date(now);y.setDate(y.getDate()-1)
+  return d.toDateString()===y.toDateString()?'Yesterday':d.toLocaleDateString(undefined,{month:'short',day:'numeric'})
+}
+
 function renderThreadList(){
   const list=document.getElementById('thread-list')
   list.innerHTML=''
@@ -239,6 +255,10 @@ function renderThreadList(){
     div.setAttribute('role','listitem')
     div.setAttribute('tabindex','0')
     div.textContent=s.name
+    const dateSpan=document.createElement('span')
+    dateSpan.className='thread-date'
+    dateSpan.textContent=relDate(s.createdAt)
+    div.appendChild(dateSpan)
     div.onclick=function(){if(div.contentEditable!=='true')switchSession(s.id)}
     div.ondblclick=function(e){e.preventDefault();startRename(div,s)}
     div.oncontextmenu=function(e){openCtxMenu(e,s,div)}
@@ -311,6 +331,8 @@ async function saveConfig(){
   const model=document.getElementById('model-select').value
   const temperature=parseFloat(document.getElementById('temp-slider').value)/10
   const systemPrompt=document.getElementById('sys-prompt').value
+  const lbl=document.getElementById('input-model-lbl')
+  if(lbl)lbl.textContent=model.split('/').pop()||model
   try{
     await fetch('/api/sandbox/'+sandboxId,{
       method:'PATCH',
@@ -398,6 +420,8 @@ async function init(){
         const cfg=d.data
         const sel=document.getElementById('model-select')
         if([...sel.options].some(function(o){return o.value===cfg.model}))sel.value=cfg.model
+        const lbl=document.getElementById('input-model-lbl')
+        if(lbl)lbl.textContent=(cfg.model||'').split('/').pop()||cfg.model||''
         const temp=typeof cfg.temperature==='number'?cfg.temperature:0.7
         const sl=document.getElementById('temp-slider')
         sl.value=String(Math.round(temp*10))
