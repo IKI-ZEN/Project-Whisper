@@ -61,7 +61,7 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
       Per-App Health
       <span style="font-size:10px;color:var(--muted);font-weight:400">Apps with attached probes or assertion suites</span>
     </div>
-    <div id="health-wrap"><div class="empty-note">Loading…</div></div>
+    <div id="health-wrap"><div style="display:flex;gap:10px;flex-wrap:wrap"><div class="sk" style="height:72px;width:200px;border-radius:var(--radius)"></div><div class="sk" style="height:72px;width:200px;border-radius:var(--radius)"></div><div class="sk" style="height:72px;width:200px;border-radius:var(--radius)"></div></div></div>
   </div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Apps</div><div class="stat-value sk" id="stat-sandboxes" style="height:32px;width:48px">&nbsp;</div></div>
@@ -78,31 +78,31 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
       AI Usage by Model — last 30 days
       <span style="font-size:10px;color:var(--muted);font-weight:400">~ approximate costs based on public pricing</span>
     </div>
-    <div id="cost-wrap"><div class="empty-note">Loading…</div></div>
+    <div id="cost-wrap"><div style="display:flex;flex-direction:column;gap:8px;padding:4px 0"><div class="sk sk-line" style="width:70%"></div><div class="sk sk-line" style="width:85%"></div><div class="sk sk-line" style="width:55%"></div></div></div>
   </div>
   <div class="two-col">
     <div>
       <div class="section">
         <div class="section-title">Recent Probe Runs</div>
-        <div id="probes-wrap"><div class="empty-note">Loading…</div></div>
+        <div id="probes-wrap"><div style="display:flex;flex-direction:column;gap:7px"><div class="sk sk-line" style="width:65%"></div><div class="sk sk-line" style="width:80%"></div><div class="sk sk-line" style="width:50%"></div></div></div>
       </div>
       <div class="section">
         <div class="section-title">Assertion Suites</div>
-        <div id="assertions-wrap"><div class="empty-note">Loading…</div></div>
+        <div id="assertions-wrap"><div style="display:flex;flex-direction:column;gap:7px"><div class="sk sk-line" style="width:60%"></div><div class="sk sk-line" style="width:75%"></div></div></div>
       </div>
       <div class="section">
         <div class="section-title">Evidence Vault — Recent</div>
-        <div id="vault-wrap"><div class="empty-note">Loading…</div></div>
+        <div id="vault-wrap"><div style="display:flex;flex-direction:column;gap:7px"><div class="sk sk-line" style="width:75%"></div><div class="sk sk-line" style="width:90%"></div><div class="sk sk-line" style="width:60%"></div></div></div>
       </div>
     </div>
     <div>
       <div class="section">
         <div class="section-title">Model Breakdown</div>
-        <div id="model-chart" class="chart-wrap"><div class="empty-note">Loading…</div></div>
+        <div id="model-chart" class="chart-wrap"><div style="display:flex;flex-direction:column;gap:10px;padding:4px 0"><div class="sk" style="height:120px;border-radius:var(--radius)"></div></div></div>
       </div>
       <div class="section">
         <div class="section-title">Recent Apps</div>
-        <div id="sandboxes-wrap"><div class="empty-note">Loading…</div></div>
+        <div id="sandboxes-wrap"><div style="display:flex;flex-direction:column;gap:7px"><div class="sk sk-line" style="width:70%"></div><div class="sk sk-line" style="width:85%"></div><div class="sk sk-line" style="width:55%"></div></div></div>
       </div>
     </div>
   </div>

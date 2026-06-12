@@ -39,6 +39,8 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 .act-btn:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 .act-btn:disabled{opacity:.5;cursor:not-allowed}
 .skeleton{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;animation:pulse 1.4s ease-in-out infinite}
+.new-env{padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius);color:var(--accent2);font-size:11px;transition:border-color .15s,color .15s}
+.new-env:hover{border-color:var(--accent2)}
 @media(max-width:480px){.card{padding:14px}}
 </style>
 </head>
