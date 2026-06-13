@@ -4,7 +4,7 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 
 ## What it does
 
-- **Vibe Builder** — describe an AI app in plain English; the platform uses Workers AI to generate a complete sandbox config and spins it up instantly
+- **Vibe Builder** — describe a sandbox, environment, or dashboard in plain English; the platform generates a full config and spins it up instantly. Four modes: `app` (quick sandbox), `environment` (domain-expert workspace with Whisperer panel), `dashboard` (platform data UI), and App Builder (multi-file web app via v2 WebSocket)
 - **Persistent sandboxes** — each sandbox is a Durable Object with conversation memory, configurable system prompt, model, temperature, and tool definitions
 - **Multi-provider AI** — route to Workers AI, OpenAI, Anthropic, or Google via Cloudflare AI Gateway using a `provider:model-id` naming convention
 - **App Builder** — describe an app in English; get a full multi-file web app (HTML, JS, CSS) streamed in real time, served at `/build/:id`. Supports vanilla, Alpine, React, Vue, Svelte, and Worker tech stacks
@@ -72,7 +72,7 @@ POST /api/ai/pii-scan          PII detection & redaction — email, card (Luhn),
 GET  /api/usage                aggregate cost/token usage across models and providers
 
 GET  /api/vibes                starter templates
-POST /api/vibes                describe app → live sandbox + appUrl + embedCode
+POST /api/vibes                describe app/environment/dashboard → sandbox + appUrl or envUrl (mode: 'app'|'environment'|'dashboard')
 
 GET  /api/sandbox              list all sandboxes
 POST /api/sandbox/import       create sandbox from exported config (verifies HMAC signature)
@@ -168,17 +168,22 @@ GET  /s/:id                    redirect → /app/:id
 POST /s/:id/run                short stable run API
 POST /s/:id/stream             short stable stream API
 
-POST   /api/environments           create environment (description, envType, envModels[], name) → envUrl
-POST   /api/environments/import    import a signed exported environment config
-GET    /api/environments/:id/export  export environment config (HMAC-signed if SIGNING_SECRET set)
-POST   /api/environments/:id/fork  fork environment → new independent copy
-PATCH  /api/environments/:id       update systemPrompt, temperature, maxTokens, or envModels
+GET  /env/:id                  agentic environment workspace (chat + Whisperer panel)
+GET  /environments             environments gallery (agentic environments created by Vibe coder)
 
-GET  /env/:id                  environment chat UI (compare mode for multiple models)
-GET  /environments             environments gallery
+POST   /api/lab                   create Lab (multi-model comparison workspace; description, envType, envModels[], name) → labUrl
+POST   /api/lab/import            import a signed exported Lab config
+GET    /api/lab/:id/export        export Lab config (HMAC-signed if SIGNING_SECRET set)
+POST   /api/lab/:id/fork          fork Lab → new independent copy
+PATCH  /api/lab/:id               update systemPrompt, temperature, maxTokens, or envModels
+
+GET  /lab/:id                  Lab workspace (multi-model comparison: up to 4 models side-by-side)
+GET  /lab                      Labs gallery (Fork/Export actions)
 ```
 
-> Environments are sandboxes with `fromEnv: true` metadata — list them via `GET /api/sandbox?fromEnv=true` (the source the `/environments` gallery uses). All other sandbox routes (`run`, `stream`, `history`, `delete`) apply to environments unchanged.
+> **Environments** (agentic workspaces) are sandboxes with `fromVibe: true` and `fromEnv: true` in KV metadata. Filter via `GET /api/sandbox?only=envs`. Created by `POST /api/vibes` with `mode='environment'`.
+>
+> **Labs** (multi-model comparison) are sandboxes with `fromLab: true` in KV metadata. Filter via `GET /api/sandbox?only=labs`. The `?only=apps` filter excludes Labs, Environments, and Dashboards. All other sandbox routes (`run`, `stream`, `history`, `delete`) apply to both unchanged.
 
 ## Model naming
 
