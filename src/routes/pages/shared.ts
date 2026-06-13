@@ -1,6 +1,30 @@
 import type { Env } from '../../types/env'
 import { issueAppToken } from '../../lib/appToken'
 
+// ── Shared nav ────────────────────────────────────────────────────────────────
+
+export type NavActive = 'chat' | 'vibe' | 'apps' | 'environments' | 'tools' | 'dashboard'
+
+export function navHtml(active: NavActive, extra = '', afterBrand = ''): string {
+  const lnk = (href: string, label: string, key: NavActive): string =>
+    `  <a href="${href}" class="navlink${active === key ? ' active' : ''}"${active === key ? ' aria-current="page"' : ''}>${label}</a>`
+  return [
+    '<nav class="topnav" role="navigation" aria-label="Main">',
+    `  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>`,
+    ...(afterBrand ? [afterBrand] : []),
+    lnk('/', 'Chat', 'chat'),
+    lnk('/vibe.html', 'Vibe', 'vibe'),
+    lnk('/apps', 'Apps', 'apps'),
+    lnk('/environments', 'Environments', 'environments'),
+    lnk('/tools.html', 'Tools', 'tools'),
+    lnk('/dashboard', 'Dashboard', 'dashboard'),
+    ...(extra ? [extra] : []),
+    '</nav>',
+  ].join('\n')
+}
+
+export const escJs = `function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}`
+
 // Injects the app token as a meta tag before </head> (fallback: before </body>)
 export async function injectAppToken(html: string, appId: string, env: Env): Promise<string> {
   if (!env.SIGNING_SECRET) return html

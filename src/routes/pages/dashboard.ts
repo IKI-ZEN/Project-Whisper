@@ -1,5 +1,5 @@
 import type { Handler } from '../../lib/http'
-import { genNonce, htmlHeaders, sharedCss } from './shared'
+import { genNonce, htmlHeaders, sharedCss, navHtml, escJs } from './shared'
 
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
@@ -44,15 +44,7 @@ h2{font-size:20px;font-weight:700;margin-bottom:4px}
 </style>
 </head>
 <body>
-<nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
-  <a href="/" class="navlink">Chat</a>
-  <a href="/vibe.html" class="navlink">Vibe</a>
-  <a href="/apps" class="navlink">Apps</a>
-  <a href="/environments" class="navlink">Environments</a>
-  <a href="/tools.html" class="navlink">Tools</a>
-  <a href="/dashboard" class="navlink active" aria-current="page">Dashboard</a>
-</nav>
+${navHtml('dashboard')}
 <main>
   <h2>Whisperer Command Centre</h2>
   <p class="sub">Research activity and application health at a glance.</p>
@@ -299,7 +291,7 @@ async function load(){
 }
 
 function fmtTok(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'k';return String(n||'—')}
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+${escJs}
 window.addEventListener('load',load)
 </script>
 </body>

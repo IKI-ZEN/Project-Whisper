@@ -1,5 +1,5 @@
 import type { Handler } from '../../lib/http'
-import { genNonce, htmlHeaders, sharedCss } from './shared'
+import { genNonce, htmlHeaders, sharedCss, navHtml, escJs } from './shared'
 
 // ── Chat page (root) ──────────────────────────────────────────────────────────
 
@@ -115,17 +115,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </style>
 </head>
 <body>
-<nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
-  <button id="sidebar-toggle" class="menu-btn" aria-label="Open sidebar" aria-expanded="false">☰</button>
-  <a href="/" class="navlink active" aria-current="page">Chat</a>
-  <a href="/vibe.html" class="navlink">Vibe</a>
-  <a href="/apps" class="navlink">Apps</a>
-  <a href="/environments" class="navlink">Environments</a>
-  <a href="/tools.html" class="navlink">Tools</a>
-  <a href="/dashboard" class="navlink">Dashboard</a>
-  <a id="nav-whisper-this" href="/tools.html" class="navlink" style="margin-left:auto;color:var(--accent2)">Whisper this →</a>
-</nav>
+${navHtml('chat', '  <a id="nav-whisper-this" href="/tools.html" class="navlink" style="margin-left:auto;color:var(--accent2)">Whisper this →</a>', '  <button id="sidebar-toggle" class="menu-btn" aria-label="Open sidebar" aria-expanded="false">☰</button>')}
 <div id="sidebar-backdrop" aria-hidden="true"></div>
 <div class="layout">
   <aside class="sidebar" aria-label="Sidebar">
@@ -207,7 +197,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </div>
 <script type="module" nonce="${nonce}" src="/md.js"></script>
 <script nonce="${nonce}">
-function _esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+${escJs}
 // Markdown rendering is provided by /md.js as window.renderMd (mirrors src/lib/markdown.ts).
 
 const LS_SID='whisper:sandboxId'
@@ -486,7 +476,7 @@ function renderDocList(){
     item.setAttribute('role','listitem')
     const name=doc.name||'Document'
     const st=doc.status||'processing'
-    item.innerHTML='<span class="doc-name">'+_esc(name)+'</span><span class="doc-st '+_esc(st)+'">'+_esc(st)+'</span><button class="doc-del" aria-label="Remove '+_esc(name)+'">×</button>'
+    item.innerHTML='<span class="doc-name">'+esc(name)+'</span><span class="doc-st '+esc(st)+'">'+esc(st)+'</span><button class="doc-del" aria-label="Remove '+esc(name)+'">×</button>'
     item.querySelector('.doc-del').onclick=function(e){e.stopPropagation();deleteDoc(doc.id)}
     list.appendChild(item)
   })
