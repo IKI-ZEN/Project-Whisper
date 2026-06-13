@@ -3,7 +3,7 @@ import { issueAppToken } from '../../lib/appToken'
 
 // ── Shared nav ────────────────────────────────────────────────────────────────
 
-export type NavActive = 'chat' | 'vibe' | 'apps' | 'environments' | 'lab' | 'tools' | 'dashboard' | 'dashboards'
+export type NavActive = 'chat' | 'vibe' | 'apps' | 'environments' | 'lab' | 'builds' | 'tools' | 'dashboard'
 
 export function navHtml(active: NavActive, extra = '', afterBrand = ''): string {
   const lnk = (href: string, label: string, key: NavActive): string =>
@@ -16,8 +16,8 @@ export function navHtml(active: NavActive, extra = '', afterBrand = ''): string 
     lnk('/vibe.html', 'Vibe', 'vibe'),
     lnk('/apps', 'Apps', 'apps'),
     lnk('/environments', 'Environments', 'environments'),
-    lnk('/dashboards', 'Dashboards', 'dashboards'),
     lnk('/lab', 'Lab', 'lab'),
+    lnk('/builds', 'Builds', 'builds'),
     lnk('/tools.html', 'Tools', 'tools'),
     lnk('/dashboard', 'Dashboard', 'dashboard'),
     ...(extra ? [extra] : []),
@@ -67,6 +67,14 @@ export function sharedCss(): string {
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>`
 }
+
+// Shared modal CSS — overlay + slide-in box pattern used across all workspace pages
+export function modalCss(): string {
+  return `.modal-overlay{position:fixed;inset:0;background:#00000088;z-index:100;display:flex;align-items:center;justify-content:center;visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}.modal-overlay.open{visibility:visible;opacity:1}.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;width:480px;max-width:90vw;display:flex;flex-direction:column;gap:12px;transform:translateY(10px);transition:transform .2s}.modal-overlay.open .modal-box{transform:translateY(0)}.modal-title{font-size:14px;font-weight:600;color:var(--accent2)}.modal-row{display:flex;gap:8px;flex-wrap:wrap}.modal-row button{flex:1;min-width:80px;padding:8px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;cursor:pointer;font-family:inherit}.modal-row button.outline{background:none;border:1px solid var(--border);color:var(--text)}.modal-row button.danger{background:#b91c1c}.form-group{display:flex;flex-direction:column;gap:4px}.form-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.form-input{padding:7px 9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:12px;font-family:inherit;outline:none}.form-input:focus{border-color:var(--accent)}.form-textarea{resize:vertical;min-height:70px;max-height:200px}.stat-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}.stat-row:last-child{border-bottom:none}.stat-val{font-family:var(--mono);color:var(--accent2)}.act-btn{font-size:12px;padding:6px 12px;min-height:32px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s;font-family:inherit;white-space:nowrap}.act-btn:hover{border-color:var(--accent2);color:var(--accent2)}.act-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.act-del{color:#f87171;border-color:#f8717144}.act-del:hover{border-color:#f87171;color:#f87171}`
+}
+
+// Shared modal open/close JS — inlined into each workspace page's script block
+export const modalJs = `function openModal(id){var m=document.getElementById(id);if(m){m.classList.add('open');var f=m.querySelector('button,input,textarea,select');if(f)f.focus()}}function closeModal(id){var m=document.getElementById(id);if(m)m.classList.remove('open')}document.addEventListener('keydown',function(e){if(e.key==='Escape'){document.querySelectorAll('.modal-overlay.open').forEach(function(m){m.classList.remove('open')})}})`
 
 export function htmlHeaders(nonce: string, allowFrame = false): Record<string, string> {
   return {

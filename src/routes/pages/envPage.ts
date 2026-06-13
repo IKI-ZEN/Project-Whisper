@@ -1,6 +1,6 @@
 import type { Handler, Params } from '../../lib/http'
 import { stub, doFetch } from '../../lib/do'
-import { genNonce, htmlHeaders, sharedCss, navHtml, escJs, injectAppToken } from './shared'
+import { genNonce, htmlHeaders, sharedCss, navHtml, escJs, injectAppToken, modalCss, modalJs } from './shared'
 
 // ── Environment workspace page (/env/:id) — agentic specialised workspace ─────
 
@@ -51,6 +51,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .env-name{font-size:14px;font-weight:600;color:var(--text)}
 .env-desc{font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .env-model{font-size:10px;color:var(--muted);font-family:var(--mono);flex-shrink:0}
+.modal-code{width:100%;height:80px;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-family:var(--mono);font-size:12px;resize:none}
 .main-area{flex:1;display:flex;overflow:hidden}
 .chat-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .chat-area{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px}
@@ -87,6 +88,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .wp-insight{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin-top:6px;margin-bottom:4px;font-size:11px;line-height:1.5}
 .wp-insight-label{font-size:10px;color:var(--accent2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
 @media(max-width:700px){.whisperer-panel{display:none}}
+${modalCss()}
 </style>
 </head>
 <body>
@@ -96,6 +98,14 @@ ${navHtml('environments')}
   <span class="env-name" id="env-name">${name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
   <span class="env-desc" id="env-desc">${description.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
   <span class="env-model" id="env-model">${model ? model.split('/').pop() ?? model : ''}</span>
+  <div class="ws-actions" style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:auto">
+    <button class="act-btn" id="fork-btn">Fork</button>
+    <button class="act-btn" id="embed-btn">Embed ↗</button>
+    <button class="act-btn" id="metrics-btn">Metrics</button>
+    <button class="act-btn" id="edit-btn">Edit</button>
+    <button class="act-btn" id="export-btn">Export ↓</button>
+    <button class="act-btn act-del" id="delete-btn">Delete</button>
+  </div>
 </div>
 <div class="main-area">
   <div class="chat-col">
@@ -114,6 +124,56 @@ ${navHtml('environments')}
       ).join('\n      ')}
     </div>
   </div>` : ''}
+</div>
+
+<!-- Embed modal -->
+<div id="embed-modal" class="modal-overlay" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <div class="modal-title">Embed this environment</div>
+    <textarea class="modal-code" id="embed-code" readonly></textarea>
+    <div class="modal-row">
+      <button id="embed-copy-btn">Copy code</button>
+      <button class="outline" onclick="closeModal('embed-modal')">Close</button>
+    </div>
+  </div>
+</div>
+<!-- Metrics modal -->
+<div id="metrics-modal" class="modal-overlay" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <div class="modal-title">Usage Metrics</div>
+    <div id="metrics-body"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
+    <div class="modal-row"><button class="outline" onclick="closeModal('metrics-modal')">Close</button></div>
+  </div>
+</div>
+<!-- Edit modal -->
+<div id="edit-modal" class="modal-overlay" role="dialog" aria-modal="true">
+  <div class="modal-box" style="width:520px">
+    <div class="modal-title">Edit Environment</div>
+    <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="edit-name" type="text" maxlength="128"/></div>
+    <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="edit-desc" type="text" maxlength="512"/></div>
+    <div class="form-group"><label class="form-label">System Prompt</label><textarea class="form-input form-textarea" id="edit-prompt" maxlength="16384"></textarea></div>
+    <div class="form-group"><label class="form-label">Model</label><input class="form-input" id="edit-model" type="text" maxlength="128"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Temperature</label><input class="form-input" id="edit-temp" type="number" min="0" max="2" step="0.1"/></div>
+      <div class="form-group"><label class="form-label">Max Tokens</label><input class="form-input" id="edit-maxtok" type="number" min="64" max="16384"/></div>
+    </div>
+    <div id="edit-status" style="font-size:12px;color:var(--muted);min-height:16px"></div>
+    <div class="modal-row">
+      <button id="edit-save-btn">Save Changes</button>
+      <button class="outline" onclick="closeModal('edit-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+<!-- Delete modal -->
+<div id="delete-modal" class="modal-overlay" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <div class="modal-title">Delete Environment?</div>
+    <p style="font-size:13px;color:var(--muted)">This permanently deletes the environment and all its conversation history. This action cannot be undone.</p>
+    <div class="modal-row">
+      <button class="danger" id="delete-confirm-btn">Yes, delete</button>
+      <button class="outline" onclick="closeModal('delete-modal')">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <script type="module" nonce="${nonce}" src="/md.js"></script>
@@ -275,6 +335,98 @@ FEATURES.forEach(function(f){
 document.getElementById('send-btn').addEventListener('click', send)
 document.getElementById('user-input').addEventListener('keydown', function(e){
   if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send() }
+})
+
+${modalJs}
+
+// Set embed code
+document.getElementById('embed-code').value =
+  '<iframe src="'+location.origin+'/env/'+ENV_ID+'" width="420" height="640" frameborder="0" allow="microphone" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>'
+document.getElementById('embed-copy-btn').addEventListener('click', function(){
+  var t = document.getElementById('embed-code').value
+  navigator.clipboard?.writeText(t).catch(function(){})
+  this.textContent = 'Copied!'
+  var self = this; setTimeout(function(){ self.textContent = 'Copy code' }, 1500)
+})
+
+document.getElementById('fork-btn').addEventListener('click', async function(){
+  this.disabled = true; this.textContent = 'Forking…'
+  try{
+    var r = await fetch('/api/sandbox/'+ENV_ID+'/fork', {method:'POST'})
+    var d = await r.json()
+    if(!d.ok) throw new Error(d.error||'Fork failed')
+    window.location.href = d.data.appUrl
+  }catch(e){ alert('Fork failed: '+String(e)); this.disabled=false; this.textContent='Fork' }
+})
+
+document.getElementById('embed-btn').addEventListener('click', function(){ openModal('embed-modal') })
+
+document.getElementById('metrics-btn').addEventListener('click', async function(){
+  openModal('metrics-modal')
+  var body = document.getElementById('metrics-body')
+  body.innerHTML = '<div style="color:var(--muted);font-size:12px">Loading…</div>'
+  try{
+    var r = await fetch('/api/sandbox/'+ENV_ID+'/metrics')
+    var d = await r.json()
+    if(!d.ok) throw new Error(d.error)
+    var m = d.data
+    body.innerHTML = [['Total Runs',m.totalRuns??0],['Tokens In',(m.totalTokensIn??0).toLocaleString()],['Tokens Out',(m.totalTokensOut??0).toLocaleString()],['Avg Latency',Math.round(m.avgLatencyMs??0)+' ms']]
+      .map(function(row){return '<div class="stat-row"><span>'+row[0]+'</span><span class="stat-val">'+row[1]+'</span></div>'}).join('')
+  }catch(e){ body.innerHTML='<div style="color:var(--red);font-size:12px">Failed: '+esc(String(e))+'</div>' }
+})
+
+document.getElementById('edit-btn').addEventListener('click', async function(){
+  try{
+    var r = await fetch('/api/sandbox/'+ENV_ID)
+    var d = await r.json()
+    if(d.ok){var a=d.data;document.getElementById('edit-name').value=a.name||'';document.getElementById('edit-desc').value=a.description||'';document.getElementById('edit-model').value=a.model||'';document.getElementById('edit-temp').value=String(a.temperature??0.7);document.getElementById('edit-maxtok').value=String(a.maxTokens??1024);document.getElementById('edit-prompt').value='';document.getElementById('edit-status').textContent='System prompt hidden for security. Enter new value only to change it.';document.getElementById('edit-status').style.color='var(--muted)'}
+  }catch{}
+  openModal('edit-modal')
+})
+document.getElementById('edit-save-btn').addEventListener('click', async function(){
+  var btn=this,status=document.getElementById('edit-status')
+  btn.disabled=true;btn.textContent='Saving…'
+  var patch={},name=document.getElementById('edit-name').value.trim(),desc=document.getElementById('edit-desc').value.trim(),model=document.getElementById('edit-model').value.trim(),temp=parseFloat(document.getElementById('edit-temp').value),maxtok=parseInt(document.getElementById('edit-maxtok').value),prompt=document.getElementById('edit-prompt').value.trim()
+  if(name)patch.name=name;if(desc)patch.description=desc;if(model)patch.model=model;if(!isNaN(temp))patch.temperature=temp;if(!isNaN(maxtok))patch.maxTokens=maxtok;if(prompt)patch.systemPrompt=prompt
+  try{
+    var r=await fetch('/api/sandbox/'+ENV_ID,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)})
+    var d=await r.json()
+    if(!d.ok)throw new Error(d.error||'Save failed')
+    status.textContent='Saved.';status.style.color='var(--green)'
+    if(name){document.getElementById('env-name').textContent=name}
+    if(model){document.getElementById('env-model').textContent=model.split('/').pop()||model}
+    setTimeout(function(){closeModal('edit-modal')},800)
+  }catch(e){status.textContent='Error: '+String(e);status.style.color='var(--red)'}
+  finally{btn.disabled=false;btn.textContent='Save Changes'}
+})
+
+document.getElementById('export-btn').addEventListener('click', async function(){
+  var btn=this;btn.disabled=true;btn.textContent='Exporting…'
+  try{
+    var r=await fetch('/api/sandbox/'+ENV_ID+'/export-session')
+    var d=await r.json()
+    if(!d.ok)throw new Error(d.error||'Export failed')
+    var blob=new Blob([JSON.stringify(d.data,null,2)],{type:'application/json'})
+    var url=URL.createObjectURL(blob);var a=document.createElement('a')
+    a.href=url;a.download='session-'+ENV_ID.slice(0,8)+'.json'
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url)
+  }catch(e){alert('Export failed: '+String(e))}
+  finally{btn.disabled=false;btn.textContent='Export ↓'}
+})
+
+document.getElementById('delete-btn').addEventListener('click', function(){ openModal('delete-modal') })
+document.getElementById('delete-confirm-btn').addEventListener('click', async function(){
+  var btn=this;btn.disabled=true;btn.textContent='Deleting…'
+  try{
+    var r=await fetch('/api/sandbox/'+ENV_ID,{method:'DELETE'})
+    var d=await r.json()
+    if(!d.ok)throw new Error(d.error||'Delete failed')
+    window.location.href='/environments'
+  }catch(e){alert('Delete failed: '+String(e));btn.disabled=false;btn.textContent='Yes, delete'}
+})
+
+document.querySelectorAll('.modal-overlay').forEach(function(m){
+  m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open')})
 })
 
 document.getElementById('user-input').focus()
