@@ -5,7 +5,7 @@ import { newId, isUUID, now } from '../lib/utils'
 import type { PipelineNode } from '../lib/schema'
 import { parseCreatePipeline, parsePatchPipeline, parsePipelineRunRequest } from '../lib/schema'
 import { executePipeline, type EnvResolver } from '../lib/pipeline'
-import { stub, doFetch } from './sandbox'
+import { stub, doFetch } from '../lib/do'
 import { PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW, PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
 
 // ── D1 row type ───────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { json, ok, err, parseBody, rateLimitByIp, readIdentity } from '../lib/ht
 import { generateVibeConfig } from '../lib/ai'
 import { parseVibeRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
-import { registerSandbox, stub, doFetch, identityHeader } from './sandbox'
+import { registerSandbox, stub, doFetch, identityHeader } from '../lib/do'
 import { EMBED_WIDTH, EMBED_HEIGHT, VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
 import { logSandboxEvent } from '../lib/events'
 

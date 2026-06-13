@@ -11,7 +11,7 @@ npm run deploy        # wrangler deploy
 npm run type-check    # tsc --noEmit  ← run after every non-trivial change
 ```
 
-Run `npm test` (290 unit tests) and `npm run type-check` — both must exit 0 before every commit.
+Run `npm test` (442 unit tests) and `npm run type-check` — both must exit 0 before every commit.
 
 ## Request flow
 
@@ -61,7 +61,7 @@ env.SANDBOX.get(env.SANDBOX.idFromName(sandboxId))   // correct
 env.SANDBOX.get(env.SANDBOX.newUniqueId())            // wrong
 ```
 
-**DO calls use `doFetch()` with the `https://do/` pseudo-protocol** (exported from `src/routes/sandbox.ts`). Do not construct raw `Request` objects against DO stubs.
+**DO calls use `doFetch()` with the `https://do/` pseudo-protocol** (exported from `src/lib/do.ts`). Do not construct raw `Request` objects against DO stubs.
 
 **Use `newId()` from `src/lib/utils.ts`** for ID generation — not `crypto.randomUUID()` directly.
 

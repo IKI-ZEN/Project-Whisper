@@ -2,7 +2,7 @@ import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit, listAllR2 } from '../lib/http'
 import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'
-import { doFetch } from './sandbox'
+import { doFetch, appStateStub } from '../lib/do'
 import { scan } from '../lib/guard'
 import { logSandboxEvent } from '../lib/events'
 import { newId, isUUID, now } from '../lib/utils'
@@ -12,12 +12,6 @@ import {
   EMAIL_RATE_LIMIT_WINDOW_MS, EMAIL_RATE_LIMIT_MAX,
   MAX_EMAIL_SCAN_CHARS, MAX_EMAIL_SUBJECT_LEN,
 } from '../lib/constants'
-
-// ── AppStateDO helpers ────────────────────────────────────────────────────────
-
-function appStateStub(env: Env, buildId: string): DurableObjectStub {
-  return env.APP_STATE.get(env.APP_STATE.idFromName(buildId))
-}
 
 // ── App State (E1) ────────────────────────────────────────────────────────────
 

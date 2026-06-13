@@ -5,7 +5,7 @@ import { scan } from '../lib/guard'
 import { newId, now, isUUID } from '../lib/utils'
 import { MAX_DOCUMENT_BYTES, GUARD_SCAN_SLICE_BYTES, MAX_VECTOR_CHUNKS, REINDEX_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, DOCUMENT_UPLOAD_RATE_LIMIT_MAX, DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW } from '../lib/constants'
 import { parseReindexBody } from '../lib/schema'
-import { sandboxExists } from './sandbox'
+import { sandboxExists } from '../lib/do'
 
 // ── Document metadata stored in R2 customMetadata ────────────────────────────
 

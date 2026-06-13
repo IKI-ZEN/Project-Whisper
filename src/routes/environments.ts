@@ -4,7 +4,7 @@ import { json, ok, err, parseBody, readJson, rateLimitByIp, readIdentity } from 
 import { generateEnvConfig } from '../lib/ai'
 import { parseEnvironmentRequest, parsePatchEnvironmentRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
-import { registerSandbox, stub, doFetch, identityHeader, sandboxExists } from './sandbox'
+import { registerSandbox, stub, doFetch, identityHeader, sandboxExists } from '../lib/do'
 import { signPayload, verifySignature } from '../lib/vault'
 import {
   SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW,

@@ -1,7 +1,7 @@
 import type { Env } from '../../types/env'
 import type { Handler, Params } from '../../lib/http'
 import type { SandboxConfig } from '../../lib/schema'
-import { sandboxExists, stub, doFetch } from '../sandbox'
+import { sandboxExists, stub, doFetch } from '../../lib/do'
 import { genNonce, htmlHeaders, injectAppToken, sharedCss } from './shared'
 
 // ── Standalone app page ───────────────────────────────────────────────────────

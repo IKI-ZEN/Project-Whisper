@@ -4,13 +4,7 @@ import { json, ok, err, parseBody, listAllKV, rateLimitByIp } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
 import { newId, isUUID, now } from '../lib/utils'
 import { BUILD_KEY_PREFIX, BUILD_TTL, BUILD_CREATE_RATE_LIMIT_MAX, BUILD_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
-import { doFetch, identityHeader } from './sandbox'
-
-// ── DO stub helper ────────────────────────────────────────────────────────────
-
-function buildStub(env: Env, id: string): DurableObjectStub {
-  return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(id))
-}
+import { doFetch, identityHeader, buildStub } from '../lib/do'
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 

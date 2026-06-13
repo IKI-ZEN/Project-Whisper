@@ -187,7 +187,7 @@ export function mockDOStorage(): MockDOStorage {
 // ── Durable Object stub / namespace ───────────────────────────────────────────
 
 // A DO stub whose .fetch() forwards to an in-memory handler, compatible with the
-// `https://do/<path>` pseudo-protocol used by doFetch (src/routes/sandbox.ts).
+// `https://do/<path>` pseudo-protocol used by doFetch (src/lib/do.ts).
 export function mockDONamespace(handler: (req: Request) => Promise<Response>): DurableObjectNamespace {
   const stub = { fetch: (input: RequestInfo | URL, init?: RequestInit) => handler(new Request(input as RequestInfo, init)) }
   return {
