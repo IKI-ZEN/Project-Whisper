@@ -381,6 +381,25 @@ For date/time formatting, use native browser APIs — no library needed:
   new Date(ts).toISOString() // ISO 8601 string
 Never import date-fns, dayjs, moment, or luxon.`
 
+      const DASHBOARD_KEYWORDS = /dashboard|metric|monitor|stat|analytic|visuali|operational|report|overview/i
+      const platformApiHint = DASHBOARD_KEYWORDS.test(initialState.description) ? `
+
+Platform data APIs (read-only, require X-App-Token from <meta name="whisper-token">):
+  const tok = document.querySelector('meta[name="whisper-token"]')?.content
+  fetch(url, { headers: { 'X-App-Token': tok } })
+
+  GET /api/app/__BUILD_ID__/platform/apps          → { apps: [{id,name,model,createdAt}] }
+  GET /api/app/__BUILD_ID__/platform/environments  → { apps: [{id,name,model,whispererFeatures,createdAt}] }
+  GET /api/app/__BUILD_ID__/platform/labs          → { apps: [{id,name,envType,envModels,createdAt}] }
+  GET /api/app/__BUILD_ID__/platform/builds        → { builds: [{id,name,status,createdAt}] }
+  GET /api/app/__BUILD_ID__/platform/metrics       → { totalRuns,totalTokensIn,totalTokensOut,avgLatencyMs,totalCostUsd,modelBreakdown[] }
+  GET /api/app/__BUILD_ID__/platform/events        → { events: [{sandbox_id,event_type,metadata,created_at}] }
+  GET /api/app/__BUILD_ID__/platform/usage         → { rows: [{model,totalCalls,totalTokensIn,totalTokensOut,totalCostUsd}] }
+  GET /api/app/__BUILD_ID__/platform/probes        → { probes: [{id,name,schedule,run_count,last_run_at}] }
+
+For embedding: <iframe src="/env/{id}" style="width:100%;height:400px;border:none">
+               <iframe src="/app/{id}" style="width:100%;height:400px;border:none">` : ''
+
       const workerHint = blueprint.techStack === 'worker' && file.filename === 'worker.js' ? `
 Worker companion format: export default { async fetch(request, env) { ... } }
 This worker.js is a deployable Cloudflare Worker script (not auto-deployed — copy to your own Worker project).
@@ -391,7 +410,7 @@ It receives fetch requests and can use Cloudflare bindings via env.` : ''
         systemPrompt: `You are writing source code for a web app file.
 Output ONLY the raw file content. No markdown fences, no explanation, no surrounding text.
 The output is written directly to ${file.filename}.
-${stateApiHint}${workerHint}`,
+${stateApiHint}${platformApiHint}${workerHint}`,
         messages:    fileMessages,
         maxTokens:   4096,
         temperature: 0.1,
