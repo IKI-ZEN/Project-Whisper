@@ -1,7 +1,6 @@
-import type { Env } from '../../types/env'
 import type { Handler, Params } from '../../lib/http'
-import { sandboxExists, stub, doFetch } from '../sandbox'
-import { genNonce, htmlHeaders, sharedCss } from './shared'
+import { stub, doFetch } from '../../lib/do'
+import { genNonce, htmlHeaders, sharedCss, navHtml, escJs } from './shared'
 
 // ── Environment chat page (/env/:id) ─────────────────────────────────────────
 
@@ -97,17 +96,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </style>
 </head>
 <body>
-<nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
-  <a href="/" class="navlink">Chat</a>
-  <a href="/vibe.html" class="navlink">Vibe</a>
-  <a href="/apps" class="navlink">Apps</a>
-  <a href="/environments" class="navlink active" aria-current="page">Environments</a>
-  <a href="/tools.html" class="navlink">Tools</a>
-  <a href="/dashboard" class="navlink">Dashboard</a>
-  <span id="env-name">Loading…</span>
-  <span id="env-type-badge" class="type-badge"></span>
-</nav>
+${navHtml('environments', '  <span id="env-name">Loading…</span>\n  <span id="env-type-badge" class="type-badge"></span>')}
 
 <div class="model-strip" id="model-strip" role="toolbar" aria-label="Active models"></div>
 <div class="consensus-bar" id="consensus-bar" style="display:none"></div>
@@ -202,7 +191,7 @@ let history = []
 let histEnabled = false
 let lastComparison = null
 
-function _esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+${escJs}
 // Markdown rendering is provided by /md.js as window.renderMd (mirrors src/lib/markdown.ts).
 
 function renderModelStrip(){
@@ -213,7 +202,7 @@ function renderModelStrip(){
     pill.className = 'model-pill'
     pill.setAttribute('role','listitem')
     const label = m.split('/').pop() || m
-    pill.innerHTML = '<span title="'+_esc(m)+'">'+_esc(label)+'</span>'
+    pill.innerHTML = '<span title="'+esc(m)+'">'+esc(label)+'</span>'
     if(models.length > 1){
       const rm = document.createElement('button')
       rm.className = 'rm'
@@ -293,15 +282,15 @@ function ensureColumns(){
       col.className = 'col-panel'
       col.id = eid
       const label = m.split('/').pop() || m
-      col.innerHTML = '<div class="col-header" id="hdr-'+_esc(eid)+'">'
-                    + '<button class="star-btn" id="star-'+_esc(eid)+'" title="Mark as best" aria-label="Mark as best response">★</button>'
-                    + '<span class="col-model-label" title="'+_esc(m)+'">'+_esc(label)+'</span>'
-                    + '<span class="col-cost" id="cost-'+_esc(eid)+'"></span>'
-                    + '<span class="col-latency" id="lat-'+_esc(eid)+'"></span>'
+      col.innerHTML = '<div class="col-header" id="hdr-'+esc(eid)+'">'
+                    + '<button class="star-btn" id="star-'+esc(eid)+'" title="Mark as best" aria-label="Mark as best response">★</button>'
+                    + '<span class="col-model-label" title="'+esc(m)+'">'+esc(label)+'</span>'
+                    + '<span class="col-cost" id="cost-'+esc(eid)+'"></span>'
+                    + '<span class="col-latency" id="lat-'+esc(eid)+'"></span>'
                     + '</div>'
-                    + '<div class="col-messages" id="msgs-'+_esc(eid)+'"></div>'
+                    + '<div class="col-messages" id="msgs-'+esc(eid)+'"></div>'
       grid.appendChild(col)
-      document.getElementById('star-'+_esc(eid)).onclick = function(){
+      document.getElementById('star-'+esc(eid)).onclick = function(){
         document.querySelectorAll('.star-btn').forEach(function(b){b.classList.remove('active')})
         this.classList.add('active')
       }
@@ -361,7 +350,7 @@ async function streamColumn(model, messages){
               full+=ev.response
               el.classList.remove('typing')
               if(ENV_TYPE==='structured'){
-                try{el.innerHTML='<pre>'+_esc(JSON.stringify(JSON.parse(full),null,2))+'</pre>'}
+                try{el.innerHTML='<pre>'+esc(JSON.stringify(JSON.parse(full),null,2))+'</pre>'}
                 catch{el.textContent=full}
               } else {
                 el.innerHTML=window.renderMd(full)

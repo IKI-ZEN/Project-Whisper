@@ -190,8 +190,10 @@ export class SandboxDO extends DurableObject<Env> {
     try {
       const result = await Promise.race([
         new Promise<string>(resolve => {
+          // resolve must be passed in explicitly — new Function bodies close over
+          // global scope only, so the executor's resolve is not visible inside.
           // eslint-disable-next-line no-new-func
-          const fn = new Function('__code', `
+          const fn = new Function('__code', 'resolve', `
             const logs = []
             const c = {
               log:   (...a) => logs.push(a.map(String).join(' ')),
@@ -212,7 +214,7 @@ export class SandboxDO extends DurableObject<Env> {
               resolve(out || '(no output)')
             }
           `)
-          fn(code)
+          fn(code, resolve)
         }),
         new Promise<string>((_, reject) =>
           setTimeout(() => reject(new Error(`Execution timed out after ${CODE_EXEC_TIMEOUT_MS / 1000}s`)), CODE_EXEC_TIMEOUT_MS)

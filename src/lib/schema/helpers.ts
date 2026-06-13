@@ -7,9 +7,9 @@ export function isObj(v: unknown): v is Obj {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-export const ALLOWED_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+const ALLOWED_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 
-export function parseContentBlock(v: unknown, idx: number): ContentBlock {
+function parseContentBlock(v: unknown, idx: number): ContentBlock {
   if (!isObj(v)) throw new Error(`content[${idx}] must be an object`)
   const { type } = v
   if (type === 'text') {
@@ -28,7 +28,7 @@ export function parseContentBlock(v: unknown, idx: number): ContentBlock {
   throw new Error(`content[${idx}].type must be "text" or "image"`)
 }
 
-export function parseMessageContent(v: unknown): string | ContentBlock[] {
+function parseMessageContent(v: unknown): string | ContentBlock[] {
   if (typeof v === 'string') return v
   if (Array.isArray(v)) {
     if (v.length > MAX_IMAGES_PER_MESSAGE + 20)

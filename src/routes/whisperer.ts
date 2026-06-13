@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, readJson, rateLimitByIp } from '../lib/http'
-import { saveToVault } from '../lib/analysis'
+import { saveToVault } from '../lib/toolRun'
 import { isUUID, now } from '../lib/utils'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
@@ -17,10 +17,10 @@ import {
 } from '../lib/ai'
 import { executePipeline } from '../lib/pipeline'
 import { scanVerbose, PATTERN_DESCRIPTIONS } from '../lib/guard'
-import { WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW } from '../lib/constants'
+import { WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS } from '../lib/constants'
 
 const sensitivity: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseSensitivityRequest)
   if (!p.ok) return p.response
@@ -46,7 +46,7 @@ const sensitivity: Handler = async (req: Request, env: Env) => {
 }
 
 const cluster: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseClusterRequest)
   if (!p.ok) return p.response
@@ -78,7 +78,7 @@ const cluster: Handler = async (req: Request, env: Env) => {
 }
 
 const cot: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseCotRequest)
   if (!p.ok) return p.response
@@ -93,7 +93,7 @@ const cot: Handler = async (req: Request, env: Env) => {
 }
 
 const entropy: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseEntropyRequest)
   if (!p.ok) return p.response
@@ -108,7 +108,7 @@ const entropy: Handler = async (req: Request, env: Env) => {
 }
 
 const archaeology: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseArchaeologyRequest)
   if (!p.ok) return p.response
@@ -126,7 +126,7 @@ const archaeology: Handler = async (req: Request, env: Env) => {
 }
 
 const pipeline: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parsePipelineRequest)
   if (!p.ok) return p.response
@@ -141,7 +141,7 @@ const pipeline: Handler = async (req: Request, env: Env) => {
 }
 
 const think: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseThinkRequest)
   if (!p.ok) return p.response
@@ -156,7 +156,7 @@ const think: Handler = async (req: Request, env: Env) => {
 }
 
 const evaluate: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseEvaluateRequest)
   if (!p.ok) return p.response
@@ -250,7 +250,7 @@ async function parseWithEnvelope<T>(
 const STRESS_PADDING_PHRASE = 'The following is background context provided for reference purposes only. '
 
 const contextStress: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseContextStressRequest)
   if (!p.ok) return p.response
@@ -285,7 +285,7 @@ const contextStress: Handler = async (req: Request, env: Env) => {
 }
 
 const drift: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseDriftRequest)
   if (!p.ok) return p.response
@@ -323,7 +323,7 @@ const drift: Handler = async (req: Request, env: Env) => {
 }
 
 const ablation: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseAblationRequest)
   if (!p.ok) return p.response
@@ -360,7 +360,7 @@ const ablation: Handler = async (req: Request, env: Env) => {
 }
 
 const consistency: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseConsistencyRequest)
   if (!p.ok) return p.response
@@ -391,7 +391,7 @@ const consistency: Handler = async (req: Request, env: Env) => {
 }
 
 const guardLab: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseWithEnvelope(req, parseGuardProbeRequest)
   if (!p.ok) return p.response
@@ -414,7 +414,7 @@ const guardLab: Handler = async (req: Request, env: Env) => {
 // output. Returns matches with type + position and, when redact:true, the
 // redacted text. Match previews contain the raw PII — callers handle with care.
 const piiScan: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parsePiiScanRequest)
   if (!p.ok) return p.response

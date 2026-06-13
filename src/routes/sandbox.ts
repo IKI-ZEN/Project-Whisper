@@ -3,52 +3,14 @@ import type { Handler, Params } from '../lib/http'
 import { json, ok, err, readJson, sseResponse, parseBody, parseBodyOptional, listAllKV, rateLimitByIp, readIdentity } from '../lib/http'
 import { parseCreateSandboxRequest, parseRunSandboxRequest, parseSessionBody, parsePatchSandboxRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now, isUUID } from '../lib/utils'
-import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW, SECURITY_REPORT_WINDOW_MS, SESSION_TOKEN_TTL_MS } from '../lib/constants'
+import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS, SECURITY_REPORT_WINDOW_MS, SESSION_TOKEN_TTL_MS } from '../lib/constants'
 import { signPayload, verifySignature } from '../lib/vault'
 import { requireAccess } from '../lib/access'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
-import { saveToVault } from '../lib/analysis'
+import { saveToVault } from '../lib/toolRun'
 import { logSandboxEvent } from '../lib/events'
 import { scan } from '../lib/guard'
-
-// ── KV metadata shape (stored with each sandbox key) ─────────────────────────
-
-export interface SandboxMeta {
-  id: string
-  name: string
-  description: string
-  model: string
-  createdAt: number
-  fromVibe?: boolean
-  fromEnv?: boolean
-  envType?: string
-  envModels?: string[]
-}
-
-// ── Internal DO dispatch ──────────────────────────────────────────────────────
-
-export function stub(env: Env, sandboxId: string): DurableObjectStub {
-  return env.SANDBOX.get(env.SANDBOX.idFromName(sandboxId))
-}
-
-export async function doFetch(
-  s: DurableObjectStub,
-  path: string,
-  method: string,
-  body?: unknown,
-  extraHeaders?: Record<string, string>,
-): Promise<Response> {
-  return s.fetch(`https://do/${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...extraHeaders },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-}
-
-export function identityHeader(req: Request): Record<string, string> {
-  const id = readIdentity(req)
-  return id ? { 'X-Whisper-Identity': id } : {}
-}
+import { stub, doFetch, identityHeader, sandboxExists, registerSandbox, type SandboxMeta } from '../lib/do'
 
 // Validate session token when SIGNING_SECRET is set and a token is supplied.
 // Missing token is always allowed (backwards compatible — token is opt-in).
@@ -93,23 +55,6 @@ async function conversationReadGate(
   return null
 }
 
-export async function sandboxExists(env: Env, id: string): Promise<boolean> {
-  return (await env.SANDBOX_REGISTRY.get(`${SANDBOX_KEY_PREFIX}${id}`)) !== null
-}
-
-// ── KV helper — stores rich metadata for gallery listing ──────────────────────
-
-export async function registerSandbox(
-  env: Env,
-  meta: SandboxMeta,
-): Promise<void> {
-  await env.SANDBOX_REGISTRY.put(
-    `${SANDBOX_KEY_PREFIX}${meta.id}`,
-    meta.id,   // value is the id — existence check remains simple
-    { expirationTtl: SANDBOX_TTL, metadata: meta },
-  )
-}
-
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const list: Handler = async (req, env) => {
@@ -129,7 +74,7 @@ const list: Handler = async (req, env) => {
 }
 
 const create: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseCreateSandboxRequest)
   if (!p.ok) return p.response
@@ -390,7 +335,7 @@ const exportConfig: Handler = async (req, env, params: Params) => {
 }
 
 const importConfig: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   let raw: unknown
   try { raw = await readJson(req) } catch (e) { return json(err(String(e)), 400) }
@@ -467,7 +412,7 @@ const importConfig: Handler = async (req, env) => {
 const fork: Handler = async (req, env, params: Params) => {
   const sourceId = params.id ?? ''
   if (!isUUID(sourceId)) return json(err('Invalid sandbox id'), 422)
-  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:sandbox-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   if (!await sandboxExists(env, sourceId)) return json(err('Sandbox not found'), 404)
 

@@ -1,8 +1,7 @@
-import type { Env } from '../../types/env'
 import type { Handler, Params } from '../../lib/http'
 import type { SandboxConfig } from '../../lib/schema'
-import { sandboxExists, stub, doFetch } from '../sandbox'
-import { genNonce, htmlHeaders, injectAppToken, sharedCss } from './shared'
+import { sandboxExists, stub, doFetch } from '../../lib/do'
+import { genNonce, htmlHeaders, injectAppToken, sharedCss, navHtml } from './shared'
 
 // ── Standalone app page ───────────────────────────────────────────────────────
 
@@ -66,20 +65,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </style>
 </head>
 <body>
-<nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
-  <a href="/" class="navlink">Chat</a>
-  <a href="/vibe.html" class="navlink">Vibe</a>
-  <a href="/apps" class="navlink active" aria-current="page">Apps</a>
-  <a href="/environments" class="navlink">Environments</a>
-  <a href="/tools.html" class="navlink">Tools</a>
-  <a href="/dashboard" class="navlink">Dashboard</a>
-  <span id="app-name" style="margin-left:auto">Loading…</span>
-  <span id="app-desc" style="display:none"></span>
-  <span id="model-badge" class="badge" style="display:none"></span>
-  <button class="hbtn" id="embed-btn" aria-haspopup="dialog">Embed ↗</button>
-  <button class="hbtn" id="share-btn">Share config</button>
-</nav>
+${navHtml('apps', '  <span id="app-name" style="margin-left:auto">Loading…</span>\n  <span id="app-desc" style="display:none"></span>\n  <span id="model-badge" class="badge" style="display:none"></span>\n  <button class="hbtn" id="embed-btn" aria-haspopup="dialog">Embed ↗</button>\n  <button class="hbtn" id="share-btn">Share config</button>')}
 <div id="messages" role="log" aria-live="polite" aria-label="Conversation messages">
   <div class="msg system" id="init-msg">Connecting…</div>
 </div>

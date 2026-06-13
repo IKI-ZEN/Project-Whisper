@@ -3,14 +3,14 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, sseEvent, sseResponse, parseQueryInt, rateLimitByIp } from '../lib/http'
 import { requireAccess } from '../lib/access'
 import { now } from '../lib/utils'
-import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW } from '../lib/constants'
+import { MONITOR_LIMIT_DEFAULT, MONITOR_LIMIT_MAX, MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW_MS } from '../lib/constants'
 
 // GET /api/monitor/stream
 // SSE endpoint — returns all sandbox_events since `since` (default: last 60s),
 // optionally filtered by sandbox_id or environment_id. Clients use EventSource with Last-Event-ID
 // for reconnect-based polling.
 const stream: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const { deny } = await requireAccess(req, env)
   if (deny) return deny
@@ -79,7 +79,7 @@ const stream: Handler = async (req: Request, env: Env) => {
 // GET /api/monitor/audit
 // Paginated audit log reader with optional filters.
 const audit: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const { deny: auditDeny } = await requireAccess(req, env)
   if (auditDeny) return auditDeny
@@ -142,7 +142,7 @@ const audit: Handler = async (req: Request, env: Env) => {
 // GET /api/monitor/patterns
 // Aggregated guard pattern frequency analysis.
 const patterns: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const { deny: patternsDeny } = await requireAccess(req, env)
   if (patternsDeny) return patternsDeny
@@ -198,7 +198,7 @@ const patterns: Handler = async (req: Request, env: Env) => {
 // GET /api/monitor/errors
 // Paginated error log reader — surfaced by reportError() from catch blocks.
 const errors: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:monitor', MONITOR_RATE_LIMIT_MAX, MONITOR_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const { deny: errorsDeny } = await requireAccess(req, env)
   if (errorsDeny) return errorsDeny

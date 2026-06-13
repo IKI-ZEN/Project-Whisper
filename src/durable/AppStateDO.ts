@@ -4,15 +4,13 @@ import { MAX_APP_STATE_KEY_LEN, MAX_APP_STATE_VALUE_LEN, MAX_APP_STATE_KEYS, APP
 
 export class AppStateDO {
   private state: DurableObjectState
-  private env: Env
 
   // User KV entries are stored under this prefix so future DO metadata keys
   // are never accidentally wiped by the user-facing clear endpoint.
   private static readonly KV_PREFIX = 'kv/'
 
-  constructor(state: DurableObjectState, env: Env) {
+  constructor(state: DurableObjectState, _env: Env) {
     this.state = state
-    this.env   = env
   }
 
   async fetch(req: Request): Promise<Response> {

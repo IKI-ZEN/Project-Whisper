@@ -56,7 +56,7 @@ function assembleRagContext(env: Env, config: SandboxConfig, matches: VectorMatc
   return kept.join('\n\n')
 }
 
-export async function runInSandbox(ai: Ai, env: Env, config: SandboxConfig, userMessage: string): Promise<string> {
+async function runInSandbox(ai: Ai, env: Env, config: SandboxConfig, userMessage: string): Promise<string> {
   return complete(ai, env, {
     model: config.model,
     systemPrompt: config.systemPrompt,
@@ -71,7 +71,7 @@ export async function runInSandbox(ai: Ai, env: Env, config: SandboxConfig, user
   })
 }
 
-export function streamInSandbox(ai: Ai, env: Env, config: SandboxConfig, userMessage: string): ReadableStream {
+function streamInSandbox(ai: Ai, env: Env, config: SandboxConfig, userMessage: string): ReadableStream {
   return completeStream(ai, env, {
     model: config.model,
     systemPrompt: config.systemPrompt,

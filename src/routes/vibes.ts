@@ -1,11 +1,10 @@
-import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp, readIdentity } from '../lib/http'
 import { generateVibeConfig } from '../lib/ai'
 import { parseVibeRequest, type SandboxConfig } from '../lib/schema'
 import { newId, now } from '../lib/utils'
-import { registerSandbox, stub, doFetch, identityHeader } from './sandbox'
-import { EMBED_WIDTH, EMBED_HEIGHT, VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
+import { registerSandbox, stub, doFetch, identityHeader } from '../lib/do'
+import { EMBED_WIDTH, EMBED_HEIGHT, VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW_MS } from '../lib/constants'
 import { logSandboxEvent } from '../lib/events'
 
 const TEMPLATES = [
@@ -20,7 +19,7 @@ const listTemplates: Handler = (_req, _env) =>
   Promise.resolve(json(ok({ templates: TEMPLATES })))
 
 const createVibe: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:vibe-create', VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:vibe-create', VIBE_CREATE_RATE_LIMIT_MAX, VIBE_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseVibeRequest)
   if (!p.ok) return p.response

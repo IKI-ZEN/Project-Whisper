@@ -1,5 +1,5 @@
 import type { Handler } from '../../lib/http'
-import { genNonce, htmlHeaders, sharedCss } from './shared'
+import { genNonce, htmlHeaders, sharedCss, navHtml, escJs } from './shared'
 
 // ── Apps gallery page ─────────────────────────────────────────────────────────
 
@@ -37,16 +37,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 </style>
 </head>
 <body>
-<nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
-  <a href="/" class="navlink">Chat</a>
-  <a href="/vibe.html" class="navlink">Vibe</a>
-  <a href="/apps" class="navlink active" aria-current="page">Apps</a>
-  <a href="/environments" class="navlink">Environments</a>
-  <a href="/tools.html" class="navlink">Tools</a>
-  <a href="/dashboard" class="navlink">Dashboard</a>
-  <a href="/vibe.html" class="navlink newapp">+ New App</a>
-</nav>
+${navHtml('apps', '  <a href="/vibe.html" class="navlink newapp">+ New App</a>')}
 <main>
   <h2>Your Apps</h2>
   <p class="sub">AI-powered apps built with Vibe or the API. Click any card to open the app.</p>
@@ -93,9 +84,7 @@ async function load() {
   }
 }
 
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-}
+${escJs}
 
 load()
 </script>

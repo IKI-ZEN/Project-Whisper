@@ -1,16 +1,9 @@
-import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, listAllKV, rateLimitByIp } from '../lib/http'
 import { parseBuildRequest } from '../lib/schema'
 import { newId, isUUID, now } from '../lib/utils'
-import { BUILD_KEY_PREFIX, BUILD_TTL, BUILD_CREATE_RATE_LIMIT_MAX, BUILD_CREATE_RATE_LIMIT_WINDOW } from '../lib/constants'
-import { doFetch, identityHeader } from './sandbox'
-
-// ── DO stub helper ────────────────────────────────────────────────────────────
-
-function buildStub(env: Env, id: string): DurableObjectStub {
-  return env.APP_BUILDER.get(env.APP_BUILDER.idFromName(id))
-}
+import { BUILD_KEY_PREFIX, BUILD_TTL, BUILD_CREATE_RATE_LIMIT_MAX, BUILD_CREATE_RATE_LIMIT_WINDOW_MS } from '../lib/constants'
+import { doFetch, identityHeader, buildStub } from '../lib/do'
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -22,7 +15,7 @@ const list: Handler = async (_req, env) => {
 
 // POST /api/v2/build
 const create: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:build-create', BUILD_CREATE_RATE_LIMIT_MAX, BUILD_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:build-create', BUILD_CREATE_RATE_LIMIT_MAX, BUILD_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const parsed = await parseBody(req, parseBuildRequest)
   if (!parsed.ok) return parsed.response

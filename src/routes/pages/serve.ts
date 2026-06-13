@@ -1,10 +1,10 @@
 import type { Env } from '../../types/env'
-import type { Handler, Params } from '../../lib/http'
+import type { Handler } from '../../lib/http'
 import { injectAppToken } from './shared'
 
 // ── Built app serving (/build/:id) ───────────────────────────────────────────
 
-export function buildMimeType(filename: string): string {
+function buildMimeType(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase() ?? ''
   const map: Record<string, string> = {
     html: 'text/html; charset=utf-8',
@@ -24,7 +24,7 @@ export function buildMimeType(filename: string): string {
 }
 
 // Permissive CSP for AI-generated apps — they may load CDN ESM frameworks
-export const BUILD_CSP = [
+const BUILD_CSP = [
   "default-src 'self' https: data: blob:",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https:",
@@ -33,7 +33,7 @@ export const BUILD_CSP = [
   "font-src 'self' https:",
 ].join('; ')
 
-export async function serveBuildFile(env: Env, buildId: string, filename: string): Promise<Response> {
+async function serveBuildFile(env: Env, buildId: string, filename: string): Promise<Response> {
   if (filename.startsWith('.')) return new Response('Not found', { status: 404 })
   const key = `apps/${buildId}/${filename}`
   const obj = await env.FILES.get(key)

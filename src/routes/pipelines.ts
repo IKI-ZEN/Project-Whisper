@@ -1,12 +1,11 @@
-import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp, parseQueryInt } from '../lib/http'
 import { newId, isUUID, now } from '../lib/utils'
 import type { PipelineNode } from '../lib/schema'
 import { parseCreatePipeline, parsePatchPipeline, parsePipelineRunRequest } from '../lib/schema'
 import { executePipeline, type EnvResolver } from '../lib/pipeline'
-import { stub, doFetch } from './sandbox'
-import { PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW, PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
+import { stub, doFetch } from '../lib/do'
+import { PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW_MS, PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW_MS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX } from '../lib/constants'
 
 // ── D1 row type ───────────────────────────────────────────────────────────────
 
@@ -38,7 +37,7 @@ function shapeRow(row: PipelineRow) {
 
 // POST /api/pipelines
 const createPipeline: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:pipeline-write', PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:pipeline-write', PIPELINE_WRITE_RATE_LIMIT_MAX, PIPELINE_WRITE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseCreatePipeline)
   if (!p.ok) return p.response
@@ -136,7 +135,7 @@ const run: Handler = async (req, env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
-  const rl = await rateLimitByIp(req, env, 'rl:pipeline-run', PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:pipeline-run', PIPELINE_RUN_RATE_LIMIT_MAX, PIPELINE_RUN_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parsePipelineRunRequest)
   if (!p.ok) return p.response

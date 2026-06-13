@@ -1,5 +1,5 @@
 import type { Handler } from '../../lib/http'
-import { genNonce, htmlHeaders, sharedCss } from './shared'
+import { genNonce, htmlHeaders, sharedCss, navHtml, escJs } from './shared'
 
 // ── Environments gallery page ─────────────────────────────────────────────────
 
@@ -45,16 +45,7 @@ h2{font-size:22px;font-weight:700;margin-bottom:6px}
 </style>
 </head>
 <body>
-<nav class="topnav" role="navigation" aria-label="Main">
-  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Whisper</a>
-  <a href="/" class="navlink">Chat</a>
-  <a href="/vibe.html" class="navlink">Vibe</a>
-  <a href="/apps" class="navlink">Apps</a>
-  <a href="/environments" class="navlink active" aria-current="page">Environments</a>
-  <a href="/tools.html" class="navlink">Tools</a>
-  <a href="/dashboard" class="navlink">Dashboard</a>
-  <a href="/environments.html" class="navlink new-env">+ New Environment</a>
-</nav>
+${navHtml('environments', '  <a href="/environments.html" class="navlink new-env">+ New Environment</a>')}
 <main>
   <h2>Your Environments</h2>
   <p class="sub">AI-configured chat workspaces. Each environment type dictates how models behave — coding, research, structured, or general.</p>
@@ -152,7 +143,7 @@ async function doExport(id, name, btn){
   }
 }
 
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+${escJs}
 
 load()
 </script>

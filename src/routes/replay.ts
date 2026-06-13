@@ -3,8 +3,8 @@ import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { newId, isUUID, now } from '../lib/utils'
-import { stub, doFetch } from './sandbox'
-import { REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW } from '../lib/constants'
+import { stub, doFetch } from '../lib/do'
+import { REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW_MS } from '../lib/constants'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -174,7 +174,7 @@ async function runReplay(
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const postReplay: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:replay', REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:replay', REPLAY_RATE_LIMIT_MAX, REPLAY_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseReplayRequest)
   if (!p.ok) return p.response

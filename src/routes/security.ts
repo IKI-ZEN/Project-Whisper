@@ -1,4 +1,3 @@
-import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { MAX_CSP_REPORT_BYTES } from '../lib/constants'
 import { logSandboxEvent } from '../lib/events'

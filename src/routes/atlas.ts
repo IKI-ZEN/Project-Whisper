@@ -4,8 +4,8 @@ import { json, ok, err, parseBody, parseQueryInt, rateLimitByIp } from '../lib/h
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { newId, isUUID, now } from '../lib/utils'
 import {
-  ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW,
-  WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW,
+  ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW_MS,
+  WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS,
 } from '../lib/constants'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ function parseNearestRequest(body: unknown): { text: string; n: number } {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 const addPrompt: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:atlas-write', ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:atlas-write', ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseAddPrompt)
   if (!p.ok) return p.response
@@ -202,7 +202,7 @@ const listPrompts: Handler = async (req: Request, env: Env) => {
   }
 }
 
-const getPrompt: Handler = async (req: Request, env: Env, params) => {
+const getPrompt: Handler = async (_req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
@@ -228,7 +228,7 @@ const deletePrompt: Handler = async (req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)
-  const rl = await rateLimitByIp(req, env, 'rl:atlas-write', ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:atlas-write', ATLAS_WRITE_RATE_LIMIT_MAX, ATLAS_WRITE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   try {
     await env.DB.prepare('DELETE FROM prompt_library WHERE id = ?').bind(id).run()
@@ -239,7 +239,7 @@ const deletePrompt: Handler = async (req: Request, env: Env, params) => {
 }
 
 const embedAtlas: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseEmbedRequest)
   if (!p.ok) return p.response
@@ -315,7 +315,7 @@ const embedAtlas: Handler = async (req: Request, env: Env) => {
 }
 
 const nearestPrompts: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:whisperer', WHISPERER_RATE_LIMIT_MAX, WHISPERER_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseNearestRequest)
   if (!p.ok) return p.response
