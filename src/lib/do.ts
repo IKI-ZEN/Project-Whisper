@@ -46,10 +46,11 @@ export interface SandboxMeta {
   model: string
   createdAt: number
   fromVibe?: boolean
-  fromEnv?: boolean
+  fromLab?: boolean       // multi-model comparison workspace (formerly fromEnv)
+  fromEnv?: boolean       // agentic environment (created via vibe coder, mode='environment')
   fromDashboard?: boolean
-  envType?: string
-  envModels?: string[]
+  envType?: string        // lab type: general | coding | research | structured | ...
+  envModels?: string[]    // ordered model list for lab compare mode
 }
 
 export async function sandboxExists(env: Env, id: string): Promise<boolean> {

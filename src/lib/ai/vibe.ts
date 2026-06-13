@@ -43,7 +43,7 @@ export function parsePromptClauses(prompt: string): string[] {
   return clauses.filter(c => c.length > 0)
 }
 
-export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string, mode: 'app' | 'dashboard' = 'app'): Promise<VibeConfig> {
+export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string, mode: 'app' | 'environment' | 'dashboard' = 'app'): Promise<VibeConfig> {
   const hasGateway = Boolean(env.AI_GATEWAY_ID && env.CLOUDFLARE_ACCOUNT_ID)
 
   const modelOptions = hasGateway
@@ -59,6 +59,26 @@ Flagship via AI Gateway (requires API keys):
     : `- "@cf/meta/llama-3.1-8b-instruct" — fast, efficient
 - "@cf/meta/llama-3.3-70b-instruct-fp8-fast" — large, complex tasks`
 
+  const environmentHint = mode === 'environment' ? `
+IMPORTANT — you are generating an AGENTIC ENVIRONMENT, not a generic chat app.
+An environment is a specialised workspace tuned for a specific domain (e.g. cybersecurity, sales, research, creative writing).
+
+Requirements:
+- systemPrompt: write a detailed, expert-level system prompt that makes the AI behave like a domain specialist. Include:
+  • The domain persona and expertise level
+  • How to structure responses (tone, format, depth)
+  • Domain-specific knowledge and behaviours the AI should demonstrate
+  • Explicit guidance on using tools if relevant
+- tools: define 1–3 domain-relevant tools ONLY if they meaningfully extend the environment's capabilities
+  (e.g. a cybersecurity environment might have a vulnerability_lookup tool)
+- model: choose the most capable model available for the domain
+- temperature: set appropriately for the domain (low for technical/structured, higher for creative)
+- appHtml: build a focused chat interface with domain branding — title, accent colour, and placeholder text that reflect the domain
+  • Show the environment name and domain prominently
+  • Style the interface to match the domain aesthetic
+  • Use the <vibe-chat sandbox-id="__SANDBOX_ID__"> web component for the chat, or build a custom interface
+` : ''
+
   const dashboardHint = mode === 'dashboard' ? `
 IMPORTANT — you are generating a DATA DASHBOARD, not a chat app.
 Do NOT include any chat input, VibeClient, or vibe-sdk.js.
@@ -66,7 +86,8 @@ The page should fetch live platform data and render it as a visual dashboard.
 
 Platform data APIs (all GET, require X-App-Token header):
   /api/app/__SANDBOX_ID__/platform/apps          → { apps: [{id, name, model, createdAt, fromVibe}] }
-  /api/app/__SANDBOX_ID__/platform/environments  → { apps: [{id, name, envType, envModels, createdAt}] }
+  /api/app/__SANDBOX_ID__/platform/environments  → { apps: [{id, name, model, createdAt}] }
+  /api/app/__SANDBOX_ID__/platform/labs          → { labs: [{id, name, envType, envModels, createdAt}] }
   /api/app/__SANDBOX_ID__/platform/builds        → { builds: [{id, name, status, files, createdAt}] }
   /api/app/__SANDBOX_ID__/platform/metrics       → { totalRuns, totalTokensIn, totalTokensOut, avgLatencyMs, totalCostUsd, modelBreakdown[] }
   /api/app/__SANDBOX_ID__/platform/events        → { events: [{sandbox_id, event_type, metadata, created_at}] }
@@ -99,7 +120,8 @@ The JSON must have exactly these fields:
   "maxTokens": ${mode === 'dashboard' ? '256' : '<integer 256-4096>'},
   "appHtml": "<complete single-file HTML app — see requirements below>"
 }
-${mode !== 'dashboard' ? `
+${mode === 'environment' ? environmentHint : ''}
+${mode === 'app' ? `
 Tool guidelines: define tools ONLY when the description explicitly requires calling external APIs or services. For knowledge-based or conversational apps, tools should be an empty array [].
 ` : ''}
 App HTML requirements:

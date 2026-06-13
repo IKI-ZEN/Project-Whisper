@@ -58,6 +58,7 @@ ${navHtml('dashboard')}
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Apps</div><div class="stat-value sk" id="stat-sandboxes" style="height:32px;width:48px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Environments</div><div class="stat-value sk" id="stat-envs" style="height:32px;width:48px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Labs</div><div class="stat-value sk" id="stat-labs" style="height:32px;width:48px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Builds</div><div class="stat-value sk" id="stat-builds" style="height:32px;width:48px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Total Runs</div><div class="stat-value sk" id="stat-runs" style="height:32px;width:64px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Tokens In</div><div class="stat-value sk" id="stat-tin" style="height:32px;width:64px">&nbsp;</div></div>
@@ -115,9 +116,10 @@ ${navHtml('dashboard')}
 <script nonce="${nonce}" type="module" src="/chart.js"></script>
 <script nonce="${nonce}">
 async function load(){
-  const [sandboxRes,envRes,buildRes,probeRes,assertRes,vaultRes,pipelineRes]=await Promise.allSettled([
+  const [sandboxRes,envRes,labRes,buildRes,probeRes,assertRes,vaultRes,pipelineRes]=await Promise.allSettled([
     fetch('/api/sandbox?only=apps').then(function(r){return r.json()}),
     fetch('/api/sandbox?only=envs').then(function(r){return r.json()}),
+    fetch('/api/sandbox?only=labs').then(function(r){return r.json()}),
     fetch('/api/v2/build').then(function(r){return r.json()}),
     fetch('/api/probes').then(function(r){return r.json()}),
     fetch('/api/assertions').then(function(r){return r.json()}),
@@ -129,11 +131,14 @@ async function load(){
     const ed=envRes.status==='fulfilled'?envRes.value:null
     const el=document.getElementById('stat-envs')
     el.textContent=ed&&ed.ok?String((ed.data.apps||[]).length):'—';el.className='stat-value'
+    const ld=labRes.status==='fulfilled'?labRes.value:null
+    const ll=document.getElementById('stat-labs')
+    ll.textContent=ld&&ld.ok?String((ld.data.apps||[]).length):'—';ll.className='stat-value'
     const bd=buildRes.status==='fulfilled'?buildRes.value:null
     const bl=document.getElementById('stat-builds')
     bl.textContent=bd&&bd.ok?String((bd.data.builds||[]).length):'—';bl.className='stat-value'
   }catch(e){
-    ['stat-envs','stat-builds'].forEach(function(id){const el=document.getElementById(id);el.textContent='—';el.className='stat-value'})
+    ['stat-envs','stat-labs','stat-builds'].forEach(function(id){const el=document.getElementById(id);el.textContent='—';el.className='stat-value'})
   }
 
   try{
@@ -212,7 +217,7 @@ async function load(){
       wrap.innerHTML='<table class="tbl"><thead><tr><th>Name</th><th>Model</th><th>Created</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
     }
   }catch(e){
-    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat','stat-cost','stat-pipelines','stat-envs','stat-builds'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
+    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat','stat-cost','stat-pipelines','stat-envs','stat-labs','stat-builds'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
     document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
     document.getElementById('health-wrap').innerHTML='<div class="empty-note">Unable to load.</div>'
   }

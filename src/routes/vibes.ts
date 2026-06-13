@@ -24,7 +24,8 @@ const createVibe: Handler = async (req, env) => {
   const p = await parseBody(req, parseVibeRequest)
   if (!p.ok) return p.response
   const { description, name, mode = 'app' } = p.data
-  const isDashboard = mode === 'dashboard'
+  const isDashboard   = mode === 'dashboard'
+  const isEnvironment = mode === 'environment'
 
   let vibeConfig
   try {
@@ -33,9 +34,12 @@ const createVibe: Handler = async (req, env) => {
     return json(err('Vibe generation failed — try a more detailed description', String(e)), 500)
   }
 
-  // Dashboards are data UIs with no conversational system prompt, so only the
-  // name is required for them; chat apps need both a name and a system prompt.
-  const configValid = isDashboard ? Boolean(vibeConfig.name) : Boolean(vibeConfig.systemPrompt && vibeConfig.name)
+  // Dashboards are data UIs with no conversational system prompt; only name is required.
+  // Environments need a name and a meaningful system prompt (the domain expertise).
+  // Chat apps need both name and system prompt.
+  const configValid = isDashboard
+    ? Boolean(vibeConfig.name)
+    : Boolean(vibeConfig.systemPrompt && vibeConfig.name)
   if (!configValid) {
     return json(err('Generated config was invalid — try a more detailed description'), 422)
   }
@@ -54,18 +58,20 @@ const createVibe: Handler = async (req, env) => {
     model:         config.model,
     createdAt:     ts,
     fromVibe:      true,
-    ...(isDashboard ? { fromDashboard: true } : {}),
+    ...(isDashboard   ? { fromDashboard: true } : {}),
+    ...(isEnvironment ? { fromEnv:       true } : {}),
   })
 
   await logSandboxEvent(env, {
     sandboxId: id,
-    type:      isDashboard ? 'dashboard_created' : 'vibe_created',
-    metadata:  { description: description.slice(0, 256) },
+    type:      isDashboard ? 'dashboard_created' : isEnvironment ? 'env_created' : 'vibe_created',
+    metadata:  { description: description.slice(0, 256), mode },
     identity,
     at:        ts,
   })
 
-  const embedCode = `<iframe src="/app/${id}" width="${EMBED_WIDTH}" height="${EMBED_HEIGHT}" frameborder="0" allow="microphone"></iframe>`
+  const baseUrl    = isEnvironment ? `/env/${id}` : `/app/${id}`
+  const embedCode  = `<iframe src="${baseUrl}" width="${EMBED_WIDTH}" height="${EMBED_HEIGHT}" frameborder="0" allow="microphone"></iframe>`
 
   return json(ok({
     sandboxId:   id,
@@ -73,7 +79,7 @@ const createVibe: Handler = async (req, env) => {
     name:        config.name,
     description: config.description,
     model:       config.model,
-    appUrl:      `/app/${id}`,
+    ...(isEnvironment ? { envUrl: `/env/${id}` } : { appUrl: `/app/${id}` }),
     shortLink:   `/s/${id}`,
     embedCode,
     shortApi: {

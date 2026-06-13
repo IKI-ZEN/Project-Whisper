@@ -125,7 +125,7 @@ export interface RunSandboxRequest {
   sessionId?: string   // named conversation thread (empty = default shared memory)
 }
 
-export type VibeMode = 'app' | 'dashboard'
+export type VibeMode = 'app' | 'environment' | 'dashboard'
 
 export interface VibeRequest {
   description: string

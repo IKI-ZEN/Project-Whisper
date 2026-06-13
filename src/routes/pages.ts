@@ -7,6 +7,8 @@ import { dashboardsGallery } from './pages/dashboardsGallery'
 import { buildIndex, buildFile } from './pages/serve'
 import { envPage } from './pages/envPage'
 import { envsGallery } from './pages/envsGallery'
+import { labPage } from './pages/labPage'
+import { labsGallery } from './pages/labsGallery'
 
 export const pageRoutes: Array<[string, string, Handler]> = [
   ['GET', '/',                    chat],
@@ -17,6 +19,8 @@ export const pageRoutes: Array<[string, string, Handler]> = [
   ['GET', '/apps',                appsGallery],
   ['GET', '/env/:id',             envPage],
   ['GET', '/environments',        envsGallery],
+  ['GET', '/lab/:id',             labPage],
+  ['GET', '/lab',                 labsGallery],
   ['GET', '/dashboards',          dashboardsGallery],
   ['GET', '/build/:id/:filename', buildFile],
   ['GET', '/build/:id',           buildIndex],

@@ -182,14 +182,19 @@ const sendEmail: Handler = async (req, env, params) => {
 
 interface BuildMeta { id: string; name: string; status: string; files?: string[]; createdAt: number; description?: string }
 
-const PLATFORM_RESOURCES = ['apps', 'environments', 'builds', 'metrics', 'events', 'usage', 'probes'] as const
+const PLATFORM_RESOURCES = ['apps', 'environments', 'labs', 'builds', 'metrics', 'events', 'usage', 'probes'] as const
 type PlatformResource = typeof PLATFORM_RESOURCES[number]
 
-function listSandboxesByKind(env: Env, kind: 'apps' | 'environments'): Promise<SandboxMeta[]> {
+function listSandboxesByKind(env: Env, kind: 'apps' | 'environments' | 'labs'): Promise<SandboxMeta[]> {
   return listAllKV<SandboxMeta>(env.SANDBOX_REGISTRY, SANDBOX_KEY_PREFIX).then(keys => keys
     .filter(k => k.metadata != null)
     .map(k => k.metadata as SandboxMeta)
-    .filter(m => kind === 'apps' ? (!m.fromEnv && !m.fromDashboard) : m.fromEnv === true)
+    .filter(m => {
+      if (kind === 'apps')         return !m.fromLab && !m.fromEnv && !m.fromDashboard
+      if (kind === 'environments') return m.fromEnv === true
+      if (kind === 'labs')         return m.fromLab === true
+      return false
+    })
     .sort((a, b) => b.createdAt - a.createdAt))
 }
 
@@ -200,6 +205,9 @@ async function readPlatformResource(resource: PlatformResource, env: Env): Promi
 
     case 'environments':
       return { apps: await listSandboxesByKind(env, 'environments') }
+
+    case 'labs':
+      return { labs: await listSandboxesByKind(env, 'labs') }
 
     case 'builds': {
       const keys = await listAllKV<BuildMeta>(env.SANDBOX_REGISTRY, BUILD_KEY_PREFIX)

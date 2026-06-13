@@ -32,18 +32,19 @@
     <a href="/vibe.html" class="navlink">Vibe</a>
     <a href="/apps" class="navlink">Apps</a>
     <a href="/environments" class="navlink">Environments</a>
-    <a href="/environments.html" class="navlink active" aria-current="page">New Environment</a>
     <a href="/dashboards" class="navlink">Dashboards</a>
+    <a href="/lab" class="navlink">Lab</a>
+    <a href="/lab.html" class="navlink active" aria-current="page">New Lab</a>
     <a href="/tools.html" class="navlink">Tools</a>
     <a href="/dashboard" class="navlink">Dashboard</a>
   </nav>
 
   <div class="vibe-layout">
     <!-- Left sidebar: builder controls -->
-    <aside class="vibe-left" aria-label="Environment builder">
+    <aside class="vibe-left" aria-label="Lab builder">
       <div class="sidebar-inner">
-        <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">New Environment</h2>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5">Describe your AI workspace — the environment type defines how models behave and what the UI optimises for.</p>
+        <h2 style="font-size:16px;font-weight:700;margin-bottom:4px">New Lab</h2>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5">Describe your comparison workspace — the lab type defines how models behave and what the UI optimises for.</p>
 
         <!-- Templates -->
         <div class="tpl-gallery" id="tpl-gallery">
@@ -280,7 +281,7 @@ document.getElementById('gen-btn').onclick = async function(){
       envModels:   selectedModels.length ? selectedModels : undefined,
       name:        document.getElementById('env-name-input').value.trim() || undefined,
     }
-    const r = await fetch('/api/environments', {
+    const r = await fetch('/api/lab', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(body),
@@ -309,7 +310,7 @@ function setStatus(msg, isErr){
 }
 
 function showResult(data){
-  const envUrl    = data.envUrl || ('/env/' + data.id)
+  const envUrl    = data.labUrl || ('/lab/' + data.id)
   const models    = data.envModels || []
   const type      = data.envType || selectedType
   const sys       = (data.config && data.config.systemPrompt) || ''
@@ -341,7 +342,7 @@ function showResult(data){
     +'<span>max tokens <b style="color:var(--text)">'+maxTok+'</b></span>'
     +'</div>'
     +'<div class="result-actions">'
-    +'<a class="launch-link" href="'+esc(envUrl)+'" target="_blank">Open Environment →</a>'
+    +'<a class="launch-link" href="'+esc(envUrl)+'" target="_blank">Open Lab →</a>'
     +'<button class="result-btn" id="copy-link-btn">Copy link</button>'
     +'<button class="result-btn" id="export-btn">Export JSON</button>'
     +'</div>'
