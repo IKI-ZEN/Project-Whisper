@@ -23,7 +23,6 @@ import { runProbeById }   from './lib/probes'
 import { pipelineRoutes }            from './routes/pipelines'
 import { openApiRoutes }             from './routes/openapi'
 import { environmentRoutes }         from './routes/environments'
-import { dashboardsRoutes }          from './routes/dashboards'
 
 // Required: Wrangler binds DO classes via exports from this entry file.
 export { SandboxDO }     from './durable/SandboxDO'
@@ -72,7 +71,7 @@ router.post('/s/:id/run',    run)
 router.post('/s/:id/stream', stream)
 
 // Mount route groups
-for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...environmentRoutes, ...dashboardsRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes, ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes, ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes, ...openApiRoutes]) {
+for (const [method, path, handler] of [...aiRoutes, ...sandboxRoutes, ...vibeRoutes, ...environmentRoutes, ...buildRoutes, ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes, ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes, ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes, ...openApiRoutes]) {
   router.on(method, path, handler)
 }
 

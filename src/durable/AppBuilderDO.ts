@@ -361,22 +361,6 @@ Purpose: ${file.description}`,
         timestamp: now(),
       }]
 
-      const isDashboard = /dashboard|metric|monitor|stats|analytic|visuali|operational|report|overview/i.test(initialState.description)
-      const platformApiHint = isDashboard ? `
-Platform data APIs (read-only — for dashboards. Requires X-App-Token header):
-  GET /api/app/__BUILD_ID__/platform/sandboxes     → { apps: [{id, name, model, createdAt, fromVibe}] }
-  GET /api/app/__BUILD_ID__/platform/environments  → { apps: [{id, name, envType, envModels, createdAt}] }
-  GET /api/app/__BUILD_ID__/platform/builds        → { builds: [{id, name, status, files, createdAt}] }
-  GET /api/app/__BUILD_ID__/platform/metrics       → { totalRuns, totalTokensIn, totalTokensOut, avgLatencyMs, totalCostUsd, modelBreakdown[] }
-  GET /api/app/__BUILD_ID__/platform/events        → { events: [{sandbox_id, event_type, metadata, created_at}] }
-  GET /api/app/__BUILD_ID__/platform/usage         → { rows: [{model, totalCalls, totalTokensIn, totalTokensOut, totalCostUsd}] }
-  GET /api/app/__BUILD_ID__/platform/probes        → { probes: [{id, name, schedule, run_count, last_run_at}] }
-Authentication: const tok = document.querySelector('meta[name="whisper-token"]')?.content
-Use as: fetch(url, { headers: { 'X-App-Token': tok } })
-For embedding apps: <iframe src="/app/{id}" ...>
-For embedding environments: <iframe src="/env/{id}" ...>
-` : ''
-
       const stateApiHint = `
 Persistent key-value storage (survives reloads):
   GET    /api/app/__BUILD_ID__/state          → { entries: [{key, value}] }
@@ -407,7 +391,7 @@ It receives fetch requests and can use Cloudflare bindings via env.` : ''
         systemPrompt: `You are writing source code for a web app file.
 Output ONLY the raw file content. No markdown fences, no explanation, no surrounding text.
 The output is written directly to ${file.filename}.
-${stateApiHint}${platformApiHint}${workerHint}`,
+${stateApiHint}${workerHint}`,
         messages:    fileMessages,
         maxTokens:   4096,
         temperature: 0.1,

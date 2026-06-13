@@ -43,7 +43,7 @@ export function parsePromptClauses(prompt: string): string[] {
   return clauses.filter(c => c.length > 0)
 }
 
-export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string, mode?: 'dashboard'): Promise<VibeConfig> {
+export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string, mode: 'app' | 'dashboard' = 'app'): Promise<VibeConfig> {
   const hasGateway = Boolean(env.AI_GATEWAY_ID && env.CLOUDFLARE_ACCOUNT_ID)
 
   const modelOptions = hasGateway
@@ -65,7 +65,7 @@ Do NOT include any chat input, VibeClient, or vibe-sdk.js.
 The page should fetch live platform data and render it as a visual dashboard.
 
 Platform data APIs (all GET, require X-App-Token header):
-  /api/app/__SANDBOX_ID__/platform/sandboxes     → { apps: [{id, name, model, createdAt, fromVibe}] }
+  /api/app/__SANDBOX_ID__/platform/apps          → { apps: [{id, name, model, createdAt, fromVibe}] }
   /api/app/__SANDBOX_ID__/platform/environments  → { apps: [{id, name, envType, envModels, createdAt}] }
   /api/app/__SANDBOX_ID__/platform/builds        → { builds: [{id, name, status, files, createdAt}] }
   /api/app/__SANDBOX_ID__/platform/metrics       → { totalRuns, totalTokensIn, totalTokensOut, avgLatencyMs, totalCostUsd, modelBreakdown[] }

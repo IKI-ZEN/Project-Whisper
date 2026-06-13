@@ -23,16 +23,20 @@ const createVibe: Handler = async (req, env) => {
   if (rl) return rl
   const p = await parseBody(req, parseVibeRequest)
   if (!p.ok) return p.response
-  const { description, name } = p.data
+  const { description, name, mode = 'app' } = p.data
+  const isDashboard = mode === 'dashboard'
 
   let vibeConfig
   try {
-    vibeConfig = await generateVibeConfig(env.AI, env, description, name)
+    vibeConfig = await generateVibeConfig(env.AI, env, description, name, mode)
   } catch (e) {
     return json(err('Vibe generation failed — try a more detailed description', String(e)), 500)
   }
 
-  if (!vibeConfig.systemPrompt || !vibeConfig.name) {
+  // Dashboards are data UIs with no conversational system prompt, so only the
+  // name is required for them; chat apps need both a name and a system prompt.
+  const configValid = isDashboard ? Boolean(vibeConfig.name) : Boolean(vibeConfig.systemPrompt && vibeConfig.name)
+  if (!configValid) {
     return json(err('Generated config was invalid — try a more detailed description'), 422)
   }
 
@@ -45,19 +49,27 @@ const createVibe: Handler = async (req, env) => {
 
   await registerSandbox(env, {
     id,
-    name:        config.name,
-    description: config.description.slice(0, 200),
-    model:       config.model,
-    createdAt:   ts,
-    fromVibe:    true,
+    name:          config.name,
+    description:   config.description.slice(0, 200),
+    model:         config.model,
+    createdAt:     ts,
+    fromVibe:      true,
+    ...(isDashboard ? { fromDashboard: true } : {}),
   })
 
-  await logSandboxEvent(env, { sandboxId: id, type: 'vibe_created', metadata: { description: description.slice(0, 256) }, identity, at: ts })
+  await logSandboxEvent(env, {
+    sandboxId: id,
+    type:      isDashboard ? 'dashboard_created' : 'vibe_created',
+    metadata:  { description: description.slice(0, 256) },
+    identity,
+    at:        ts,
+  })
 
   const embedCode = `<iframe src="/app/${id}" width="${EMBED_WIDTH}" height="${EMBED_HEIGHT}" frameborder="0" allow="microphone"></iframe>`
 
   return json(ok({
     sandboxId:   id,
+    mode,
     name:        config.name,
     description: config.description,
     model:       config.model,

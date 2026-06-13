@@ -114,10 +114,10 @@ async function createDashboard() {
   btn.textContent = 'Generating…'
   document.getElementById('create-status').textContent = 'Building your dashboard with AI…'
   try {
-    const r = await fetch('/api/dashboards', {
+    const r = await fetch('/api/vibes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: desc, ...(name ? { name } : {}) }),
+      body: JSON.stringify({ description: desc, mode: 'dashboard', ...(name ? { name } : {}) }),
     })
     const d = await r.json()
     if (!d.ok) { document.getElementById('create-status').textContent = 'Error: ' + esc(d.error || 'Unknown error'); return }
