@@ -7,7 +7,7 @@ import { SANDBOX_KEY_PREFIX, SANDBOX_TTL, SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX
 import { signPayload, verifySignature } from '../lib/vault'
 import { requireAccess } from '../lib/access'
 import { extractAppToken, verifyAppToken } from '../lib/appToken'
-import { saveToVault } from '../lib/analysis'
+import { saveToVault } from '../lib/toolRun'
 import { logSandboxEvent } from '../lib/events'
 import { scan } from '../lib/guard'
 import { stub, doFetch, identityHeader, sandboxExists, registerSandbox, type SandboxMeta } from '../lib/do'

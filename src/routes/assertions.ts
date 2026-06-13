@@ -4,7 +4,7 @@ import { json, ok, err, parseBody, rateLimitByIp } from '../lib/http'
 import { complete, embed, cosineSimilarity } from '../lib/ai'
 import { scan } from '../lib/guard'
 import { newId, isUUID, now } from '../lib/utils'
-import { resolveAnalysisContext } from '../lib/analysis'
+import { resolveAnalysisContext } from '../lib/toolRun'
 import { RATE_LIMIT_WINDOW_MS, SUITE_RUN_RATE_LIMIT_MAX, MAX_ASSERTION_REGEX_INPUT } from '../lib/constants'
 
 // ── Types ─────────────────────────────────────────────────────────────────────

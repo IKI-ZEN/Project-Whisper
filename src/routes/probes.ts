@@ -9,7 +9,7 @@ import {
   generatePromptVariants, computeSimilarityMatrix,
 } from '../lib/ai'
 import { MODELS } from '../lib/ai'
-import { resolveAnalysisContext, extractMetrics } from '../lib/analysis'
+import { resolveAnalysisContext, extractMetrics } from '../lib/toolRun'
 import { executePipeline } from '../lib/pipeline'
 import { parseWebhookUrl } from '../lib/schema'
 import type { PipelineNode } from '../lib/schema'

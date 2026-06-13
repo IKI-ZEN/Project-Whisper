@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { extractMetrics } from './analysis.ts'
+import { extractMetrics } from './toolRun.ts'
 
 describe('extractMetrics', () => {
   describe('entropy tool', () => {

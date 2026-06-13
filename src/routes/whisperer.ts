@@ -1,7 +1,7 @@
 import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, readJson, rateLimitByIp } from '../lib/http'
-import { saveToVault } from '../lib/analysis'
+import { saveToVault } from '../lib/toolRun'
 import { isUUID, now } from '../lib/utils'
 import {
   parseSensitivityRequest, parseClusterRequest, parseCotRequest,
