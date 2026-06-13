@@ -241,19 +241,20 @@
         btn.classList.toggle('active', mode === m)
         btn.setAttribute('aria-pressed', String(mode === m))
       }
-      // 'quick', 'environment', and 'dashboard' all render in the quick panel; 'app' uses the build panel.
-      const usesQuickPanel = mode === 'quick' || mode === 'environment' || mode === 'dashboard'
+      // 'quick' and 'environment' use the HTTP vibe path and render in quick-panel.
+      // 'app' and 'dashboard' both use the App Builder WebSocket pipeline and render in app-panel.
+      // 'app-builder-opts' (sandbox ID, framework) is only shown for 'app' mode — not dashboards.
+      const usesAppBuilder = mode === 'app' || mode === 'dashboard'
       document.getElementById('app-builder-opts').style.display = mode === 'app' ? 'flex' : 'none'
-      document.getElementById('quick-panel').style.display = usesQuickPanel ? 'flex' : 'none'
-      document.getElementById('app-panel').style.display = mode === 'app' ? 'flex' : 'none'
+      document.getElementById('quick-panel').style.display = !usesAppBuilder ? 'flex' : 'none'
+      document.getElementById('app-panel').style.display = usesAppBuilder ? 'flex' : 'none'
       document.getElementById('vibe-desc').placeholder = DESC_PLACEHOLDER[mode]
       const vibeBtn = document.getElementById('vibe-btn')
       if (!vibeBtn.disabled) vibeBtn.textContent = BTN_LABEL[mode]
     }
 
     function doVibeAction() {
-      if (vibeMode === 'app') doAppBuild()
-      else if (vibeMode === 'dashboard') doVibe('dashboard')
+      if (vibeMode === 'app' || vibeMode === 'dashboard') doAppBuild()
       else if (vibeMode === 'environment') doVibe('environment')
       else doVibe('app')
     }
@@ -337,7 +338,7 @@
       const desc = document.getElementById('vibe-desc').value.trim()
       if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
       const name = document.getElementById('vibe-name').value.trim() || undefined
-      const sandboxId = document.getElementById('build-sandbox-id').value.trim() || undefined
+      const sandboxId = vibeMode === 'app' ? (document.getElementById('build-sandbox-id').value.trim() || undefined) : undefined
       const btn = document.getElementById('vibe-btn')
       setLoading(btn, 'Building…')
       buildFileContent = {}
