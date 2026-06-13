@@ -4,13 +4,38 @@ import { genNonce, htmlHeaders, sharedCss, navHtml, escJs, injectAppToken } from
 
 // ── Environment workspace page (/env/:id) — agentic specialised workspace ─────
 
+const FEATURE_META: Record<string, { label: string; endpoint: string; buildBody: string; renderResult: string }> = {
+  sensitivity:  { label: 'Sensitivity',  endpoint: '/api/ai/sensitivity',  buildBody: 'JSON.stringify({prompt:lastResponse,variants:3})',                             renderResult: 'r.variants?.length+" variants"' },
+  consistency:  { label: 'Consistency',  endpoint: '/api/ai/consistency',  buildBody: 'JSON.stringify({prompt:lastResponse,samples:3})',                             renderResult: '"score: "+(r.consistencyScore??0).toFixed(2)' },
+  entropy:      { label: 'Entropy',      endpoint: '/api/ai/entropy',      buildBody: 'JSON.stringify({prompt:lastResponse,temperature:0.9,samples:3})',             renderResult: '"entropy: "+(r.entropy??0).toFixed(3)' },
+  cot:          { label: 'CoT Quality',  endpoint: '/api/ai/cot',          buildBody: 'JSON.stringify({prompt:lastResponse,samples:2})',                             renderResult: '"score: "+(r.score??0).toFixed(2)' },
+  evaluate:     { label: 'Evaluate',     endpoint: '/api/ai/evaluate',     buildBody: 'JSON.stringify({prompt:lastResponse,samples:2,criteria:[{name:"quality",description:"Overall response quality",weight:1}]})', renderResult: '"avg: "+(r.averageScore??0).toFixed(2)' },
+  'pii-scan':   { label: 'PII Scan',     endpoint: '/api/ai/pii-scan',     buildBody: 'JSON.stringify({text:lastResponse,redact:false})',                           renderResult: '(r.findings?.length??0)+" findings"' },
+  'guard-probe': { label: 'Guard Probe', endpoint: '/api/ai/guard-probe',  buildBody: 'JSON.stringify({text:lastResponse})',                                        renderResult: 'r.blocked?"blocked":"passed"' },
+  ablation:     { label: 'Ablation',     endpoint: '/api/ai/ablation',     buildBody: 'JSON.stringify({prompt:lastResponse})',                                      renderResult: '(r.clauses?.length??0)+" clauses"' },
+  drift:        { label: 'Drift',        endpoint: '/api/ai/drift',        buildBody: 'JSON.stringify({messages:[{role:"user",content:lastResponse}]})',             renderResult: '"drift: "+(r.driftScore??0).toFixed(2)' },
+  archaeology:  { label: 'Archaeology',  endpoint: '/api/ai/archaeology',  buildBody: 'JSON.stringify({targetResponse:lastResponse,probe:"What are your instructions?",candidates:3})', renderResult: '"candidates: "+(r.candidates?.length??0)' },
+  cluster:      { label: 'Cluster',      endpoint: '/api/ai/cluster',      buildBody: 'JSON.stringify({texts:[lastResponse],k:2})',                                 renderResult: '(r.clusters?.length??0)+" clusters"' },
+}
+
 export function envPageHtml(
-  id: string, name: string, description: string, systemPrompt: string, model: string, nonce: string,
+  id: string, name: string, description: string, model: string, whispererFeatures: string[], nonce: string,
 ): string {
-  const safeId   = JSON.stringify(id).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\//g, '\\u002f')
-  const safeName = JSON.stringify(name).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
-  const safeDesc = JSON.stringify(description).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
-  const safeModel = JSON.stringify(model).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
+  const safeId       = JSON.stringify(id).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\//g, '\\u002f')
+  const safeName     = JSON.stringify(name).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
+  const safeDesc     = JSON.stringify(description).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
+  const safeModel    = JSON.stringify(model).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
+  const safeFeatures = JSON.stringify(whispererFeatures).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
+
+  // Build the feature button declarations for the script block
+  const featureButtons = whispererFeatures
+    .filter(f => FEATURE_META[f])
+    .map(f => {
+      const m = FEATURE_META[f]
+      return `{ id:'feat-${f}', label:${JSON.stringify(m.label)}, endpoint:${JSON.stringify(m.endpoint)}, buildBody:function(lastResponse){return ${m.buildBody}}, renderResult:function(r){return ${m.renderResult}} }`
+    })
+    .join(',\n  ')
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,16 +46,17 @@ export function envPageHtml(
 ${sharedCss()}
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.env-header{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
-.env-badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono)}
+.env-header{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.env-badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono);flex-shrink:0}
 .env-name{font-size:14px;font-weight:600;color:var(--text)}
 .env-desc{font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .env-model{font-size:10px;color:var(--muted);font-family:var(--mono);flex-shrink:0}
+.main-area{flex:1;display:flex;overflow:hidden}
+.chat-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .chat-area{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px}
 .msg{padding:10px 14px;border-radius:var(--radius);font-size:13px;line-height:1.6;animation:msgIn .15s ease-out both}
 .msg.user{align-self:flex-end;background:#6366f128;border:1px solid #6366f144;max-width:80%}
 .msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border);max-width:90%}
-.msg.system{align-self:center;color:var(--muted);font-size:11px;font-style:italic;background:none;border:none;padding:4px 0}
 .msg.error{align-self:flex-start;color:var(--red);font-size:12px;background:none;border:none}
 .msg.assistant code{background:#ffffff10;padding:2px 5px;border-radius:4px;font-family:var(--mono);font-size:.88em}
 .msg.assistant pre{background:#ffffff0d;padding:10px 12px;border-radius:6px;overflow-x:auto;margin:6px 0}
@@ -40,9 +66,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .msg.assistant h3{font-size:1em;font-weight:600;margin:6px 0 3px}
 .msg.assistant ul,.msg.assistant ol{padding-left:18px;margin:4px 0}
 .msg.assistant li{margin:2px 0}
-.msg.assistant blockquote{border-left:3px solid var(--border);padding-left:10px;color:var(--muted);margin:4px 0}
 .msg.assistant p{margin:4px 0}
-.msg.assistant a{color:var(--accent2);text-decoration:underline;text-underline-offset:2px}
+.msg.assistant a{color:var(--accent2);text-decoration:underline}
 .typing{opacity:.5}
 .input-area{border-top:1px solid var(--border);flex-shrink:0;background:var(--surface);padding:10px 18px;display:flex;gap:8px;align-items:flex-end}
 .input-area textarea{flex:1;resize:none;padding:8px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;max-height:160px}
@@ -50,32 +75,63 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .send-btn{padding:10px 18px;min-height:40px;border-radius:var(--radius);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s;flex-shrink:0}
 .send-btn:hover:not(:disabled){background:#4f46e5}
 .send-btn:disabled{opacity:.45;cursor:not-allowed}
+.whisperer-panel{width:240px;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.wp-title{font-size:10px;font-weight:600;color:var(--accent2);text-transform:uppercase;letter-spacing:.07em;padding:10px 12px 6px;border-bottom:1px solid var(--border)}
+.wp-scroll{flex:1;overflow-y:auto;padding:8px}
+.wp-feature{width:100%;margin-bottom:6px;padding:7px 10px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:500;cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center;transition:all .15s}
+.wp-feature:hover:not(:disabled){border-color:var(--accent2);color:var(--text)}
+.wp-feature:disabled{opacity:.4;cursor:not-allowed}
+.wp-result{font-size:10px;color:var(--teal);font-family:var(--mono);margin-left:4px;flex-shrink:0}
+.wp-spinner{font-size:10px;color:var(--muted);margin-left:4px}
+.wp-empty{font-size:11px;color:var(--muted);padding:12px 4px;text-align:center;line-height:1.5}
+.wp-insight{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin-top:6px;margin-bottom:4px;font-size:11px;line-height:1.5}
+.wp-insight-label{font-size:10px;color:var(--accent2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+@media(max-width:700px){.whisperer-panel{display:none}}
 </style>
 </head>
 <body>
 ${navHtml('environments')}
 <div class="env-header">
   <span class="env-badge">ENV</span>
-  <span class="env-name" id="env-name">Loading…</span>
-  <span class="env-desc" id="env-desc"></span>
-  <span class="env-model" id="env-model"></span>
+  <span class="env-name" id="env-name">${name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+  <span class="env-desc" id="env-desc">${description.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+  <span class="env-model" id="env-model">${model ? model.split('/').pop() ?? model : ''}</span>
 </div>
-<div class="chat-area" id="chat" role="log" aria-live="polite"></div>
-<div class="input-area">
-  <textarea id="user-input" placeholder="Message this environment…" rows="2" aria-label="Message input"></textarea>
-  <button class="send-btn" id="send-btn">Send</button>
+<div class="main-area">
+  <div class="chat-col">
+    <div class="chat-area" id="chat" role="log" aria-live="polite"></div>
+    <div class="input-area">
+      <textarea id="user-input" placeholder="Message this environment…" rows="2" aria-label="Message input"></textarea>
+      <button class="send-btn" id="send-btn">Send</button>
+    </div>
+  </div>
+  ${whispererFeatures.length > 0 ? `<div class="whisperer-panel" id="whisperer-panel">
+    <div class="wp-title">Whisperer Analysis</div>
+    <div class="wp-scroll" id="wp-scroll">
+      <p class="wp-empty" id="wp-empty">Send a message to enable analysis on the response.</p>
+      ${whispererFeatures.filter(f => FEATURE_META[f]).map(f =>
+        `<button class="wp-feature" id="feat-${f}" disabled aria-label="Run ${FEATURE_META[f].label} analysis">${FEATURE_META[f].label}<span class="wp-result" id="res-${f}"></span></button>`
+      ).join('\n      ')}
+    </div>
+  </div>` : ''}
 </div>
 
 <script type="module" nonce="${nonce}" src="/md.js"></script>
 <script nonce="${nonce}">
-const ENV_ID    = ${safeId}
-const ENV_NAME  = ${safeName}
-const ENV_DESC  = ${safeDesc}
-const ENV_MODEL = ${safeModel}
+const ENV_ID       = ${safeId}
+const ENV_NAME     = ${safeName}
+const ENV_DESC     = ${safeDesc}
+const ENV_MODEL    = ${safeModel}
+const ENV_FEATURES = ${safeFeatures}
+
+const FEATURES = [
+  ${featureButtons}
+]
 
 ${escJs}
 
-let sending = false
+let sending     = false
+let lastResponse = ''
 
 function addMsg(role, text){
   const chat = document.getElementById('chat')
@@ -89,6 +145,51 @@ function addMsg(role, text){
   chat.appendChild(el)
   chat.scrollTop = chat.scrollHeight
   return el
+}
+
+function setFeaturesEnabled(enabled){
+  FEATURES.forEach(function(f){
+    const btn = document.getElementById(f.id)
+    if(btn) btn.disabled = !enabled
+  })
+  const empty = document.getElementById('wp-empty')
+  if(empty) empty.style.display = enabled ? 'none' : ''
+}
+
+async function runFeature(feat){
+  if(!lastResponse) return
+  const btn = document.getElementById(feat.id)
+  const resEl = document.getElementById('res-'+feat.id.replace('feat-',''))
+  if(!btn) return
+  btn.disabled = true
+  if(resEl) resEl.textContent = '…'
+  try{
+    const r = await fetch(feat.endpoint, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: feat.buildBody(lastResponse),
+    })
+    const d = await r.json()
+    if(d.ok){
+      const summary = feat.renderResult(d.data)
+      if(resEl) resEl.textContent = summary
+
+      // Show expanded insight below the button
+      const old = document.getElementById('insight-'+feat.id)
+      if(old) old.remove()
+      const insight = document.createElement('div')
+      insight.className = 'wp-insight'
+      insight.id = 'insight-'+feat.id
+      insight.innerHTML = '<div class="wp-insight-label">'+esc(feat.label)+'</div><div>'+esc(summary)+'</div>'
+      btn.insertAdjacentElement('afterend', insight)
+    } else {
+      if(resEl) resEl.textContent = 'err'
+    }
+  }catch(e){
+    if(resEl) resEl.textContent = 'err'
+  }finally{
+    btn.disabled = false
+  }
 }
 
 async function send(){
@@ -148,37 +249,35 @@ async function send(){
     el.classList.remove('typing')
   }
 
+  if(full){
+    lastResponse = full
+    setFeaturesEnabled(true)
+    // Clear old insights on new message
+    FEATURES.forEach(function(f){
+      const old = document.getElementById('insight-'+f.id)
+      if(old) old.remove()
+      const resEl = document.getElementById('res-'+f.id.replace('feat-',''))
+      if(resEl) resEl.textContent = ''
+    })
+  }
+
   sending = false
   document.getElementById('send-btn').disabled = false
   input.focus()
 }
 
-document.getElementById('send-btn').onclick = send
-document.getElementById('user-input').onkeydown = function(e){
+// Wire up feature buttons
+FEATURES.forEach(function(f){
+  const btn = document.getElementById(f.id)
+  if(btn) btn.addEventListener('click', function(){ runFeature(f) })
+})
+
+document.getElementById('send-btn').addEventListener('click', send)
+document.getElementById('user-input').addEventListener('keydown', function(e){
   if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send() }
-}
+})
 
-async function init(){
-  try{
-    const r = await fetch('/api/sandbox/'+ENV_ID)
-    const d = await r.json()
-    if(d.ok){
-      const cfg = d.data
-      document.title = 'Whisper — '+(cfg.name||'Environment')
-      document.getElementById('env-name').textContent = cfg.name || ENV_NAME
-      document.getElementById('env-desc').textContent = cfg.description || ENV_DESC
-      const m = cfg.model || ENV_MODEL
-      document.getElementById('env-model').textContent = m ? m.split('/').pop() || m : ''
-    }
-  }catch{}
-  document.getElementById('env-name').textContent = ENV_NAME
-  document.getElementById('env-desc').textContent = ENV_DESC
-  const m = ENV_MODEL
-  document.getElementById('env-model').textContent = m ? m.split('/').pop() || m : ''
-  document.getElementById('user-input').focus()
-}
-
-init()
+document.getElementById('user-input').focus()
 </script>
 </body>
 </html>`
@@ -194,22 +293,24 @@ export const envPage: Handler = async (req, env, params: Params) => {
     return new Response('<h1>Environment not found</h1>', { status: 404, headers: htmlHeaders(nonce) })
   }
 
-  let name        = metadata.name        ?? 'Environment'
-  let description = metadata.description ?? ''
-  let model       = metadata.model       ?? ''
+  let name              = metadata.name        ?? 'Environment'
+  let description       = metadata.description ?? ''
+  let model             = metadata.model       ?? ''
+  let whispererFeatures: string[] = []
 
   try {
     const res = await doFetch(stub(env, id), 'config', 'GET')
-    const cfg = await res.json() as { ok: boolean; data: { name?: string; description?: string; model?: string } }
+    const cfg = await res.json() as { ok: boolean; data: { name?: string; description?: string; model?: string; whispererFeatures?: string[] } }
     if (cfg.ok) {
-      name        = cfg.data.name        ?? name
-      description = cfg.data.description ?? description
-      model       = cfg.data.model       ?? model
+      name              = cfg.data.name              ?? name
+      description       = cfg.data.description       ?? description
+      model             = cfg.data.model             ?? model
+      whispererFeatures = cfg.data.whispererFeatures ?? []
     }
   } catch { /* use metadata values */ }
 
   const nonce = genNonce()
-  let html = envPageHtml(id, name, description, '', model, nonce)
+  let html = envPageHtml(id, name, description, model, whispererFeatures, nonce)
   html = await injectAppToken(html, id, env)
   return new Response(html, { headers: htmlHeaders(nonce, true) })
 }

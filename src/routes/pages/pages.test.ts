@@ -74,7 +74,7 @@ describe('dashboardHtml', () => {
 
 describe('envPageHtml', () => {
   it('returns non-empty HTML string containing DOCTYPE and nonce', () => {
-    const html = envPageHtml('test-env-id', 'general', ['anthropic:claude-sonnet-4-6'], 'You are helpful.', false, NONCE)
+    const html = envPageHtml('test-env-id', 'Test Environment', 'A helpful assistant.', 'anthropic:claude-sonnet-4-6', ['sensitivity', 'consistency'], NONCE)
     assert.ok(html.length > 0)
     assert.ok(html.includes('<!DOCTYPE html>'))
     assert.ok(html.includes(NONCE))

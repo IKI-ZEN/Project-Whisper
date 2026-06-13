@@ -14,7 +14,8 @@ export interface VibeConfig {
   model: string
   temperature: number
   maxTokens: number
-  appHtml?: string   // custom HTML page served at /app/:id; uses __SANDBOX_ID__ as placeholder
+  appHtml?: string           // custom HTML page served at /app/:id; uses __SANDBOX_ID__ as placeholder
+  whispererFeatures?: string[] // active Whisperer analysis features (environments only)
 }
 
 /**
@@ -59,24 +60,46 @@ Flagship via AI Gateway (requires API keys):
     : `- "@cf/meta/llama-3.1-8b-instruct" — fast, efficient
 - "@cf/meta/llama-3.3-70b-instruct-fp8-fast" — large, complex tasks`
 
+  const whispererFeatureList = `
+Available Whisperer features (pick 2–4 most relevant for the domain):
+  "sensitivity"   — prompt sensitivity analysis (how much does phrasing affect output?)
+  "consistency"   — response consistency across repeated prompts
+  "entropy"       — output randomness / temperature effect analysis
+  "cot"           — chain-of-thought quality analysis
+  "evaluate"      — rubric-based response evaluation
+  "pii-scan"      — detect and flag PII in responses
+  "guard-probe"   — test model guard/safety boundaries
+  "ablation"      — identify which prompt clauses drive the response
+  "drift"         — measure response drift over multi-turn conversations
+  "archaeology"   — reverse-engineer the effective system prompt from responses
+  "cluster"       — cluster multiple responses to surface themes`
+
   const environmentHint = mode === 'environment' ? `
 IMPORTANT — you are generating an AGENTIC ENVIRONMENT, not a generic chat app.
 An environment is a specialised workspace tuned for a specific domain (e.g. cybersecurity, sales, research, creative writing).
 
-Requirements:
-- systemPrompt: write a detailed, expert-level system prompt that makes the AI behave like a domain specialist. Include:
+JSON field requirements:
+- name: short domain-specific name
+- systemPrompt: detailed, expert-level instructions that make the AI behave like a domain specialist. Include:
   • The domain persona and expertise level
   • How to structure responses (tone, format, depth)
-  • Domain-specific knowledge and behaviours the AI should demonstrate
+  • Domain-specific knowledge and behaviours to demonstrate
   • Explicit guidance on using tools if relevant
-- tools: define 1–3 domain-relevant tools ONLY if they meaningfully extend the environment's capabilities
-  (e.g. a cybersecurity environment might have a vulnerability_lookup tool)
-- model: choose the most capable model available for the domain
-- temperature: set appropriately for the domain (low for technical/structured, higher for creative)
-- appHtml: build a focused chat interface with domain branding — title, accent colour, and placeholder text that reflect the domain
-  • Show the environment name and domain prominently
-  • Style the interface to match the domain aesthetic
-  • Use the <vibe-chat sandbox-id="__SANDBOX_ID__"> web component for the chat, or build a custom interface
+- tools: define 1–3 domain-relevant tools ONLY if they meaningfully extend capabilities
+- model: choose the most capable model suitable for the domain
+- temperature: low (0.2) for technical/structured work, higher (0.8–1.0) for creative
+- appHtml: build a focused chat interface with domain branding
+  • Prominent domain name, accent colour, and descriptive placeholder text
+  • Use <vibe-chat sandbox-id="__SANDBOX_ID__"> web component for the chat
+  • Style to match the domain aesthetic (e.g. dark/terminal for cyber, warm for creative)
+- whispererFeatures: array of 2–4 Whisperer feature names most relevant for this domain
+${whispererFeatureList}
+  Example: cybersecurity → ["guard-probe","pii-scan","consistency","entropy"]
+  Example: sales → ["evaluate","consistency","sensitivity","drift"]
+  Example: research → ["cot","ablation","consistency","evaluate"]
+  Example: creative → ["entropy","sensitivity","cluster","drift"]
+
+IMPORTANT: include "whispererFeatures" as a top-level field in the JSON alongside name, systemPrompt, etc.
 ` : ''
 
   const dashboardHint = mode === 'dashboard' ? `
@@ -118,7 +141,8 @@ The JSON must have exactly these fields:
   "model": "<choose the most appropriate model from the options below>",
   "temperature": ${mode === 'dashboard' ? '0' : '<number 0-2: 0.2 for factual, 0.7 for balanced, 1.2 for creative>'},
   "maxTokens": ${mode === 'dashboard' ? '256' : '<integer 256-4096>'},
-  "appHtml": "<complete single-file HTML app — see requirements below>"
+  "appHtml": "<complete single-file HTML app — see requirements below>"${mode === 'environment' ? `,
+  "whispererFeatures": ["<feature1>", "<feature2>", ...]` : ''}
 }
 ${mode === 'environment' ? environmentHint : ''}
 ${mode === 'app' ? `
@@ -176,6 +200,11 @@ User description: "${description}"`
 
   const rawAppHtml = typeof parsed.appHtml === 'string' ? parsed.appHtml.trim() : ''
 
+  const VALID_WHISPERER = new Set(['sensitivity','consistency','entropy','cot','evaluate','pii-scan','guard-probe','ablation','drift','archaeology','cluster'])
+  const whispererFeatures = Array.isArray(parsed.whispererFeatures)
+    ? (parsed.whispererFeatures as unknown[]).filter((f): f is string => typeof f === 'string' && VALID_WHISPERER.has(f))
+    : undefined
+
   return {
     name:         typeof parsed.name === 'string'         ? parsed.name         : name ?? 'Untitled App',
     description:  typeof parsed.description === 'string'  ? parsed.description  : description.slice(0, 256),
@@ -185,6 +214,7 @@ User description: "${description}"`
     temperature:  typeof parsed.temperature === 'number'  ? parsed.temperature  : DEFAULT_TEMPERATURE,
     maxTokens:    typeof parsed.maxTokens === 'number'    ? parsed.maxTokens    : DEFAULT_MAX_TOKENS,
     appHtml:      rawAppHtml.length > 0 && rawAppHtml.length <= 51_200 ? rawAppHtml : undefined,
+    ...(whispererFeatures && whispererFeatures.length > 0 ? { whispererFeatures } : {}),
   }
 }
 
