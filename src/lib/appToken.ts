@@ -45,3 +45,4 @@ export function isAppScopedPath(pathname: string, appId: string): boolean {
   if (pathname === `/s/${appId}/stream`) return true
   return false
 }
+

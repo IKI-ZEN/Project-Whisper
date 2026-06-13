@@ -118,6 +118,9 @@ export const SUITE_RUN_RATE_LIMIT_MAX    = 5       // 5 suite runs/min
 // Assertion regex input cap — prevents ReDoS on long responses
 export const MAX_ASSERTION_REGEX_INPUT   = 50_000
 
+// Platform read proxy — max events returned per call
+export const PLATFORM_READ_MAX_EVENTS    = 100
+
 // App tokens — short-lived HMAC-signed credentials injected at page-serve time
 export const APP_TOKEN_TTL_MS            = 3_600_000   // 1 hour
 

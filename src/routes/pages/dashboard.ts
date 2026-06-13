@@ -57,6 +57,8 @@ ${navHtml('dashboard')}
   </div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Apps</div><div class="stat-value sk" id="stat-sandboxes" style="height:32px;width:48px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Environments</div><div class="stat-value sk" id="stat-envs" style="height:32px;width:48px">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Builds</div><div class="stat-value sk" id="stat-builds" style="height:32px;width:48px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Total Runs</div><div class="stat-value sk" id="stat-runs" style="height:32px;width:64px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Tokens In</div><div class="stat-value sk" id="stat-tin" style="height:32px;width:64px">&nbsp;</div></div>
     <div class="stat-card"><div class="stat-label">Tokens Out</div><div class="stat-value sk" id="stat-tout" style="height:32px;width:64px">&nbsp;</div></div>
@@ -105,19 +107,34 @@ ${navHtml('dashboard')}
       <a href="/tools.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Tools workbench</a>
       <a href="/vibe.html" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Vibe builder</a>
       <a href="/apps" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Apps gallery</a>
+      <a href="/dashboards" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Dashboards</a>
+      <a href="/environments" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);text-decoration:none">Environments</a>
     </div>
   </div>
 </main>
 <script nonce="${nonce}" type="module" src="/chart.js"></script>
 <script nonce="${nonce}">
 async function load(){
-  const [sandboxRes,probeRes,assertRes,vaultRes,pipelineRes]=await Promise.allSettled([
-    fetch('/api/sandbox').then(function(r){return r.json()}),
+  const [sandboxRes,envRes,buildRes,probeRes,assertRes,vaultRes,pipelineRes]=await Promise.allSettled([
+    fetch('/api/sandbox?only=apps').then(function(r){return r.json()}),
+    fetch('/api/sandbox?only=envs').then(function(r){return r.json()}),
+    fetch('/api/v2/build').then(function(r){return r.json()}),
     fetch('/api/probes').then(function(r){return r.json()}),
     fetch('/api/assertions').then(function(r){return r.json()}),
     fetch('/api/vault?limit=5').then(function(r){return r.json()}),
     fetch('/api/pipelines?limit=1').then(function(r){return r.json()}),
   ])
+
+  try{
+    const ed=envRes.status==='fulfilled'?envRes.value:null
+    const el=document.getElementById('stat-envs')
+    el.textContent=ed&&ed.ok?String((ed.data.apps||[]).length):'—';el.className='stat-value'
+    const bd=buildRes.status==='fulfilled'?buildRes.value:null
+    const bl=document.getElementById('stat-builds')
+    bl.textContent=bd&&bd.ok?String((bd.data.builds||[]).length):'—';bl.className='stat-value'
+  }catch(e){
+    ['stat-envs','stat-builds'].forEach(function(id){const el=document.getElementById(id);el.textContent='—';el.className='stat-value'})
+  }
 
   try{
     const d=sandboxRes.status==='fulfilled'?sandboxRes.value:null
@@ -195,7 +212,7 @@ async function load(){
       wrap.innerHTML='<table class="tbl"><thead><tr><th>Name</th><th>Model</th><th>Created</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
     }
   }catch(e){
-    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat','stat-cost','stat-pipelines'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
+    ['stat-sandboxes','stat-runs','stat-tin','stat-tout','stat-lat','stat-cost','stat-pipelines','stat-envs','stat-builds'].forEach(function(id){document.getElementById(id).textContent='—';document.getElementById(id).className='stat-value'})
     document.getElementById('sandboxes-wrap').innerHTML='<div class="empty-note">'+esc(String(e))+'</div>'
     document.getElementById('health-wrap').innerHTML='<div class="empty-note">Unable to load.</div>'
   }

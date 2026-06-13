@@ -154,6 +154,17 @@ export function parseVibeRequest(body: unknown): VibeRequest {
   }
 }
 
+export function parseDashboardRequest(body: unknown): VibeRequest {
+  if (!isObj(body)) throw new Error('Request body must be a JSON object')
+  const description = str(body.description, 'description')
+  if (description.length < 10)               throw new Error('description must be at least 10 characters')
+  if (description.length > MAX_VIBE_DESCRIPTION) throw new Error(`description must be <= ${MAX_VIBE_DESCRIPTION} characters`)
+  return {
+    description,
+    name: body.name !== undefined ? str(body.name, 'name') : undefined,
+  }
+}
+
 export function parseEnvironmentRequest(body: unknown): EnvironmentRequest {
   if (!isObj(body)) throw new Error('Request body must be a JSON object')
   const description = str(body.description, 'description')

@@ -597,5 +597,5 @@ export const envPage: Handler = async (_req, env, params: Params) => {
   } catch { /* use metadata values */ }
 
   const nonce = genNonce()
-  return new Response(envPageHtml(id, envType, envModels, systemPrompt, ragEnabled, nonce), { headers: htmlHeaders(nonce) })
+  return new Response(envPageHtml(id, envType, envModels, systemPrompt, ragEnabled, nonce), { headers: htmlHeaders(nonce, true) })
 }

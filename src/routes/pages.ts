@@ -3,6 +3,7 @@ import { appPage } from './pages/appPage'
 import { appsGallery } from './pages/appsGallery'
 import { chat } from './pages/chatPage'
 import { dashboard } from './pages/dashboard'
+import { dashboardsGallery } from './pages/dashboardsGallery'
 import { buildIndex, buildFile } from './pages/serve'
 import { envPage } from './pages/envPage'
 import { envsGallery } from './pages/envsGallery'
@@ -16,6 +17,7 @@ export const pageRoutes: Array<[string, string, Handler]> = [
   ['GET', '/apps',                appsGallery],
   ['GET', '/env/:id',             envPage],
   ['GET', '/environments',        envsGallery],
+  ['GET', '/dashboards',          dashboardsGallery],
   ['GET', '/build/:id/:filename', buildFile],
   ['GET', '/build/:id',           buildIndex],
 ]

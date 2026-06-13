@@ -47,6 +47,7 @@ export interface SandboxMeta {
   createdAt: number
   fromVibe?: boolean
   fromEnv?: boolean
+  fromDashboard?: boolean
   envType?: string
   envModels?: string[]
 }
