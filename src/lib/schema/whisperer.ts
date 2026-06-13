@@ -1,4 +1,4 @@
-import type { ThinkRequest, SensitivityRequest, ClusterRequest, CotRequest, EntropyRequest, ArchaeologyRequest, PipelineRequest, PipelineNode, VibeRequest, EnvironmentRequest, PiiScanRequest } from './types'
+import type { ThinkRequest, SensitivityRequest, ClusterRequest, CotRequest, EntropyRequest, ArchaeologyRequest, PipelineRequest, PipelineNode, VibeRequest, VibeMode, EnvironmentRequest, PiiScanRequest } from './types'
 import { isObj, str, num, bool, type Obj } from './helpers'
 import {
   DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS,
@@ -148,9 +148,16 @@ export function parseVibeRequest(body: unknown): VibeRequest {
   const description = str(body.description, 'description')
   if (description.length < 10)               throw new Error('description must be at least 10 characters')
   if (description.length > MAX_VIBE_DESCRIPTION) throw new Error(`description must be <= ${MAX_VIBE_DESCRIPTION} characters`)
+  let mode: VibeMode | undefined
+  if (body.mode !== undefined) {
+    const m = str(body.mode, 'mode')
+    if (m !== 'app' && m !== 'environment' && m !== 'dashboard') throw new Error("mode must be 'app', 'environment', or 'dashboard'")
+    mode = m
+  }
   return {
     description,
     name: body.name !== undefined ? str(body.name, 'name') : undefined,
+    mode,
   }
 }
 

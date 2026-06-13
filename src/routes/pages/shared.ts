@@ -3,7 +3,7 @@ import { issueAppToken } from '../../lib/appToken'
 
 // ── Shared nav ────────────────────────────────────────────────────────────────
 
-export type NavActive = 'chat' | 'vibe' | 'apps' | 'environments' | 'tools' | 'dashboard'
+export type NavActive = 'chat' | 'vibe' | 'apps' | 'environments' | 'lab' | 'tools' | 'dashboard' | 'dashboards'
 
 export function navHtml(active: NavActive, extra = '', afterBrand = ''): string {
   const lnk = (href: string, label: string, key: NavActive): string =>
@@ -16,6 +16,8 @@ export function navHtml(active: NavActive, extra = '', afterBrand = ''): string 
     lnk('/vibe.html', 'Vibe', 'vibe'),
     lnk('/apps', 'Apps', 'apps'),
     lnk('/environments', 'Environments', 'environments'),
+    lnk('/dashboards', 'Dashboards', 'dashboards'),
+    lnk('/lab', 'Lab', 'lab'),
     lnk('/tools.html', 'Tools', 'tools'),
     lnk('/dashboard', 'Dashboard', 'dashboard'),
     ...(extra ? [extra] : []),

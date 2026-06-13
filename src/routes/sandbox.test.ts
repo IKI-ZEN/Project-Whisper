@@ -9,7 +9,7 @@ import { SANDBOX_KEY_PREFIX } from '../lib/constants'
 const req = (url = 'https://x/api/sandbox', init?: RequestInit) => new Request(url, init)
 
 // Seed the registry with sandbox metadata (stored as KV value metadata).
-function seedRegistry(metas: Array<{ id: string; fromEnv?: boolean; createdAt: number }>) {
+function seedRegistry(metas: Array<{ id: string; fromEnv?: boolean; fromLab?: boolean; fromDashboard?: boolean; createdAt: number }>) {
   const SANDBOX_REGISTRY = mockKV()
   for (const m of metas) {
     void SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${m.id}`, m.id, {
@@ -48,6 +48,29 @@ describe('sandbox list', () => {
       { id: '22222222-2222-4222-8222-222222222222', createdAt: 200, fromEnv: true },
     ])
     const res = await list(req('https://x/api/sandbox?only=envs'), env, {})
+    const body = await res.json() as { data: { total: number } }
+    assert.equal(body.data.total, 1)
+  })
+
+  it('filters to labs only with ?only=labs', async () => {
+    const env = seedRegistry([
+      { id: '11111111-1111-4111-8111-111111111111', createdAt: 100 },
+      { id: '22222222-2222-4222-8222-222222222222', createdAt: 200, fromLab: true },
+      { id: '33333333-3333-4333-8333-333333333333', createdAt: 300, fromEnv: true },
+    ])
+    const res = await list(req('https://x/api/sandbox?only=labs'), env, {})
+    const body = await res.json() as { data: { total: number } }
+    assert.equal(body.data.total, 1)
+  })
+
+  it('?only=apps excludes labs, environments, and dashboards', async () => {
+    const env = seedRegistry([
+      { id: '11111111-1111-4111-8111-111111111111', createdAt: 100 },
+      { id: '22222222-2222-4222-8222-222222222222', createdAt: 200, fromLab: true },
+      { id: '33333333-3333-4333-8333-333333333333', createdAt: 300, fromEnv: true },
+      { id: '44444444-4444-4444-8444-444444444444', createdAt: 400, fromDashboard: true },
+    ])
+    const res = await list(req('https://x/api/sandbox?only=apps'), env, {})
     const body = await res.json() as { data: { total: number } }
     assert.equal(body.data.total, 1)
   })

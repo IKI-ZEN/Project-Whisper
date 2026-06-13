@@ -14,7 +14,8 @@ export interface VibeConfig {
   model: string
   temperature: number
   maxTokens: number
-  appHtml?: string   // custom HTML page served at /app/:id; uses __SANDBOX_ID__ as placeholder
+  appHtml?: string           // custom HTML page served at /app/:id; uses __SANDBOX_ID__ as placeholder
+  whispererFeatures?: string[] // active Whisperer analysis features (environments only)
 }
 
 /**
@@ -43,7 +44,7 @@ export function parsePromptClauses(prompt: string): string[] {
   return clauses.filter(c => c.length > 0)
 }
 
-export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string): Promise<VibeConfig> {
+export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string, mode: 'app' | 'environment' | 'dashboard' = 'app'): Promise<VibeConfig> {
   const hasGateway = Boolean(env.AI_GATEWAY_ID && env.CLOUDFLARE_ACCOUNT_ID)
 
   const modelOptions = hasGateway
@@ -59,31 +60,103 @@ Flagship via AI Gateway (requires API keys):
     : `- "@cf/meta/llama-3.1-8b-instruct" — fast, efficient
 - "@cf/meta/llama-3.3-70b-instruct-fp8-fast" — large, complex tasks`
 
+  const whispererFeatureList = `
+Available Whisperer features (pick 2–4 most relevant for the domain):
+  "sensitivity"   — prompt sensitivity analysis (how much does phrasing affect output?)
+  "consistency"   — response consistency across repeated prompts
+  "entropy"       — output randomness / temperature effect analysis
+  "cot"           — chain-of-thought quality analysis
+  "evaluate"      — rubric-based response evaluation
+  "pii-scan"      — detect and flag PII in responses
+  "guard-probe"   — test model guard/safety boundaries
+  "ablation"      — identify which prompt clauses drive the response
+  "drift"         — measure response drift over multi-turn conversations
+  "archaeology"   — reverse-engineer the effective system prompt from responses
+  "cluster"       — cluster multiple responses to surface themes`
+
+  const environmentHint = mode === 'environment' ? `
+IMPORTANT — you are generating an AGENTIC ENVIRONMENT, not a generic chat app.
+An environment is a specialised workspace tuned for a specific domain (e.g. cybersecurity, sales, research, creative writing).
+
+JSON field requirements:
+- name: short domain-specific name
+- systemPrompt: detailed, expert-level instructions that make the AI behave like a domain specialist. Include:
+  • The domain persona and expertise level
+  • How to structure responses (tone, format, depth)
+  • Domain-specific knowledge and behaviours to demonstrate
+  • Explicit guidance on using tools if relevant
+- tools: define 1–3 domain-relevant tools ONLY if they meaningfully extend capabilities
+- model: choose the most capable model suitable for the domain
+- temperature: low (0.2) for technical/structured work, higher (0.8–1.0) for creative
+- appHtml: build a focused chat interface with domain branding
+  • Prominent domain name, accent colour, and descriptive placeholder text
+  • Use <vibe-chat sandbox-id="__SANDBOX_ID__"> web component for the chat
+  • Style to match the domain aesthetic (e.g. dark/terminal for cyber, warm for creative)
+- whispererFeatures: array of 2–4 Whisperer feature names most relevant for this domain
+${whispererFeatureList}
+  Example: cybersecurity → ["guard-probe","pii-scan","consistency","entropy"]
+  Example: sales → ["evaluate","consistency","sensitivity","drift"]
+  Example: research → ["cot","ablation","consistency","evaluate"]
+  Example: creative → ["entropy","sensitivity","cluster","drift"]
+
+IMPORTANT: include "whispererFeatures" as a top-level field in the JSON alongside name, systemPrompt, etc.
+` : ''
+
+  const dashboardHint = mode === 'dashboard' ? `
+IMPORTANT — you are generating a DATA DASHBOARD, not a chat app.
+Do NOT include any chat input, VibeClient, or vibe-sdk.js.
+The page should fetch live platform data and render it as a visual dashboard.
+
+Platform data APIs (all GET, require X-App-Token header):
+  /api/app/__SANDBOX_ID__/platform/apps          → { apps: [{id, name, model, createdAt, fromVibe}] }
+  /api/app/__SANDBOX_ID__/platform/environments  → { apps: [{id, name, model, createdAt}] }
+  /api/app/__SANDBOX_ID__/platform/labs          → { labs: [{id, name, envType, envModels, createdAt}] }
+  /api/app/__SANDBOX_ID__/platform/builds        → { builds: [{id, name, status, files, createdAt}] }
+  /api/app/__SANDBOX_ID__/platform/metrics       → { totalRuns, totalTokensIn, totalTokensOut, avgLatencyMs, totalCostUsd, modelBreakdown[] }
+  /api/app/__SANDBOX_ID__/platform/events        → { events: [{sandbox_id, event_type, metadata, created_at}] }
+  /api/app/__SANDBOX_ID__/platform/usage         → { rows: [{model, totalCalls, totalTokensIn, totalTokensOut, totalCostUsd}] }
+  /api/app/__SANDBOX_ID__/platform/probes        → { probes: [{id, name, schedule, run_count, last_run_at}] }
+
+How to authenticate (the token is injected server-side):
+  const tok = document.querySelector('meta[name="whisper-token"]')?.content
+  const headers = tok ? { 'X-App-Token': tok } : {}
+  const data = await fetch('/api/app/__SANDBOX_ID__/platform/metrics', { headers }).then(r=>r.json())
+
+Embedding:
+  <iframe src="/app/{id}" ...>    — embed a vibe app
+  <iframe src="/env/{id}" ...>    — embed an environment comparison panel
+
+Design as a rich operational dashboard: stat cards, charts (use SVG or Canvas), activity feeds.
+Use auto-refresh (setInterval) with a sensible interval (30–60s) for live data.
+` : ''
+
   const metaPrompt = `You are an AI app generator. Given a description, output ONLY a valid JSON object — no markdown, no explanation, no code fences.
 
 The JSON must have exactly these fields:
 {
   "name": "<string, max 128 chars, descriptive app name>",
   "description": "<string, max 512 chars, what this app does>",
-  "systemPrompt": "<string, detailed system instructions that make the AI excellent at the task>",
-  "tools": [<optional array — define tools ONLY if the app description implies the AI needs to call external functions. Each tool: { "name": "snake_case_name", "description": "what this tool does", "parameters": { "param_name": { "type": "string|number|boolean", "description": "...", "required": true|false } } }>],
+  "systemPrompt": "<string${mode === 'dashboard' ? ', set to an empty string for dashboards' : ', detailed system instructions that make the AI excellent at the task'}>",
+  "tools": [],
   "model": "<choose the most appropriate model from the options below>",
-  "temperature": <number 0-2: 0.2 for factual, 0.7 for balanced, 1.2 for creative>,
-  "maxTokens": <integer 256-4096>,
-  "appHtml": "<complete single-file HTML app — see requirements below>"
+  "temperature": ${mode === 'dashboard' ? '0' : '<number 0-2: 0.2 for factual, 0.7 for balanced, 1.2 for creative>'},
+  "maxTokens": ${mode === 'dashboard' ? '256' : '<integer 256-4096>'},
+  "appHtml": "<complete single-file HTML app — see requirements below>"${mode === 'environment' ? `,
+  "whispererFeatures": ["<feature1>", "<feature2>", ...]` : ''}
 }
-
+${mode === 'environment' ? environmentHint : ''}
+${mode === 'app' ? `
 Tool guidelines: define tools ONLY when the description explicitly requires calling external APIs or services. For knowledge-based or conversational apps, tools should be an empty array [].
-
+` : ''}
 App HTML requirements:
 - Generate a COMPLETE, self-contained HTML page (DOCTYPE, head, body, styles, scripts all inline)
 - Use __SANDBOX_ID__ (double underscore each side) as the sandbox ID placeholder — it will be replaced at runtime
-- Load the SDK: <script type="module"> ... import { VibeClient } from '/vibe-sdk.js'; const client = new VibeClient(); ...
+${mode === 'dashboard' ? dashboardHint : `- Load the SDK: <script type="module"> ... import { VibeClient } from '/vibe-sdk.js'; const client = new VibeClient(); ...
 - For simple chat apps: use the <vibe-chat sandbox-id="__SANDBOX_ID__"> web component
-- For richer apps (dashboards, tools, multi-step flows): build a full custom UI using client.sandbox.get('__SANDBOX_ID__') and client.ai.*
+- For richer apps (dashboards, tools, multi-step flows): build a full custom UI using client.sandbox.get('__SANDBOX_ID__') and client.ai.*`}
 - Style with inline CSS — dark theme (#0c0c0f background, #d8d8e8 text, #7c3aed accent)
 - All script tags must be type="module" — no inline event handlers (use addEventListener)
-- The page must be fully functional with no external CDN dependencies (only /vibe-sdk.js from same origin)
+- The page must be fully functional with no external CDN dependencies${mode === 'dashboard' ? ' (no /vibe-sdk.js needed — only native fetch)' : ' (only /vibe-sdk.js from same origin)'}
 
 Available models:
 ${modelOptions}
@@ -127,6 +200,11 @@ User description: "${description}"`
 
   const rawAppHtml = typeof parsed.appHtml === 'string' ? parsed.appHtml.trim() : ''
 
+  const VALID_WHISPERER = new Set(['sensitivity','consistency','entropy','cot','evaluate','pii-scan','guard-probe','ablation','drift','archaeology','cluster'])
+  const whispererFeatures = Array.isArray(parsed.whispererFeatures)
+    ? (parsed.whispererFeatures as unknown[]).filter((f): f is string => typeof f === 'string' && VALID_WHISPERER.has(f))
+    : undefined
+
   return {
     name:         typeof parsed.name === 'string'         ? parsed.name         : name ?? 'Untitled App',
     description:  typeof parsed.description === 'string'  ? parsed.description  : description.slice(0, 256),
@@ -136,6 +214,7 @@ User description: "${description}"`
     temperature:  typeof parsed.temperature === 'number'  ? parsed.temperature  : DEFAULT_TEMPERATURE,
     maxTokens:    typeof parsed.maxTokens === 'number'    ? parsed.maxTokens    : DEFAULT_MAX_TOKENS,
     appHtml:      rawAppHtml.length > 0 && rawAppHtml.length <= 51_200 ? rawAppHtml : undefined,
+    ...(whispererFeatures && whispererFeatures.length > 0 ? { whispererFeatures } : {}),
   }
 }
 

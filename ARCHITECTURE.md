@@ -155,7 +155,7 @@ for (const [method, path, handler] of [
   ...pageRoutes, ...documentRoutes, ...whispererRoutes, ...securityRoutes,
   ...appstateRoutes, ...monitorRoutes, ...vaultRoutes, ...replayRoutes,
   ...assertionRoutes, ...atlasRoutes, ...probesRoutes, ...pipelineRoutes,
-  ...environmentRoutes,
+  ...labRoutes, ...environmentRoutes,
 ]) router.on(method, path, handler)
 ```
 
@@ -904,7 +904,9 @@ The alternative is injecting the build ID as a JavaScript variable in a `<script
 | `rl:build-create:{ip}` | `number[]` timestamp array for build creation rate limiter |
 | `rl:monitor:{ip}` | `number[]` timestamp array for monitor stream/audit rate limiter |
 | `rl:doc-upload:{ip}` | `number[]` timestamp array for document upload rate limiter |
-| `sandbox:{uuid}` (fromEnv) | Sandbox UUID string + `{ id, name, description, model, createdAt, fromEnv: true, envType, envModels }` metadata — environments stored identically to sandboxes with `fromEnv: true` flag |
+| `sandbox:{uuid}` (fromLab) | Sandbox UUID string + `{ id, name, description, model, createdAt, fromLab: true, envType, envModels }` metadata — Lab (multi-model comparison workspace) |
+| `sandbox:{uuid}` (fromEnv) | Sandbox UUID string + `{ id, name, description, model, createdAt, fromVibe: true, fromEnv: true, whispererFeatures }` metadata — agentic Environment created by the Vibe coder |
+| `sandbox:{uuid}` (fromDashboard) | Sandbox UUID string + `{ id, name, description, model, createdAt, fromVibe: true, fromDashboard: true }` metadata — Dashboard created by the Vibe coder |
 
 ### Durable Object storage
 

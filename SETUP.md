@@ -132,7 +132,8 @@ The dev server starts at `http://localhost:8787`.
 | `http://localhost:8787/` | Chat |
 | `http://localhost:8787/vibe.html` | Vibe Builder |
 | `http://localhost:8787/tools.html` | AI Workbench |
-| `http://localhost:8787/environments` | Environments Gallery |
+| `http://localhost:8787/environments` | Environments Gallery (agentic workspaces) |
+| `http://localhost:8787/lab` | Labs Gallery (multi-model comparison) |
 | `http://localhost:8787/apps` | Apps Gallery |
 | `http://localhost:8787/dashboard` | Dashboard |
 | `http://localhost:8787/api` | API health + endpoint map |

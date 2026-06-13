@@ -48,7 +48,7 @@ async function load() {
   const grid = document.getElementById('grid')
   grid.innerHTML = [1,2,3].map(() => \`<div class="skeleton" role="listitem" aria-hidden="true"><div class="sk-line" style="width:60%"></div><div class="sk-line" style="width:90%"></div><div class="sk-line" style="width:40%"></div></div>\`).join('')
   try {
-    const r = await fetch('/api/sandbox')
+    const r = await fetch('/api/sandbox?only=apps')
     const d = await r.json()
     if (!d.ok || !d.data.apps.length) {
       grid.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center'

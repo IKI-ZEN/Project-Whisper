@@ -1,6 +1,8 @@
+import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
-import { json, ok, err, parseBody, checkRateLimit, listAllR2 } from '../lib/http'
+import { json, ok, err, parseBody, checkRateLimit, listAllR2, listAllKV } from '../lib/http'
 import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'
+import type { SandboxMeta } from '../lib/do'
 import { doFetch, appStateStub } from '../lib/do'
 import { scan } from '../lib/guard'
 import { logSandboxEvent } from '../lib/events'
@@ -10,6 +12,8 @@ import {
   IMAGE_RATE_LIMIT_WINDOW_MS, IMAGE_RATE_LIMIT_MAX,
   EMAIL_RATE_LIMIT_WINDOW_MS, EMAIL_RATE_LIMIT_MAX,
   MAX_EMAIL_SCAN_CHARS, MAX_EMAIL_SUBJECT_LEN,
+  PLATFORM_READ_MAX_EVENTS,
+  SANDBOX_KEY_PREFIX, BUILD_KEY_PREFIX,
 } from '../lib/constants'
 
 // ── App State (E1) ────────────────────────────────────────────────────────────
@@ -171,6 +175,135 @@ const sendEmail: Handler = async (req, env, params) => {
   }
 }
 
+// ── Platform read proxy (P1) ──────────────────────────────────────────────────
+// A single read-only endpoint — GET /api/app/:id/platform/:resource — accessible
+// via app token. It surfaces platform-wide data so generated dashboard apps can
+// render live operational information without a Cloudflare Access JWT.
+
+interface BuildMeta { id: string; name: string; status: string; files?: string[]; createdAt: number; description?: string }
+
+const PLATFORM_RESOURCES = ['apps', 'environments', 'labs', 'builds', 'metrics', 'events', 'usage', 'probes'] as const
+type PlatformResource = typeof PLATFORM_RESOURCES[number]
+
+function listSandboxesByKind(env: Env, kind: 'apps' | 'environments' | 'labs'): Promise<SandboxMeta[]> {
+  return listAllKV<SandboxMeta>(env.SANDBOX_REGISTRY, SANDBOX_KEY_PREFIX).then(keys => keys
+    .filter(k => k.metadata != null)
+    .map(k => k.metadata as SandboxMeta)
+    .filter(m => {
+      if (kind === 'apps')         return !m.fromLab && !m.fromEnv && !m.fromDashboard
+      if (kind === 'environments') return m.fromEnv === true
+      if (kind === 'labs')         return m.fromLab === true
+      return false
+    })
+    .sort((a, b) => b.createdAt - a.createdAt))
+}
+
+async function readPlatformResource(resource: PlatformResource, env: Env): Promise<Record<string, unknown>> {
+  switch (resource) {
+    case 'apps':
+      return { apps: await listSandboxesByKind(env, 'apps') }
+
+    case 'environments':
+      return { apps: await listSandboxesByKind(env, 'environments') }
+
+    case 'labs':
+      return { labs: await listSandboxesByKind(env, 'labs') }
+
+    case 'builds': {
+      const keys = await listAllKV<BuildMeta>(env.SANDBOX_REGISTRY, BUILD_KEY_PREFIX)
+      const builds = keys
+        .filter(k => k.metadata != null)
+        .map(k => k.metadata as BuildMeta)
+        .sort((a, b) => b.createdAt - a.createdAt)
+      return { builds }
+    }
+
+    case 'metrics': {
+      const row = await env.DB.prepare(
+        `SELECT COUNT(*) as totalRuns,
+                SUM(tokens_in) as totalTokensIn,
+                SUM(tokens_out) as totalTokensOut,
+                AVG(latency_ms) as avgLatencyMs,
+                SUM(cost_usd) as totalCostUsd
+           FROM usage_metrics`,
+      ).first<{ totalRuns: number; totalTokensIn: number; totalTokensOut: number; avgLatencyMs: number; totalCostUsd: number }>()
+      const breakdown = await env.DB.prepare(
+        `SELECT model,
+                COUNT(*) as runs,
+                SUM(tokens_in) as tokensIn,
+                SUM(tokens_out) as tokensOut,
+                SUM(cost_usd) as costUsd
+           FROM usage_metrics
+          GROUP BY model
+          ORDER BY runs DESC
+          LIMIT 20`,
+      ).all<{ model: string; runs: number; tokensIn: number; tokensOut: number; costUsd: number }>()
+      return {
+        totalRuns:      row?.totalRuns      ?? 0,
+        totalTokensIn:  row?.totalTokensIn  ?? 0,
+        totalTokensOut: row?.totalTokensOut ?? 0,
+        avgLatencyMs:   row?.avgLatencyMs   ?? 0,
+        totalCostUsd:   row?.totalCostUsd   ?? 0,
+        modelBreakdown: breakdown.results ?? [],
+      }
+    }
+
+    case 'events': {
+      const result = await env.DB.prepare(
+        `SELECT sandbox_id, event_type, metadata, created_at
+           FROM sandbox_events
+          ORDER BY created_at DESC
+          LIMIT ?`,
+      ).bind(PLATFORM_READ_MAX_EVENTS).all<{ sandbox_id: string; event_type: string; metadata: string; created_at: number }>()
+      const events = (result.results ?? []).map(r => ({
+        ...r,
+        metadata: (() => { try { return JSON.parse(r.metadata) } catch { return {} } })(),
+      }))
+      return { events }
+    }
+
+    case 'usage': {
+      const from30d = now() - 30 * 86_400_000
+      const result = await env.DB.prepare(
+        `SELECT model,
+                COUNT(*) as totalCalls,
+                SUM(tokens_in) as totalTokensIn,
+                SUM(tokens_out) as totalTokensOut,
+                SUM(cost_usd) as totalCostUsd
+           FROM usage_metrics
+          WHERE created_at >= ?
+          GROUP BY model
+          ORDER BY totalCalls DESC`,
+      ).bind(from30d).all<{ model: string; totalCalls: number; totalTokensIn: number; totalTokensOut: number; totalCostUsd: number }>()
+      return { rows: result.results ?? [] }
+    }
+
+    case 'probes': {
+      const result = await env.DB.prepare(
+        `SELECT p.id, p.name, p.schedule, p.last_run_at,
+                (SELECT COUNT(*) FROM probe_runs WHERE probe_id = p.id) as run_count
+           FROM probes p
+          ORDER BY p.created_at DESC`,
+      ).all<{ id: string; name: string; schedule: string; last_run_at: number | null; run_count: number }>()
+      return { probes: result.results ?? [] }
+    }
+  }
+}
+
+const platformRead: Handler = async (_req, env, params) => {
+  const id = params.id ?? ''
+  if (!isUUID(id)) return json(err('Invalid app id'), 422)
+  const resource = (params.resource ?? '') as PlatformResource
+  if (!(PLATFORM_RESOURCES as readonly string[]).includes(resource)) {
+    return json(err(`Unknown platform resource — expected one of: ${PLATFORM_RESOURCES.join(', ')}`), 404)
+  }
+  try {
+    return json(ok(await readPlatformResource(resource, env)))
+  } catch (e) {
+    return json(err(`Platform resource "${resource}" unavailable`, String(e)), 500)
+  }
+}
+
 // ── Route table ───────────────────────────────────────────────────────────────
 
 export const appstateRoutes: Array<[string, string, Handler]> = [
@@ -187,4 +320,6 @@ export const appstateRoutes: Array<[string, string, Handler]> = [
   ['DELETE', '/api/app/:id/images/:imageId', deleteImage],
   // Email (E5)
   ['POST',   '/api/app/:id/email',           sendEmail],
+  // Platform read proxy (P1) — accessible via app token from generated dashboards
+  ['GET',    '/api/app/:id/platform/:resource', platformRead],
 ]
