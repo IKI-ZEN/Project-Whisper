@@ -27,15 +27,6 @@ interface TestCase {
   assertions: Assertion[]
 }
 
-interface Suite {
-  id: string
-  name: string
-  description: string
-  cases: TestCase[]
-  created_at: number
-  updated_at: number
-}
-
 interface AssertionResult {
   type: string
   passed: boolean

@@ -157,7 +157,7 @@ const list: Handler = async (req: Request, env: Env) => {
 }
 
 // DELETE /api/vault/:id
-const remove: Handler = async (req: Request, env: Env, params: Params) => {
+const remove: Handler = async (_req: Request, env: Env, params: Params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)

@@ -202,7 +202,7 @@ const listPrompts: Handler = async (req: Request, env: Env) => {
   }
 }
 
-const getPrompt: Handler = async (req: Request, env: Env, params) => {
+const getPrompt: Handler = async (_req: Request, env: Env, params) => {
   const id = params.id
   if (!id) return json(err('Missing id'), 400)
   if (!isUUID(id)) return json(err('Invalid id'), 422)

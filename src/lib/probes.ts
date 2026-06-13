@@ -1,5 +1,5 @@
 import type { Env } from '../types/env'
-import { newId, isUUID, now } from './utils'
+import { newId, now } from './utils'
 import { PROBE_WEBHOOK_TIMEOUT_MS, WEBHOOK_SIGNATURE_VERSION } from './constants'
 import { signPayload } from './vault'
 import {

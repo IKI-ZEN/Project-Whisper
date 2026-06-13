@@ -38,7 +38,7 @@ async function completeOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts)
   const authH = def.authHeaders ? def.authHeaders(key) : { Authorization: `Bearer ${key}` }
   const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
     method: 'POST',
-    headers: buildGatewayHeaders(key, authH, opts, wireModel),
+    headers: buildGatewayHeaders(authH, opts, wireModel),
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
@@ -83,7 +83,7 @@ async function completeAnthropic(env: Env, gw: GatewayResult, opts: CompletionOp
   const res = await fetch(`${gatewayBase(env)}${def.path(model)}`, {
     method: 'POST',
     headers: {
-      ...buildGatewayHeaders(key, authH, opts, model),
+      ...buildGatewayHeaders(authH, opts, model),
       'anthropic-version': '2023-06-01',
       'anthropic-beta': 'prompt-caching-2024-07-31',
     },
@@ -135,7 +135,7 @@ async function completeGoogle(env: Env, gw: GatewayResult, opts: CompletionOpts)
   const authH = def.authHeaders ? def.authHeaders(key) : { 'x-goog-api-key': key }
   const res = await fetch(`${gatewayBase(env)}${def.path(model)}`, {
     method: 'POST',
-    headers: buildGatewayHeaders(key, authH, opts, model),
+    headers: buildGatewayHeaders(authH, opts, model),
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
@@ -180,7 +180,7 @@ async function completeCohere(env: Env, gw: GatewayResult, opts: CompletionOpts)
   }
   const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
     method: 'POST',
-    headers: buildGatewayHeaders(key, authH, opts, modelId),
+    headers: buildGatewayHeaders(authH, opts, modelId),
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
@@ -213,7 +213,7 @@ async function completeHuggingFace(env: Env, gw: GatewayResult, opts: Completion
   }
   const res = await fetch(`${gatewayBase(env)}${def.path(modelId)}`, {
     method: 'POST',
-    headers: buildGatewayHeaders(key, authH, opts, modelId),
+    headers: buildGatewayHeaders(authH, opts, modelId),
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })
@@ -237,7 +237,7 @@ async function completeReplicate(env: Env, gw: GatewayResult, opts: CompletionOp
   }
   const createRes = await fetch(`${base}${def.path(modelId)}`, {
     method: 'POST',
-    headers: buildGatewayHeaders(key, authH, opts, modelId),
+    headers: buildGatewayHeaders(authH, opts, modelId),
     body: JSON.stringify({ version: modelId, input }),
     signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
   })

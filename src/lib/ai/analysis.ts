@@ -4,7 +4,6 @@ import type { Env } from '../../types/env'
 import { DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS } from '../constants'
 import { now } from '../utils'
 import { MODELS } from './models'
-import { type CompletionOpts } from './messages'
 import { complete, embed } from './complete'
 
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {

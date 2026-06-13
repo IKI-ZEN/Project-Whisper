@@ -1,4 +1,3 @@
-import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp, readIdentity } from '../lib/http'
 import { generateVibeConfig } from '../lib/ai'

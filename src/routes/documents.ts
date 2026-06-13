@@ -1,4 +1,4 @@
-import type { Env, WhisperJob } from '../types/env'
+import type { WhisperJob } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, checkRateLimit, rateLimitByIp, parseBodyOptional, listAllR2 } from '../lib/http'
 import { scan } from '../lib/guard'

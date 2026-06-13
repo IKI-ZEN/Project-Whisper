@@ -1,7 +1,7 @@
 // ── Shared message builder ────────────────────────────────────────────────────
 
 import type { Message, Tool, ContentBlock } from '../schema'
-import { decodeToolResult, encodeToolCalls, isToolCallReply, decodeToolCalls } from './tools'
+import { decodeToolResult, isToolCallReply, decodeToolCalls } from './tools'
 
 export interface CompletionOpts {
   model?: string

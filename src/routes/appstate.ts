@@ -1,4 +1,3 @@
-import type { Env } from '../types/env'
 import type { Handler } from '../lib/http'
 import { json, ok, err, parseBody, checkRateLimit, listAllR2 } from '../lib/http'
 import { parseAppStateValueRequest, parseEmailRequest } from '../lib/schema'

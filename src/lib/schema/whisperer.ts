@@ -1,10 +1,10 @@
 import type { ThinkRequest, SensitivityRequest, ClusterRequest, CotRequest, EntropyRequest, ArchaeologyRequest, PipelineRequest, PipelineNode, VibeRequest, EnvironmentRequest, PiiScanRequest } from './types'
 import { isObj, str, num, bool, type Obj } from './helpers'
 import {
-  DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, DEFAULT_MODEL,
+  DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS,
   MAX_SENSITIVITY_VARIANTS, MAX_ENTROPY_SAMPLES, MAX_ARCHAEOLOGY_CANDIDATES,
   MAX_CLUSTER_TEXTS, MAX_PIPELINE_NODES, MAX_PIPELINE_DEPTH,
-  MAX_NAME_LEN, MAX_VIBE_DESCRIPTION, MAX_SYSTEM_PROMPT_LEN,
+  MAX_VIBE_DESCRIPTION,
   MAX_ENV_MODELS, ENV_TYPES, MAX_PII_SCAN_CHARS,
 } from '../constants'
 import { PII_TYPES } from '../pii'

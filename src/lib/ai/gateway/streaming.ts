@@ -73,7 +73,7 @@ export function streamOpenAI(env: Env, gw: GatewayResult, opts: CompletionOpts):
     `${gatewayBase(env)}${def.path(modelId)}`,
     {
       method: 'POST',
-      headers: buildGatewayHeaders(key, authH, opts, wireModel),
+      headers: buildGatewayHeaders(authH, opts, wireModel),
       body: JSON.stringify({ model: wireModel, messages: buildMessages(opts), temperature: opts.temperature ?? DEFAULT_TEMPERATURE, max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, stream: true }),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
@@ -90,7 +90,7 @@ export function streamAnthropic(env: Env, gw: GatewayResult, opts: CompletionOpt
     `${gatewayBase(env)}${def.path(model)}`,
     {
       method: 'POST',
-      headers: { ...buildGatewayHeaders(key, authH, opts, model), 'anthropic-version': '2023-06-01' },
+      headers: { ...buildGatewayHeaders(authH, opts, model), 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model, messages, ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}), max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS, temperature: opts.temperature ?? DEFAULT_TEMPERATURE, stream: true }),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
@@ -116,7 +116,7 @@ export function streamGoogle(env: Env, gw: GatewayResult, opts: CompletionOpts):
     `${gatewayBase(env)}/google-ai-studio/v1/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`,
     {
       method: 'POST',
-      headers: buildGatewayHeaders(key, authH, opts, model),
+      headers: buildGatewayHeaders(authH, opts, model),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },
@@ -145,7 +145,7 @@ export function streamCohere(env: Env, gw: GatewayResult, opts: CompletionOpts):
     `${gatewayBase(env)}${def.path(modelId)}`,
     {
       method: 'POST',
-      headers: buildGatewayHeaders(key, authH, opts, modelId),
+      headers: buildGatewayHeaders(authH, opts, modelId),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(AI_GATEWAY_TIMEOUT_MS),
     },

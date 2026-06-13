@@ -1,6 +1,6 @@
 import type { Env, WhisperJob } from './types/env'
 import { Router, json, ok } from './lib/http'
-import { now, isUUID } from './lib/utils'
+import { isUUID } from './lib/utils'
 import { APP_VERSION, CRON_HOURLY, CRON_WEEKLY } from './lib/constants'
 import { logSandboxEvent, reportError } from './lib/events'
 import { aiRoutes }              from './routes/ai'

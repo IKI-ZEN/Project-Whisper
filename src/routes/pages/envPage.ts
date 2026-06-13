@@ -1,6 +1,5 @@
-import type { Env } from '../../types/env'
 import type { Handler, Params } from '../../lib/http'
-import { sandboxExists, stub, doFetch } from '../../lib/do'
+import { stub, doFetch } from '../../lib/do'
 import { genNonce, htmlHeaders, sharedCss, navHtml, escJs } from './shared'
 
 // ── Environment chat page (/env/:id) ─────────────────────────────────────────

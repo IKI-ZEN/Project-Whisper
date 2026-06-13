@@ -1,4 +1,3 @@
-import type { Env } from '../types/env'
 import type { Handler, Params } from '../lib/http'
 import { json, ok, err, parseBody, rateLimitByIp, parseQueryInt } from '../lib/http'
 import { newId, isUUID, now } from '../lib/utils'

@@ -1,5 +1,5 @@
 import type { Env } from '../../types/env'
-import type { Handler, Params } from '../../lib/http'
+import type { Handler } from '../../lib/http'
 import { injectAppToken } from './shared'
 
 // ── Built app serving (/build/:id) ───────────────────────────────────────────

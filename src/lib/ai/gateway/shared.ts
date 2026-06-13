@@ -16,7 +16,6 @@ export function run(ai: Ai): AiRun {
 // Constructs the standard set of headers for every AI Gateway request.
 // All cache/metadata headers live here — never inline them in provider functions.
 export function buildGatewayHeaders(
-  key: string,
   authH: Record<string, string>,
   opts: CompletionOpts,
   modelLabel: string,
