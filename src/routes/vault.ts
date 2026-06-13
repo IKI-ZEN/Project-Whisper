@@ -6,9 +6,9 @@ import { newId, isUUID, now } from '../lib/utils'
 import { embed, kMeansClusters, cosineSimilarity } from '../lib/ai'
 import { parseVaultAnalyzeRequest } from '../lib/schema'
 import {
-  VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW,
-  VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW,
-  VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW,
+  VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW_MS,
+  VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW_MS,
+  VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW_MS,
   AI_SEARCH_MAX_RESULTS, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX,
 } from '../lib/constants'
 
@@ -81,7 +81,7 @@ function parseRow(row: Record<string, unknown>) {
 
 // POST /api/vault
 const create: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:vault-write', VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:vault-write', VAULT_WRITE_RATE_LIMIT_MAX, VAULT_WRITE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   const p = await parseBody(req, parseVaultRecord)
   if (!p.ok) return p.response
@@ -304,7 +304,7 @@ const exportJsonl: Handler = async (req: Request, env: Env) => {
 
 // POST /api/vault/analyze — cluster vault records by prompt embedding similarity
 const analyze: Handler = async (req: Request, env: Env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:vault-analyze', VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:vault-analyze', VAULT_ANALYZE_RATE_LIMIT_MAX, VAULT_ANALYZE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
 
   const p = await parseBody(req, parseVaultAnalyzeRequest)
@@ -382,7 +382,7 @@ const search: Handler = async (req: Request, env: Env) => {
   const limit = parseQueryInt(url.searchParams, 'limit', 20, 1, AI_SEARCH_MAX_RESULTS)
   const tool  = url.searchParams.get('tool') ?? undefined
   if (!q.trim()) return json(err('q is required'), 400)
-  const rl = await rateLimitByIp(req, env, 'rl:vault-search', VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:vault-search', VAULT_SEARCH_RATE_LIMIT_MAX, VAULT_SEARCH_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   try {
     const { results: hits } = await env.AI_SEARCH.search({ messages: [{ role: 'user', content: q }], limit })

@@ -131,16 +131,16 @@ export const MAX_WEBHOOK_URL_LEN         = 512
 
 // Vault cluster analysis
 export const VAULT_ANALYZE_RATE_LIMIT_MAX    = 3       // max per window
-export const VAULT_ANALYZE_RATE_LIMIT_WINDOW = 300_000 // 5 minutes
+export const VAULT_ANALYZE_RATE_LIMIT_WINDOW_MS = 300_000 // 5 minutes
 
 // AI gateway outbound call timeout
 export const AI_GATEWAY_TIMEOUT_MS           = 120_000 // 2 minutes
 
 // Pipeline and vault write rate limits (per IP, for unauthenticated deployments)
 export const PIPELINE_WRITE_RATE_LIMIT_MAX    = 30
-export const PIPELINE_WRITE_RATE_LIMIT_WINDOW = 60_000
+export const PIPELINE_WRITE_RATE_LIMIT_WINDOW_MS = 60_000
 export const VAULT_WRITE_RATE_LIMIT_MAX       = 30
-export const VAULT_WRITE_RATE_LIMIT_WINDOW    = 60_000
+export const VAULT_WRITE_RATE_LIMIT_WINDOW_MS    = 60_000
 
 // Vision / multimodal input
 export const MAX_IMAGE_BASE64_BYTES = 5_592_405  // ~4 MB binary after decoding base64
@@ -160,7 +160,7 @@ export const MAX_TTS_TEXT_LEN = 5_000
 
 // AI Search — semantic vault search
 export const VAULT_SEARCH_RATE_LIMIT_MAX    = 20
-export const VAULT_SEARCH_RATE_LIMIT_WINDOW = 60_000
+export const VAULT_SEARCH_RATE_LIMIT_WINDOW_MS = 60_000
 export const AI_SEARCH_MAX_RESULTS         = 50
 
 // Model fallback telemetry sentinel
@@ -179,15 +179,15 @@ export const MONITOR_LIMIT_MAX     = 500
 
 // Sandbox creation rate limit (create/import/fork are DO-provisioning operations)
 export const SANDBOX_CREATE_RATE_LIMIT_MAX    = 10
-export const SANDBOX_CREATE_RATE_LIMIT_WINDOW = 60_000
+export const SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Pipeline execution rate limit (AI chain calls per IP)
 export const PIPELINE_RUN_RATE_LIMIT_MAX    = 20
-export const PIPELINE_RUN_RATE_LIMIT_WINDOW = 60_000
+export const PIPELINE_RUN_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Replay rate limit (multi-step AI completions per IP)
 export const REPLAY_RATE_LIMIT_MAX    = 10
-export const REPLAY_RATE_LIMIT_WINDOW = 60_000
+export const REPLAY_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Usage analytics list
 export const USAGE_LIMIT_DEFAULT = 100
@@ -199,25 +199,25 @@ export const ENV_TYPES      = ['general', 'coding', 'research', 'structured', 'c
 
 // Whisperer analysis (AI-intensive multi-call endpoints)
 export const WHISPERER_RATE_LIMIT_MAX    = 15
-export const WHISPERER_RATE_LIMIT_WINDOW = 60_000
+export const WHISPERER_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Atlas prompt library writes
 export const ATLAS_WRITE_RATE_LIMIT_MAX    = 20
-export const ATLAS_WRITE_RATE_LIMIT_WINDOW = 60_000
+export const ATLAS_WRITE_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Vibe & Build AI generation (expensive)
 export const VIBE_CREATE_RATE_LIMIT_MAX     = 5
-export const VIBE_CREATE_RATE_LIMIT_WINDOW  = 60_000
+export const VIBE_CREATE_RATE_LIMIT_WINDOW_MS  = 60_000
 export const BUILD_CREATE_RATE_LIMIT_MAX    = 5
-export const BUILD_CREATE_RATE_LIMIT_WINDOW = 60_000
+export const BUILD_CREATE_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Monitor stream/audit (prevent scraping)
 export const MONITOR_RATE_LIMIT_MAX    = 30
-export const MONITOR_RATE_LIMIT_WINDOW = 60_000
+export const MONITOR_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Document upload (R2 + D1 write per file)
 export const DOCUMENT_UPLOAD_RATE_LIMIT_MAX    = 20
-export const DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW = 60_000
+export const DOCUMENT_UPLOAD_RATE_LIMIT_WINDOW_MS = 60_000
 
 // Cloudflare Access JWKS public-key cache lifetime
 export const JWKS_CACHE_TTL_MS = 3_600_000   // 1 hour

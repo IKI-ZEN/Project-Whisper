@@ -7,7 +7,7 @@ import { newId, now, isUUID } from '../lib/utils'
 import { registerSandbox, stub, doFetch, identityHeader, sandboxExists } from '../lib/do'
 import { signPayload, verifySignature } from '../lib/vault'
 import {
-  SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW,
+  SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS,
   SANDBOX_TTL, SANDBOX_KEY_PREFIX, MAX_ENV_MODELS, ENV_TYPES,
 } from '../lib/constants'
 import { logSandboxEvent } from '../lib/events'
@@ -24,7 +24,7 @@ async function getEnvMeta(env: Env, id: string) {
 // ── Create ────────────────────────────────────────────────────────────────────
 
 const createEnvironment: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
 
   const p = await parseBody(req, parseEnvironmentRequest)
@@ -164,7 +164,7 @@ const exportEnvironment: Handler = async (_req, env, params: Params) => {
 // ── Import ────────────────────────────────────────────────────────────────────
 
 const importEnvironment: Handler = async (req, env) => {
-  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
 
   let raw: unknown
@@ -248,7 +248,7 @@ const importEnvironment: Handler = async (req, env) => {
 const forkEnvironment: Handler = async (req, env, params: Params) => {
   const sourceId = params.id ?? ''
   if (!isUUID(sourceId)) return json(err('Invalid environment id'), 422)
-  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW)
+  const rl = await rateLimitByIp(req, env, 'rl:env-create', SANDBOX_CREATE_RATE_LIMIT_MAX, SANDBOX_CREATE_RATE_LIMIT_WINDOW_MS)
   if (rl) return rl
   if (!await sandboxExists(env, sourceId)) return json(err('Environment not found'), 404)
 
