@@ -668,10 +668,13 @@ export class VibesClient {
    * AI picks the best config, creates a Durable Object sandbox, and returns a VibeResult.
    * @param {string} description - Plain-language description of what the AI app should do
    * @param {string} [name] - Optional name; AI generates one if omitted
+   * @param {'app'|'dashboard'} [mode] - 'app' (default) for a chat app, 'dashboard' for a data dashboard
    * @returns {Promise<VibeResult>}
    */
-  async create(description, name) {
-    const data = await apiRequest(this._base, '/api/vibes', 'POST', { description, name })
+  async create(description, name, mode) {
+    const body = { description, name }
+    if (mode) body.mode = mode
+    const data = await apiRequest(this._base, '/api/vibes', 'POST', body)
     return new VibeBuilderResult(this._base, data)
   }
 }

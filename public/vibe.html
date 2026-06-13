@@ -15,6 +15,7 @@
     <a href="/vibe.html" class="navlink active" aria-current="page">Vibe</a>
     <a href="/apps" class="navlink">Apps</a>
     <a href="/environments" class="navlink">Environments</a>
+    <a href="/dashboards" class="navlink">Dashboards</a>
     <a href="/tools.html" class="navlink">Tools</a>
     <a href="/dashboard" class="navlink">Dashboard</a>
   </nav>
@@ -28,6 +29,7 @@
         <!-- Mode toggle (segmented control) -->
         <div class="mode-seg" role="group" aria-label="Mode">
           <button id="mode-quick-btn" class="mode-btn active" aria-pressed="true">Quick Sandbox</button>
+          <button id="mode-dashboard-btn" class="mode-btn" aria-pressed="false">Dashboard</button>
           <button id="mode-app-btn" class="mode-btn" aria-pressed="false">App Builder</button>
         </div>
 
@@ -218,24 +220,36 @@
     }
 
     // ── Mode toggle ──
+    // 'quick'     → chat sandbox via POST /api/vibes
+    // 'dashboard' → data dashboard via POST /api/vibes { mode: 'dashboard' }
+    // 'app'       → multi-file static app via the v2 App Builder (WebSocket)
+    const BTN_LABEL = { quick: 'Generate Sandbox →', dashboard: 'Build Dashboard →', app: 'Build App →' }
+    const DESC_PLACEHOLDER = {
+      quick: 'e.g. A customer support chatbot that speaks only in haikus and never breaks character…',
+      dashboard: 'e.g. A dashboard showing my app run counts, recent activity, and a model cost breakdown…',
+      app: 'e.g. A landing page with a signup form and a pricing table…',
+    }
     function setVibeMode(mode) {
       vibeMode = mode
-      const qBtn = document.getElementById('mode-quick-btn')
-      const aBtn = document.getElementById('mode-app-btn')
-      qBtn.classList.toggle('active', mode === 'quick')
-      aBtn.classList.toggle('active', mode === 'app')
-      qBtn.setAttribute('aria-pressed', String(mode === 'quick'))
-      aBtn.setAttribute('aria-pressed', String(mode === 'app'))
+      const buttons = { quick: 'mode-quick-btn', dashboard: 'mode-dashboard-btn', app: 'mode-app-btn' }
+      for (const [m, btnId] of Object.entries(buttons)) {
+        const btn = document.getElementById(btnId)
+        btn.classList.toggle('active', mode === m)
+        btn.setAttribute('aria-pressed', String(mode === m))
+      }
+      // 'quick' and 'dashboard' both render in the quick panel; 'app' uses the build panel.
+      const usesQuickPanel = mode === 'quick' || mode === 'dashboard'
       document.getElementById('app-builder-opts').style.display = mode === 'app' ? 'flex' : 'none'
-      document.getElementById('quick-panel').style.display = mode === 'quick' ? 'flex' : 'none'
+      document.getElementById('quick-panel').style.display = usesQuickPanel ? 'flex' : 'none'
       document.getElementById('app-panel').style.display = mode === 'app' ? 'flex' : 'none'
+      document.getElementById('vibe-desc').placeholder = DESC_PLACEHOLDER[mode]
       const vibeBtn = document.getElementById('vibe-btn')
-      if (!vibeBtn.disabled) vibeBtn.textContent = mode === 'quick' ? 'Generate Sandbox →' : 'Build App →'
+      if (!vibeBtn.disabled) vibeBtn.textContent = BTN_LABEL[mode]
     }
 
     function doVibeAction() {
-      if (vibeMode === 'quick') doVibe()
-      else doAppBuild()
+      if (vibeMode === 'app') doAppBuild()
+      else doVibe(vibeMode === 'dashboard' ? 'dashboard' : 'app')
     }
 
     // ── Load templates ──
@@ -261,21 +275,23 @@
       }
     }
 
-    // ── Quick Sandbox creator ──
-    async function doVibe() {
+    // ── Quick Sandbox / Dashboard creator ──
+    async function doVibe(apiMode = 'app') {
+      const isDashboard = apiMode === 'dashboard'
+      const noun = isDashboard ? 'dashboard' : 'sandbox'
       const desc = document.getElementById('vibe-desc').value.trim()
       if (desc.length < 10) { alert('Please enter at least 10 characters.'); return }
       const name = document.getElementById('vibe-name').value.trim() || undefined
       const btn = document.getElementById('vibe-btn')
       const out = document.getElementById('vibe-out')
-      setLoading(btn, 'Generating…')
+      setLoading(btn, isDashboard ? 'Building…' : 'Generating…')
       document.getElementById('vibe-placeholder')?.remove()
-      out.textContent = 'Asking AI to design your sandbox…'
+      out.textContent = `Asking AI to design your ${noun}…`
       setStatus('vibe', null)
       try {
-        vibeResult = await client.vibes.create(desc, name)
+        vibeResult = await client.vibes.create(desc, name, isDashboard ? 'dashboard' : undefined)
         out.textContent = JSON.stringify(vibeResult, null, 2)
-        setStatus('vibe', `Sandbox created: ${vibeResult.name}`)
+        setStatus('vibe', `${isDashboard ? 'Dashboard' : 'Sandbox'} created: ${vibeResult.name}`)
         document.getElementById('launch-app-link').href = vibeResult.appUrl
         document.getElementById('embed-out').value = vibeResult.embedCode
         document.getElementById('short-api-out').value = vibeResult.shortApi.run
@@ -304,7 +320,7 @@
         out.textContent = `Error: ${e}`
         setStatus('vibe', String(e), true)
       } finally {
-        clearLoading(btn, 'Generate Sandbox →')
+        clearLoading(btn, BTN_LABEL[vibeMode])
       }
     }
 
@@ -557,6 +573,7 @@
     // ── Wire up ──
     document.getElementById('vibe-btn').onclick = doVibeAction
     document.getElementById('mode-quick-btn').onclick = () => setVibeMode('quick')
+    document.getElementById('mode-dashboard-btn').onclick = () => setVibeMode('dashboard')
     document.getElementById('mode-app-btn').onclick = () => setVibeMode('app')
     document.getElementById('import-btn').onclick = doImport
 
