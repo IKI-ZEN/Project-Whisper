@@ -110,7 +110,7 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   }
 }
 
-// Generic sliding-window rate limiter — stored in RATE_LIMITS KV (separate from user data).
+// Generic sliding-window rate limiter — stored in RATE_LIMITS_WHISPER KV (separate from user data).
 export async function checkRateLimit(
   key: string,
   max: number,
@@ -119,7 +119,7 @@ export async function checkRateLimit(
   message = 'Rate limit exceeded — try again in a minute.',
 ): Promise<Response | null> {
   const ts     = now()
-  const stored = await env.RATE_LIMITS.get(key, 'json') as number[] | null
+  const stored = await env.RATE_LIMITS_WHISPER.get(key, 'json') as number[] | null
   const window = (stored ?? []).filter(t => t > ts - windowMs)
   if (window.length >= max) {
     // The oldest in-window request frees a slot once it ages out → reset time.
@@ -134,7 +134,7 @@ export async function checkRateLimit(
     return res
   }
   window.push(ts)
-  await env.RATE_LIMITS.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
+  await env.RATE_LIMITS_WHISPER.put(key, JSON.stringify(window), { expirationTtl: Math.ceil(windowMs / 1000) })
   return null
 }
 

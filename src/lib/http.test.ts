@@ -78,7 +78,7 @@ function makeMockKV(): KVNamespace {
 }
 
 function makeEnv(kv: KVNamespace): Env {
-  return { RATE_LIMITS: kv } as unknown as Env
+  return { RATE_LIMITS_WHISPER: kv } as unknown as Env
 }
 
 describe('checkRateLimit', () => {

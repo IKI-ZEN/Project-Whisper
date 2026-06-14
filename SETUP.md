@@ -68,12 +68,10 @@ id = "<id from SANDBOX_REGISTRY create>"
 preview_id = "<preview_id from SANDBOX_REGISTRY create>"
 
 [[kv_namespaces]]
-binding = "RATE_LIMITS"
+binding = "RATE_LIMITS_WHISPER"
 id = "<id from RATE_LIMITS_WHISPER create>"
 preview_id = "<preview_id from RATE_LIMITS_WHISPER create>"
 ```
-
-> **Note:** The Cloudflare dashboard namespace name is `RATE_LIMITS_WHISPER` (for organisational clarity), but the Worker binding is `RATE_LIMITS` — paste the namespace ID into the `binding = "RATE_LIMITS"` entry.
 
 **D1 database:**
 
@@ -229,7 +227,7 @@ id = "<SANDBOX_REGISTRY namespace ID>"
 preview_id = "<SANDBOX_REGISTRY preview namespace ID>"
 
 [[kv_namespaces]]
-binding = "RATE_LIMITS"
+binding = "RATE_LIMITS_WHISPER"
 id = "<RATE_LIMITS_WHISPER namespace ID>"
 preview_id = "<RATE_LIMITS_WHISPER preview namespace ID>"
 ```

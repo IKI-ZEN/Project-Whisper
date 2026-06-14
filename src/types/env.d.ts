@@ -38,7 +38,7 @@ export interface Env {
   SANDBOX_REGISTRY: KVNamespace
 
   // KV — rate limit state (separate from user data for independent rotation)
-  RATE_LIMITS: KVNamespace
+  RATE_LIMITS_WHISPER: KVNamespace
 
   // D1 — audit logs, usage metrics
   DB: D1Database

@@ -217,7 +217,7 @@ export function makeEnv(overrides: Partial<Env> = {}): Env {
   return {
     ENVIRONMENT: 'test',
     SANDBOX_REGISTRY: mockKV(),
-    RATE_LIMITS: mockKV(),
+    RATE_LIMITS_WHISPER: mockKV(),
     FILES: mockR2(),
     DB: mockD1(),
     ...overrides,
