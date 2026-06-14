@@ -46,7 +46,9 @@ export function envPageHtml(
 ${sharedCss()}
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.env-header{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.env-header{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;flex-wrap:wrap}
+.env-header .ws-actions{flex-wrap:wrap}
+@media(max-width:700px){.env-desc{display:none}.env-header .ws-actions{margin-left:0!important;width:100%}}
 .env-badge{font-size:10px;padding:2px 8px;border-radius:99px;background:#6366f122;color:var(--accent2);font-family:var(--mono);flex-shrink:0}
 .env-name{font-size:14px;font-weight:600;color:var(--text)}
 .env-desc{font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -127,9 +129,9 @@ ${navHtml('environments')}
 </div>
 
 <!-- Embed modal -->
-<div id="embed-modal" class="modal-overlay" role="dialog" aria-modal="true">
+<div id="embed-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="embed-title">
   <div class="modal-box">
-    <div class="modal-title">Embed this environment</div>
+    <div class="modal-title" id="embed-title">Embed this environment</div>
     <textarea class="modal-code" id="embed-code" readonly></textarea>
     <div class="modal-row">
       <button id="embed-copy-btn">Copy code</button>
@@ -138,17 +140,17 @@ ${navHtml('environments')}
   </div>
 </div>
 <!-- Metrics modal -->
-<div id="metrics-modal" class="modal-overlay" role="dialog" aria-modal="true">
+<div id="metrics-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="metrics-title">
   <div class="modal-box">
-    <div class="modal-title">Usage Metrics</div>
+    <div class="modal-title" id="metrics-title">Usage Metrics</div>
     <div id="metrics-body"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
     <div class="modal-row"><button class="outline" data-close="metrics-modal">Close</button></div>
   </div>
 </div>
 <!-- Edit modal -->
-<div id="edit-modal" class="modal-overlay" role="dialog" aria-modal="true">
-  <div class="modal-box" style="width:520px">
-    <div class="modal-title">Edit Environment</div>
+<div id="edit-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+  <div class="modal-box modal-wide">
+    <div class="modal-title" id="edit-title">Edit Environment</div>
     <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="edit-name" type="text" maxlength="128"/></div>
     <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="edit-desc" type="text" maxlength="512"/></div>
     <div class="form-group"><label class="form-label">System Prompt</label><textarea class="form-input form-textarea" id="edit-prompt" maxlength="16384"></textarea></div>
@@ -165,9 +167,9 @@ ${navHtml('environments')}
   </div>
 </div>
 <!-- Delete modal -->
-<div id="delete-modal" class="modal-overlay" role="dialog" aria-modal="true">
+<div id="delete-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title">
   <div class="modal-box">
-    <div class="modal-title">Delete Environment?</div>
+    <div class="modal-title" id="delete-title">Delete Environment?</div>
     <p style="font-size:13px;color:var(--muted)">This permanently deletes the environment and all its conversation history. This action cannot be undone.</p>
     <div class="modal-row">
       <button class="danger" id="delete-confirm-btn">Yes, delete</button>

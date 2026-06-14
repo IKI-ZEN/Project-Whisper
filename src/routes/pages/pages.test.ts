@@ -9,8 +9,19 @@ import { envPageHtml } from './envPage'
 import { envsGalleryHtml } from './envsGallery'
 import { labPageHtml } from './labPage'
 import { labsGalleryHtml } from './labsGallery'
+import { modalJs } from './shared'
 
 const NONCE = 'test-nonce-abc123'
+
+// Modals must label themselves for screen readers (WCAG 4.1.2): every role="dialog"
+// needs an aria-labelledby pointing at its title. This catches dialogs added without one.
+function assertDialogsLabelled(html: string, label: string): void {
+  const dialogRe = /<div[^>]*role="dialog"[^>]*>/g
+  let m: RegExpExecArray | null
+  while ((m = dialogRe.exec(html)) !== null) {
+    assert.ok(/aria-labelledby="/.test(m[0]), `${label}: every role="dialog" needs aria-labelledby (found ${m[0]})`)
+  }
+}
 
 // Every workspace/gallery page renders with CSP `script-src 'nonce-…'` and no
 // `unsafe-inline`. Inline HTML event-handler attributes (onclick=, onerror=, …)
@@ -47,6 +58,25 @@ describe('appPageHtml', () => {
 
   it('uses no inline event handlers (CSP-safe)', () => {
     assertNoInlineHandlers(appPageHtml('test-sandbox-id', NONCE), 'app page')
+  })
+
+  it('labels every dialog for screen readers', () => {
+    assertDialogsLabelled(appPageHtml('test-sandbox-id', NONCE), 'app page')
+  })
+})
+
+describe('modalJs (shared)', () => {
+  it('traps Tab focus inside the open modal (WCAG 2.1.2)', () => {
+    // The keydown handler must intercept Tab and cycle focus between the first and
+    // last focusable control rather than letting it escape behind the overlay.
+    assert.ok(modalJs.includes("e.key==='Tab'"), 'modalJs must handle the Tab key')
+    assert.ok(modalJs.includes('modalFocusables'), 'modalJs must enumerate focusable controls')
+    assert.ok(modalJs.includes('e.preventDefault()'), 'modalJs must preventDefault to cycle focus')
+  })
+
+  it('still closes on Escape and on backdrop click', () => {
+    assert.ok(modalJs.includes("e.key==='Escape'"))
+    assert.ok(modalJs.includes("contains('modal-overlay')"))
   })
 })
 
@@ -171,6 +201,12 @@ describe('envPageHtml', () => {
     assert.ok(html.includes('<!DOCTYPE html>'))
     assert.ok(!html.includes('Whisperer Analysis'), 'panel must be omitted when no features selected')
   })
+
+  it('labels every dialog and lets the header wrap on mobile', () => {
+    const html = envPageHtml('test-env-id', 'n', 'd', 'm', ['sensitivity'], NONCE)
+    assertDialogsLabelled(html, 'env page')
+    assert.ok(/\.env-header\{[^}]*flex-wrap:wrap/.test(html), 'env-header must wrap so the action bar stays visible on narrow viewports')
+  })
 })
 
 describe('envsGalleryHtml', () => {
@@ -211,6 +247,10 @@ describe('labPageHtml', () => {
 
   it('uses no inline event handlers (CSP-safe)', () => {
     assertNoInlineHandlers(labPageHtml('test-lab-id', 'general', ['m'], 's', false, NONCE), 'lab page')
+  })
+
+  it('labels every dialog for screen readers', () => {
+    assertDialogsLabelled(labPageHtml('test-lab-id', 'general', ['m'], 's', false, NONCE), 'lab page')
   })
 })
 

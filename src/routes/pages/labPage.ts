@@ -32,6 +32,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .add-model-btn{font-size:11px;padding:3px 10px;border-radius:99px;background:none;border:1px dashed var(--border);color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:border-color .15s,color .15s}
 .add-model-btn:hover{border-color:var(--accent2);color:var(--accent2)}
 .strip-sep{flex:1}
+.strip-divider{width:1px;align-self:stretch;background:var(--border);margin:0 4px;flex-shrink:0}
+@media(max-width:600px){.strip-divider{width:100%;height:1px;margin:4px 0}}
 .options-btn{font-size:11px;padding:4px 10px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
 .options-btn:hover{border-color:var(--accent2);color:var(--accent2)}
 .compare-grid{display:grid;flex:1;overflow:hidden;gap:0}
@@ -141,17 +143,17 @@ ${navHtml('lab', '  <span id="lab-name">Loading…</span>\n  <span id="lab-type-
 </div>
 
 <!-- Metrics modal -->
-<div id="metrics-modal" class="modal-overlay" role="dialog" aria-modal="true">
+<div id="metrics-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="metrics-title">
   <div class="modal-box">
-    <div class="modal-title">Usage Metrics</div>
+    <div class="modal-title" id="metrics-title">Usage Metrics</div>
     <div id="metrics-body"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
     <div class="modal-row"><button class="outline" data-close="metrics-modal">Close</button></div>
   </div>
 </div>
 <!-- Edit modal -->
-<div id="edit-modal" class="modal-overlay" role="dialog" aria-modal="true">
-  <div class="modal-box" style="width:520px">
-    <div class="modal-title">Edit Lab</div>
+<div id="edit-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+  <div class="modal-box modal-wide">
+    <div class="modal-title" id="edit-title">Edit Lab</div>
     <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="edit-name" type="text" maxlength="128"/></div>
     <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="edit-desc" type="text" maxlength="512"/></div>
     <div class="form-group"><label class="form-label">System Prompt</label><textarea class="form-input form-textarea" id="edit-prompt" maxlength="16384"></textarea></div>
@@ -167,9 +169,9 @@ ${navHtml('lab', '  <span id="lab-name">Loading…</span>\n  <span id="lab-type-
   </div>
 </div>
 <!-- Delete modal -->
-<div id="delete-modal" class="modal-overlay" role="dialog" aria-modal="true">
+<div id="delete-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title">
   <div class="modal-box">
-    <div class="modal-title">Delete Lab?</div>
+    <div class="modal-title" id="delete-title">Delete Lab?</div>
     <p style="font-size:13px;color:var(--muted)">This permanently deletes this lab. The conversation history will be lost. This action cannot be undone.</p>
     <div class="modal-row">
       <button class="danger" id="delete-confirm-btn">Yes, delete</button>
@@ -285,7 +287,11 @@ function renderModelStrip(){
   histBadge.style.display = 'none'
   strip.appendChild(histBadge)
 
-  // Action buttons — right side of strip
+  // Action buttons — right side of strip, fronted by a divider so the group stays
+  // visually distinct from the model pills when the strip wraps on narrow screens.
+  var actSep = document.createElement('span')
+  actSep.className = 'strip-divider'
+  strip.appendChild(actSep)
   ;['Fork','Metrics','Edit','Export','Delete'].forEach(function(label){
     var btn = document.createElement('button')
     btn.className = 'act-btn' + (label==='Delete'?' act-del':'')

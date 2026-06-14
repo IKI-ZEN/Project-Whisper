@@ -98,7 +98,7 @@ ${navHtml('apps')}
 
 <!-- Edit modal -->
 <div id="edit-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="edit-title">
-  <div class="modal-box" style="width:520px">
+  <div class="modal-box modal-wide">
     <div class="modal-title" id="edit-title">Edit App</div>
     <div class="form-group">
       <label class="form-label" for="edit-name">Name</label>
