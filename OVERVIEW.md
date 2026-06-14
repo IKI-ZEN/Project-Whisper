@@ -510,7 +510,7 @@ The platform serves several purpose-built pages — no build step, all static as
 | URL | Page | Purpose |
 |-----|------|---------|
 | `/` | Chat | Default sandbox chat; creates a new sandbox for first-time visitors |
-| `/vibe.html` | Vibe Builder | Describe an AI assistant → instant sandbox; App Builder for multi-file apps |
+| `/vibe.html` | Vibe Coder | Single creation surface: Quick sandbox, Environment (agentic workspace), Dashboard (via App Builder → `/build/:id`), or multi-file App (via App Builder) |
 | `/tools.html` | AI Workbench | Raw AI capability testing: text, streaming, embeddings, image, audio, whisperer tools |
 | `/environments` | Environments Gallery | Browse agentic environments created by the Vibe coder |
 | `/env/:id` | Environment Workspace | Agentic workspace: chat + Whisperer analysis panel (features auto-selected at creation) |

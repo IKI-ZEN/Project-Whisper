@@ -44,7 +44,7 @@ export function parsePromptClauses(prompt: string): string[] {
   return clauses.filter(c => c.length > 0)
 }
 
-export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string, mode: 'app' | 'environment' | 'dashboard' = 'app'): Promise<VibeConfig> {
+export async function generateVibeConfig(ai: Ai, env: Env, description: string, name?: string, mode: 'app' | 'environment' = 'app'): Promise<VibeConfig> {
   const hasGateway = Boolean(env.AI_GATEWAY_ID && env.CLOUDFLARE_ACCOUNT_ID)
 
   const modelOptions = hasGateway
@@ -102,45 +102,17 @@ ${whispererFeatureList}
 IMPORTANT: include "whispererFeatures" as a top-level field in the JSON alongside name, systemPrompt, etc.
 ` : ''
 
-  const dashboardHint = mode === 'dashboard' ? `
-IMPORTANT — you are generating a DATA DASHBOARD, not a chat app.
-Do NOT include any chat input, VibeClient, or vibe-sdk.js.
-The page should fetch live platform data and render it as a visual dashboard.
-
-Platform data APIs (all GET, require X-App-Token header):
-  /api/app/__SANDBOX_ID__/platform/apps          → { apps: [{id, name, model, createdAt, fromVibe}] }
-  /api/app/__SANDBOX_ID__/platform/environments  → { apps: [{id, name, model, createdAt}] }
-  /api/app/__SANDBOX_ID__/platform/labs          → { labs: [{id, name, envType, envModels, createdAt}] }
-  /api/app/__SANDBOX_ID__/platform/builds        → { builds: [{id, name, status, files, createdAt}] }
-  /api/app/__SANDBOX_ID__/platform/metrics       → { totalRuns, totalTokensIn, totalTokensOut, avgLatencyMs, totalCostUsd, modelBreakdown[] }
-  /api/app/__SANDBOX_ID__/platform/events        → { events: [{sandbox_id, event_type, metadata, created_at}] }
-  /api/app/__SANDBOX_ID__/platform/usage         → { rows: [{model, totalCalls, totalTokensIn, totalTokensOut, totalCostUsd}] }
-  /api/app/__SANDBOX_ID__/platform/probes        → { probes: [{id, name, schedule, run_count, last_run_at}] }
-
-How to authenticate (the token is injected server-side):
-  const tok = document.querySelector('meta[name="whisper-token"]')?.content
-  const headers = tok ? { 'X-App-Token': tok } : {}
-  const data = await fetch('/api/app/__SANDBOX_ID__/platform/metrics', { headers }).then(r=>r.json())
-
-Embedding:
-  <iframe src="/app/{id}" ...>    — embed a vibe app
-  <iframe src="/env/{id}" ...>    — embed an environment comparison panel
-
-Design as a rich operational dashboard: stat cards, charts (use SVG or Canvas), activity feeds.
-Use auto-refresh (setInterval) with a sensible interval (30–60s) for live data.
-` : ''
-
   const metaPrompt = `You are an AI app generator. Given a description, output ONLY a valid JSON object — no markdown, no explanation, no code fences.
 
 The JSON must have exactly these fields:
 {
   "name": "<string, max 128 chars, descriptive app name>",
   "description": "<string, max 512 chars, what this app does>",
-  "systemPrompt": "<string${mode === 'dashboard' ? ', set to an empty string for dashboards' : ', detailed system instructions that make the AI excellent at the task'}>",
+  "systemPrompt": "<string, detailed system instructions that make the AI excellent at the task>",
   "tools": [],
   "model": "<choose the most appropriate model from the options below>",
-  "temperature": ${mode === 'dashboard' ? '0' : '<number 0-2: 0.2 for factual, 0.7 for balanced, 1.2 for creative>'},
-  "maxTokens": ${mode === 'dashboard' ? '256' : '<integer 256-4096>'},
+  "temperature": <number 0-2: 0.2 for factual, 0.7 for balanced, 1.2 for creative>,
+  "maxTokens": <integer 256-4096>,
   "appHtml": "<complete single-file HTML app — see requirements below>"${mode === 'environment' ? `,
   "whispererFeatures": ["<feature1>", "<feature2>", ...]` : ''}
 }
@@ -151,12 +123,12 @@ Tool guidelines: define tools ONLY when the description explicitly requires call
 App HTML requirements:
 - Generate a COMPLETE, self-contained HTML page (DOCTYPE, head, body, styles, scripts all inline)
 - Use __SANDBOX_ID__ (double underscore each side) as the sandbox ID placeholder — it will be replaced at runtime
-${mode === 'dashboard' ? dashboardHint : `- Load the SDK: <script type="module"> ... import { VibeClient } from '/vibe-sdk.js'; const client = new VibeClient(); ...
+- Load the SDK: <script type="module"> ... import { VibeClient } from '/vibe-sdk.js'; const client = new VibeClient(); ...
 - For simple chat apps: use the <vibe-chat sandbox-id="__SANDBOX_ID__"> web component
-- For richer apps (dashboards, tools, multi-step flows): build a full custom UI using client.sandbox.get('__SANDBOX_ID__') and client.ai.*`}
+- For richer apps (tools, multi-step flows): build a full custom UI using client.sandbox.get('__SANDBOX_ID__') and client.ai.*
 - Style with inline CSS — dark theme (#0c0c0f background, #d8d8e8 text, #7c3aed accent)
 - All script tags must be type="module" — no inline event handlers (use addEventListener)
-- The page must be fully functional with no external CDN dependencies${mode === 'dashboard' ? ' (no /vibe-sdk.js needed — only native fetch)' : ' (only /vibe-sdk.js from same origin)'}
+- The page must be fully functional with no external CDN dependencies (only /vibe-sdk.js from same origin)
 
 Available models:
 ${modelOptions}

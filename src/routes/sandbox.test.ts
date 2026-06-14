@@ -241,3 +241,53 @@ describe('GET /export requires Cloudflare Access', () => {
     assert.equal(res.status, 200)
   })
 })
+
+describe('sandbox fork preserves type flags', () => {
+  const fork = findHandler(sandboxRoutes, 'POST', '/api/sandbox/:id/fork')
+
+  // DO that answers a config GET with a canned SandboxConfig and ok's everything else.
+  function forkEnv(meta: Record<string, unknown>) {
+    const SANDBOX_REGISTRY = mockKV()
+    void SANDBOX_REGISTRY.put(`${SANDBOX_KEY_PREFIX}${SID}`, SID, {
+      metadata: { id: SID, name: 'Source', description: 'd', model: 'm', createdAt: 1, ...meta },
+    })
+    const SANDBOX = mockDONamespace(async (r: Request) => {
+      if (r.url.endsWith('/config') && r.method === 'GET') {
+        return new Response(JSON.stringify({ ok: true, data: {
+          id: SID, name: 'Source', description: 'd', systemPrompt: 's', tools: [],
+          model: 'm', temperature: 0.7, maxTokens: 1024, memory: [], createdAt: 1, updatedAt: 1,
+        } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    return { env: makeEnv({ SANDBOX_REGISTRY, SANDBOX }), SANDBOX_REGISTRY }
+  }
+
+  const forkReq = () => new Request(`https://x/api/sandbox/${SID}/fork`, { method: 'POST' })
+
+  it('an environment fork lands at /env/:id and keeps fromEnv + whispererFeatures', async () => {
+    const { env, SANDBOX_REGISTRY } = forkEnv({ fromEnv: true, fromVibe: true, whispererFeatures: ['sensitivity', 'entropy'] })
+    const res = await fork(forkReq(), env, { id: SID })
+    assert.equal(res.status, 201)
+    const body = await res.json() as { data: { id: string; appUrl: string } }
+    assert.match(body.data.appUrl, /^\/env\//, 'env fork must return an /env/ URL')
+
+    const entry = await SANDBOX_REGISTRY.getWithMetadata(`${SANDBOX_KEY_PREFIX}${body.data.id}`)
+    const m = entry.metadata as { fromEnv?: boolean; fromVibe?: boolean; whispererFeatures?: string[] }
+    assert.equal(m.fromEnv, true)
+    assert.equal(m.fromVibe, true)
+    assert.deepEqual(m.whispererFeatures, ['sensitivity', 'entropy'])
+  })
+
+  it('a plain app fork lands at /app/:id and carries no env flags', async () => {
+    const { env, SANDBOX_REGISTRY } = forkEnv({})
+    const res = await fork(forkReq(), env, { id: SID })
+    assert.equal(res.status, 201)
+    const body = await res.json() as { data: { id: string; appUrl: string } }
+    assert.match(body.data.appUrl, /^\/app\//, 'app fork must return an /app/ URL')
+
+    const entry = await SANDBOX_REGISTRY.getWithMetadata(`${SANDBOX_KEY_PREFIX}${body.data.id}`)
+    const m = entry.metadata as { fromEnv?: boolean }
+    assert.notEqual(m.fromEnv, true)
+  })
+})

@@ -418,6 +418,10 @@ const fork: Handler = async (req, env, params: Params) => {
   if (rl) return rl
   if (!await sandboxExists(env, sourceId)) return json(err('Sandbox not found'), 404)
 
+  // Preserve type flags so the fork lands on the correct page (/env/:id vs /app/:id)
+  const srcEntry = await env.SANDBOX_REGISTRY.getWithMetadata<SandboxMeta>(`${SANDBOX_KEY_PREFIX}${sourceId}`)
+  const srcMeta  = srcEntry.metadata
+
   const cfgRes  = await doFetch(stub(env, sourceId), 'config', 'GET')
   const cfgBody = await cfgRes.json() as { ok: boolean; data?: SandboxConfig }
   if (!cfgBody.ok || !cfgBody.data) return json(err('Failed to load source config'), 500)
@@ -438,10 +442,19 @@ const fork: Handler = async (req, env, params: Params) => {
   }
 
   await doFetch(stub(env, id), 'init', 'POST', config, identityHeader(req))
-  await registerSandbox(env, { id, name: config.name, description: config.description, model: config.model, createdAt: ts })
+  await registerSandbox(env, {
+    id,
+    name:        config.name,
+    description: config.description,
+    model:       config.model,
+    createdAt:   ts,
+    ...(srcMeta?.fromEnv  ? { fromEnv:  true, whispererFeatures: srcMeta.whispererFeatures } : {}),
+    ...(srcMeta?.fromVibe ? { fromVibe: true }                                               : {}),
+  })
   await logSandboxEvent(env, { sandboxId: id, type: 'created', metadata: { name: config.name, forkedFrom: sourceId }, identity, at: ts })
 
-  return json(ok({ id, name: config.name, appUrl: `/app/${id}`, shortLink: `/s/${id}`, api: { run: `/s/${id}/run`, stream: `/s/${id}/stream` } }), 201)
+  const forkedUrl = srcMeta?.fromEnv ? `/env/${id}` : `/app/${id}`
+  return json(ok({ id, name: config.name, appUrl: forkedUrl, shortLink: `/s/${id}`, api: { run: `/s/${id}/run`, stream: `/s/${id}/stream` } }), 201)
 }
 
 // ── Session token issuance (Signal B) ─────────────────────────────────────────

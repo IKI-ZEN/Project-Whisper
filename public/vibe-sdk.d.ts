@@ -418,7 +418,7 @@ export const VibeResult: typeof VibeBuilderResult
 /** Quick AI-assistant creator (single sandbox + custom HTML). */
 export class VibesClient {
   templates(): Promise<VibeTemplate[]>
-  create(description: string, name?: string, mode?: 'app' | 'environment' | 'dashboard'): Promise<VibeBuilderResult>
+  create(description: string, name?: string, mode?: 'app' | 'environment'): Promise<VibeBuilderResult>
 }
 
 // ── AppStateHandle ────────────────────────────────────────────────────────────

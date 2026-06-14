@@ -1,6 +1,6 @@
 import type { Handler, Params } from '../../lib/http'
 import { stub, doFetch } from '../../lib/do'
-import { genNonce, htmlHeaders, sharedCss, navHtml, escJs } from './shared'
+import { genNonce, htmlHeaders, sharedCss, navHtml, escJs, modalCss, modalJs } from './shared'
 
 // ── Lab page (/lab/:id) — multi-model comparison workspace ────────────────────
 
@@ -32,6 +32,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .add-model-btn{font-size:11px;padding:3px 10px;border-radius:99px;background:none;border:1px dashed var(--border);color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:border-color .15s,color .15s}
 .add-model-btn:hover{border-color:var(--accent2);color:var(--accent2)}
 .strip-sep{flex:1}
+.strip-divider{width:1px;align-self:stretch;background:var(--border);margin:0 4px;flex-shrink:0}
+@media(max-width:600px){.strip-divider{width:100%;height:1px;margin:4px 0}}
 .options-btn{font-size:11px;padding:4px 10px;border-radius:var(--radius);background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
 .options-btn:hover{border-color:var(--accent2);color:var(--accent2)}
 .compare-grid{display:grid;flex:1;overflow:hidden;gap:0}
@@ -93,6 +95,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .model-picker{position:relative}
 .model-picker input{padding:4px 8px;border-radius:var(--radius);background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:11px;font-family:var(--mono);width:200px;outline:none}
 .model-picker input:focus{border-color:var(--accent)}
+.modal-code{width:100%;height:80px;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-family:var(--mono);font-size:12px;resize:none}
+${modalCss()}
 </style>
 </head>
 <body>
@@ -135,6 +139,44 @@ ${navHtml('lab', '  <span id="lab-name">Loading…</span>\n  <span id="lab-type-
     <textarea id="user-input" placeholder="Type a message… (Enter to send, Shift+Enter for new line)" rows="2" aria-label="Message input"></textarea>
     <button class="send-btn" id="send-btn">Send</button>
     <button class="options-btn" id="options-toggle" aria-expanded="false" title="Toggle options">⚙</button>
+  </div>
+</div>
+
+<!-- Metrics modal -->
+<div id="metrics-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="metrics-title">
+  <div class="modal-box">
+    <div class="modal-title" id="metrics-title">Usage Metrics</div>
+    <div id="metrics-body"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
+    <div class="modal-row"><button class="outline" data-close="metrics-modal">Close</button></div>
+  </div>
+</div>
+<!-- Edit modal -->
+<div id="edit-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+  <div class="modal-box modal-wide">
+    <div class="modal-title" id="edit-title">Edit Lab</div>
+    <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="edit-name" type="text" maxlength="128"/></div>
+    <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="edit-desc" type="text" maxlength="512"/></div>
+    <div class="form-group"><label class="form-label">System Prompt</label><textarea class="form-input form-textarea" id="edit-prompt" maxlength="16384"></textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Temperature</label><input class="form-input" id="edit-temp" type="number" min="0" max="2" step="0.1"/></div>
+      <div class="form-group"><label class="form-label">Max Tokens</label><input class="form-input" id="edit-maxtok" type="number" min="64" max="16384"/></div>
+    </div>
+    <div id="edit-status" style="font-size:12px;color:var(--muted);min-height:16px"></div>
+    <div class="modal-row">
+      <button id="edit-save-btn">Save Changes</button>
+      <button class="outline" data-close="edit-modal">Cancel</button>
+    </div>
+  </div>
+</div>
+<!-- Delete modal -->
+<div id="delete-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+  <div class="modal-box">
+    <div class="modal-title" id="delete-title">Delete Lab?</div>
+    <p style="font-size:13px;color:var(--muted)">This permanently deletes this lab. The conversation history will be lost. This action cannot be undone.</p>
+    <div class="modal-row">
+      <button class="danger" id="delete-confirm-btn">Yes, delete</button>
+      <button class="outline" data-close="delete-modal">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -244,8 +286,24 @@ function renderModelStrip(){
   histBadge.className = 'hist-badge'
   histBadge.style.display = 'none'
   strip.appendChild(histBadge)
+
+  // Action buttons — right side of strip, fronted by a divider so the group stays
+  // visually distinct from the model pills when the strip wraps on narrow screens.
+  var actSep = document.createElement('span')
+  actSep.className = 'strip-divider'
+  strip.appendChild(actSep)
+  ;['Fork','Metrics','Edit','Export','Delete'].forEach(function(label){
+    var btn = document.createElement('button')
+    btn.className = 'act-btn' + (label==='Delete'?' act-del':'')
+    btn.textContent = label
+    btn.title = {Fork:'Create a copy',Metrics:'View usage metrics',Edit:'Edit lab config',Export:'Export lab config',Delete:'Delete this lab'}[label]
+    btn.id = 'lab-'+label.toLowerCase()+'-btn'
+    strip.appendChild(btn)
+  })
+
   updateHistBadge()
   updateGrid()
+  wireLabActions()
 }
 
 function addModel(m){
@@ -471,6 +529,94 @@ function showConsensus(responses){
   bar.innerHTML = '<span>Consensus:</span> <span class="consensus-score">'+pct+'% ('+label+')</span>'
                 + '<span style="margin-left:auto;color:var(--muted)">'+(responses.length)+' of '+(models.length)+' models responded</span>'
   bar.style.display = ''
+}
+
+${modalJs}
+
+function wireLabActions(){
+  var forkBtn    = document.getElementById('lab-fork-btn')
+  var metricsBtn = document.getElementById('lab-metrics-btn')
+  var editBtn    = document.getElementById('lab-edit-btn')
+  var exportBtn  = document.getElementById('lab-export-btn')
+  var deleteBtn  = document.getElementById('lab-delete-btn')
+
+  if(forkBtn) forkBtn.onclick = async function(){
+    this.disabled=true;this.textContent='Forking…'
+    try{
+      var r=await fetch('/api/lab/'+LAB_ID+'/fork',{method:'POST'})
+      var d=await r.json()
+      if(!d.ok)throw new Error(d.error||'Fork failed')
+      window.location.href=d.data.labUrl||'/lab/'+d.data.id
+    }catch(e){alert('Fork failed: '+String(e));this.disabled=false;this.textContent='Fork'}
+  }
+
+  if(metricsBtn) metricsBtn.onclick = async function(){
+    openModal('metrics-modal')
+    var body=document.getElementById('metrics-body')
+    body.innerHTML='<div style="color:var(--muted);font-size:12px">Loading…</div>'
+    try{
+      var r=await fetch('/api/sandbox/'+LAB_ID+'/metrics')
+      var d=await r.json()
+      if(!d.ok)throw new Error(d.error)
+      var m=d.data
+      body.innerHTML=[['Total Runs',m.totalRuns??0],['Tokens In',(m.totalTokensIn??0).toLocaleString()],['Tokens Out',(m.totalTokensOut??0).toLocaleString()],['Avg Latency',Math.round(m.avgLatencyMs??0)+' ms']]
+        .map(function(row){return '<div class="stat-row"><span>'+row[0]+'</span><span class="stat-val">'+row[1]+'</span></div>'}).join('')
+    }catch(e){body.innerHTML='<div style="color:var(--red);font-size:12px">Failed: '+esc(String(e))+'</div>'}
+  }
+
+  if(editBtn) editBtn.onclick = async function(){
+    try{
+      var r=await fetch('/api/sandbox/'+LAB_ID)
+      var d=await r.json()
+      if(d.ok){var a=d.data;document.getElementById('edit-name').value=a.name||'';document.getElementById('edit-desc').value=a.description||'';document.getElementById('edit-temp').value=String(a.temperature??0.7);document.getElementById('edit-maxtok').value=String(a.maxTokens??1024);document.getElementById('edit-prompt').value='';document.getElementById('edit-status').textContent='System prompt hidden for security.';document.getElementById('edit-status').style.color='var(--muted)'}
+    }catch{}
+    openModal('edit-modal')
+  }
+
+  var saveBtn=document.getElementById('edit-save-btn')
+  if(saveBtn) saveBtn.onclick = async function(){
+    var btn=this,status=document.getElementById('edit-status')
+    btn.disabled=true;btn.textContent='Saving…'
+    var patch={},name=document.getElementById('edit-name').value.trim(),desc=document.getElementById('edit-desc').value.trim(),temp=parseFloat(document.getElementById('edit-temp').value),maxtok=parseInt(document.getElementById('edit-maxtok').value),prompt=document.getElementById('edit-prompt').value.trim()
+    if(name)patch.name=name;if(desc)patch.description=desc;if(!isNaN(temp))patch.temperature=temp;if(!isNaN(maxtok))patch.maxTokens=maxtok;if(prompt)patch.systemPrompt=prompt
+    try{
+      var r=await fetch('/api/sandbox/'+LAB_ID,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)})
+      var d=await r.json()
+      if(!d.ok)throw new Error(d.error||'Save failed')
+      status.textContent='Saved.';status.style.color='var(--green)'
+      if(name)document.getElementById('lab-name').textContent=name
+      setTimeout(function(){closeModal('edit-modal')},800)
+    }catch(e){status.textContent='Error: '+String(e);status.style.color='var(--red)'}
+    finally{btn.disabled=false;btn.textContent='Save Changes'}
+  }
+
+  if(exportBtn) exportBtn.onclick = async function(){
+    var btn=this;btn.disabled=true;btn.textContent='Exporting…'
+    try{
+      var r=await fetch('/api/lab/'+LAB_ID+'/export')
+      var d=await r.json()
+      if(!d.ok)throw new Error(d.error||'Export failed')
+      var name=d.data.name||'lab'
+      var blob=new Blob([JSON.stringify(d.data,null,2)],{type:'application/json'})
+      var url=URL.createObjectURL(blob);var a=document.createElement('a')
+      a.href=url;a.download=name.replace(/[^a-zA-Z0-9_-]/g,'_')+'.json'
+      document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url)
+    }catch(e){alert('Export failed: '+String(e))}
+    finally{btn.disabled=false;btn.textContent='Export'}
+  }
+
+  if(deleteBtn) deleteBtn.onclick = function(){ openModal('delete-modal') }
+
+  var delConfirm=document.getElementById('delete-confirm-btn')
+  if(delConfirm) delConfirm.onclick = async function(){
+    var btn=this;btn.disabled=true;btn.textContent='Deleting…'
+    try{
+      var r=await fetch('/api/sandbox/'+LAB_ID,{method:'DELETE'})
+      var d=await r.json()
+      if(!d.ok)throw new Error(d.error||'Delete failed')
+      window.location.href='/lab'
+    }catch(e){alert('Delete failed: '+String(e));btn.disabled=false;btn.textContent='Yes, delete'}
+  }
 }
 
 async function init(){

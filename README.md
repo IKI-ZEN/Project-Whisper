@@ -4,7 +4,7 @@ A zero-runtime-dependency AI harness on Cloudflare infrastructure. No npm packag
 
 ## What it does
 
-- **Vibe Builder** — describe a sandbox, environment, or dashboard in plain English; the platform generates a full config and spins it up instantly. Four modes: `app` (quick sandbox), `environment` (domain-expert workspace with Whisperer panel), `dashboard` (platform data UI), and App Builder (multi-file web app via v2 WebSocket)
+- **Vibe Coder** — single creation surface at `/vibe.html` with four modes: `app` (quick sandbox at `/app/:id`), `environment` (domain-expert agentic workspace at `/env/:id` with Whisperer panel, auto-selects 2–4 analysis features), `dashboard` (routes to App Builder → multi-file app at `/build/:id` with live platform data via `platformApiHint`), and App Builder (arbitrary multi-file web app)
 - **Persistent sandboxes** — each sandbox is a Durable Object with conversation memory, configurable system prompt, model, temperature, and tool definitions
 - **Multi-provider AI** — route to Workers AI, OpenAI, Anthropic, or Google via Cloudflare AI Gateway using a `provider:model-id` naming convention
 - **App Builder** — describe an app in English; get a full multi-file web app (HTML, JS, CSS) streamed in real time, served at `/build/:id`. Supports vanilla, Alpine, React, Vue, Svelte, and Worker tech stacks
@@ -72,7 +72,7 @@ POST /api/ai/pii-scan          PII detection & redaction — email, card (Luhn),
 GET  /api/usage                aggregate cost/token usage across models and providers
 
 GET  /api/vibes                starter templates
-POST /api/vibes                describe app/environment/dashboard → sandbox + appUrl or envUrl (mode: 'app'|'environment'|'dashboard')
+POST /api/vibes                describe app or environment → sandbox + appUrl or envUrl (mode: 'app'|'environment'; dashboards → POST /api/v2/build)
 
 GET  /api/sandbox              list all sandboxes
 POST /api/sandbox/import       create sandbox from exported config (verifies HMAC signature)

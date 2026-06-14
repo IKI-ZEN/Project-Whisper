@@ -151,7 +151,7 @@ export function parseVibeRequest(body: unknown): VibeRequest {
   let mode: VibeMode | undefined
   if (body.mode !== undefined) {
     const m = str(body.mode, 'mode')
-    if (m !== 'app' && m !== 'environment' && m !== 'dashboard') throw new Error("mode must be 'app', 'environment', or 'dashboard'")
+    if (m !== 'app' && m !== 'environment') throw new Error("mode must be 'app' or 'environment'")
     mode = m
   }
   return {
