@@ -77,7 +77,7 @@ async function load(){
       grid.insertAdjacentHTML('beforeend',\`
         <div class="card" role="listitem" style="animation:cardIn .2s ease-out both;animation-delay:\${delay}ms" data-id="\${esc(build.id)}" data-name="\${esc(build.name||build.id)}">
           <div class="card-thumb">
-            <img src="\${thumbUrl}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<span class=\\"card-thumb-placeholder\\">◈</span>'"/>
+            <img src="\${thumbUrl}" alt="" loading="lazy" class="thumb-img"/>
           </div>
           <div class="card-body">
             <span class="card-name">\${esc(build.name||build.id)}</span>
@@ -96,6 +96,12 @@ async function load(){
       \`)
     })
     document.getElementById('grid').addEventListener('click', handleCardAction)
+    // Thumbnail fallback — wired via JS (inline onerror is blocked by CSP)
+    grid.querySelectorAll('.thumb-img').forEach(function(img){
+      img.addEventListener('error', function(){
+        this.parentNode.innerHTML = '<span class="card-thumb-placeholder">◈</span>'
+      })
+    })
   }catch(e){
     grid.style.cssText='flex:1;display:flex;align-items:center;justify-content:center'
     grid.innerHTML='<div class="empty"><h3>Failed to load builds</h3><p>'+esc(String(e))+'</p></div>'

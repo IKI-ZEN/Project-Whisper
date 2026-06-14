@@ -2,12 +2,26 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { appPageHtml } from './appPage'
 import { appsGalleryHtml } from './appsGallery'
+import { buildsGalleryHtml } from './buildsGallery'
 import { chatPageHtml } from './chatPage'
 import { dashboardHtml } from './dashboard'
 import { envPageHtml } from './envPage'
 import { envsGalleryHtml } from './envsGallery'
+import { labPageHtml } from './labPage'
+import { labsGalleryHtml } from './labsGallery'
 
 const NONCE = 'test-nonce-abc123'
+
+// Every workspace/gallery page renders with CSP `script-src 'nonce-…'` and no
+// `unsafe-inline`. Inline HTML event-handler attributes (onclick=, onerror=, …)
+// are therefore silently blocked by the browser. This regex catches them in any
+// generated page so the no-inline-handler rule can't regress.
+const INLINE_HANDLER_RE = /\s(on[a-z]+)\s*=\s*"/i
+
+function assertNoInlineHandlers(html: string, label: string): void {
+  const m = html.match(INLINE_HANDLER_RE)
+  assert.ok(!m, `${label} must not use inline HTML event handlers (found ${m?.[1]}=) — blocked by CSP`)
+}
 
 describe('appPageHtml', () => {
   it('returns non-empty HTML string containing DOCTYPE and nonce', () => {
@@ -15,6 +29,24 @@ describe('appPageHtml', () => {
     assert.ok(html.length > 0)
     assert.ok(html.includes('<!DOCTYPE html>'))
     assert.ok(html.includes(NONCE))
+  })
+
+  it('exposes the full lifecycle action set', () => {
+    const html = appPageHtml('test-sandbox-id', NONCE)
+    for (const id of ['fork-btn', 'metrics-btn', 'edit-btn', 'export-btn', 'embed-btn', 'delete-btn']) {
+      assert.ok(html.includes(`id="${id}"`), `app page must render #${id}`)
+    }
+  })
+
+  it('wires fork/delete/export to the sandbox API and lands the fork via appUrl', () => {
+    const html = appPageHtml('test-sandbox-id', NONCE)
+    assert.ok(html.includes("'/fork'") || html.includes('/fork'), 'fork must POST to the fork endpoint')
+    assert.ok(html.includes('/export-session'), 'export must hit the signed session export')
+    assert.ok(html.includes('d.data.appUrl'), 'fork must navigate to the returned appUrl')
+  })
+
+  it('uses no inline event handlers (CSP-safe)', () => {
+    assertNoInlineHandlers(appPageHtml('test-sandbox-id', NONCE), 'app page')
   })
 })
 
@@ -24,6 +56,40 @@ describe('appsGalleryHtml', () => {
     assert.ok(html.length > 0)
     assert.ok(html.includes('<!DOCTYPE html>'))
     assert.ok(html.includes(NONCE))
+  })
+
+  it('lists only apps and offers fork/export/delete per card', () => {
+    const html = appsGalleryHtml(NONCE)
+    assert.ok(html.includes('/api/sandbox?only=apps'), 'gallery must filter to apps only')
+    assert.ok(html.includes('fork-btn'))
+    assert.ok(html.includes('export-btn'))
+    assert.ok(html.includes('delete-btn'))
+  })
+
+  it('uses no inline event handlers (CSP-safe)', () => {
+    assertNoInlineHandlers(appsGalleryHtml(NONCE), 'apps gallery')
+  })
+})
+
+describe('buildsGalleryHtml', () => {
+  it('returns non-empty HTML string containing DOCTYPE and nonce', () => {
+    const html = buildsGalleryHtml(NONCE)
+    assert.ok(html.length > 0)
+    assert.ok(html.includes('<!DOCTYPE html>'))
+    assert.ok(html.includes(NONCE))
+  })
+
+  it('reads from the v2 build registry and renders deploy/delete actions', () => {
+    const html = buildsGalleryHtml(NONCE)
+    assert.ok(html.includes('/api/v2/build'), 'builds gallery must read the build list endpoint')
+    assert.ok(html.includes('deploy-btn'), 'completed builds must offer Deploy')
+    assert.ok(html.includes('delete-btn'), 'builds must offer Delete')
+    assert.ok(html.includes('/thumbnail'), 'cards must reference the thumbnail endpoint')
+  })
+
+  it('uses no inline event handlers (CSP-safe)', () => {
+    // Regression guard: the thumbnail fallback was originally an inline onerror=.
+    assertNoInlineHandlers(buildsGalleryHtml(NONCE), 'builds gallery')
   })
 })
 
@@ -79,6 +145,32 @@ describe('envPageHtml', () => {
     assert.ok(html.includes('<!DOCTYPE html>'))
     assert.ok(html.includes(NONCE))
   })
+
+  it('renders the requested Whisperer features and the lifecycle action set', () => {
+    const html = envPageHtml('test-env-id', 'Test Env', 'desc', 'openai:gpt-4o', ['sensitivity', 'entropy'], NONCE)
+    assert.ok(html.includes('feat-sensitivity'), 'requested feature button must render')
+    assert.ok(html.includes('feat-entropy'))
+    assert.ok(!html.includes('feat-cluster'), 'unrequested features must not render')
+    for (const id of ['fork-btn', 'embed-btn', 'metrics-btn', 'edit-btn', 'export-btn', 'delete-btn']) {
+      assert.ok(html.includes(`id="${id}"`), `env page must render #${id}`)
+    }
+  })
+
+  it('forks via the sandbox endpoint and returns to /environments on delete', () => {
+    const html = envPageHtml('test-env-id', 'Test Env', 'desc', 'm', ['sensitivity'], NONCE)
+    assert.ok(html.includes("'/fork'") || html.includes('/fork'))
+    assert.ok(html.includes("'/environments'"), 'delete must redirect to the environments gallery')
+  })
+
+  it('uses no inline event handlers (CSP-safe)', () => {
+    assertNoInlineHandlers(envPageHtml('test-env-id', 'n', 'd', 'm', ['sensitivity'], NONCE), 'env page')
+  })
+
+  it('renders with an empty feature list (no Whisperer panel)', () => {
+    const html = envPageHtml('test-env-id', 'n', 'd', 'm', [], NONCE)
+    assert.ok(html.includes('<!DOCTYPE html>'))
+    assert.ok(!html.includes('Whisperer Analysis'), 'panel must be omitted when no features selected')
+  })
 })
 
 describe('envsGalleryHtml', () => {
@@ -87,5 +179,50 @@ describe('envsGalleryHtml', () => {
     assert.ok(html.length > 0)
     assert.ok(html.includes('<!DOCTYPE html>'))
     assert.ok(html.includes(NONCE))
+  })
+
+  it('lists only environments and offers fork/export/delete per card', () => {
+    const html = envsGalleryHtml(NONCE)
+    assert.ok(html.includes('/api/sandbox?only=envs'), 'gallery must filter to envs only')
+    assert.ok(html.includes('fork-btn'))
+    assert.ok(html.includes('export-btn'))
+    assert.ok(html.includes('delete-btn'))
+  })
+
+  it('uses no inline event handlers (CSP-safe)', () => {
+    assertNoInlineHandlers(envsGalleryHtml(NONCE), 'envs gallery')
+  })
+})
+
+describe('labPageHtml', () => {
+  it('returns non-empty HTML string containing DOCTYPE and nonce', () => {
+    const html = labPageHtml('test-lab-id', 'general', ['openai:gpt-4o'], 'sys', false, NONCE)
+    assert.ok(html.length > 0)
+    assert.ok(html.includes('<!DOCTYPE html>'))
+    assert.ok(html.includes(NONCE))
+  })
+
+  it('forks via the lab endpoint (preserves fromLab) and exports lab config', () => {
+    const html = labPageHtml('test-lab-id', 'coding', ['openai:gpt-4o', 'anthropic:claude-sonnet-4-6'], 'sys', false, NONCE)
+    assert.ok(html.includes('/api/lab/'), 'lab fork/export must use the lab API, not the generic sandbox API')
+    assert.ok(html.includes('/fork'))
+    assert.ok(html.includes('/export'))
+  })
+
+  it('uses no inline event handlers (CSP-safe)', () => {
+    assertNoInlineHandlers(labPageHtml('test-lab-id', 'general', ['m'], 's', false, NONCE), 'lab page')
+  })
+})
+
+describe('labsGalleryHtml', () => {
+  it('returns non-empty HTML string containing DOCTYPE and nonce', () => {
+    const html = labsGalleryHtml(NONCE)
+    assert.ok(html.length > 0)
+    assert.ok(html.includes('<!DOCTYPE html>'))
+    assert.ok(html.includes(NONCE))
+  })
+
+  it('uses no inline event handlers (CSP-safe)', () => {
+    assertNoInlineHandlers(labsGalleryHtml(NONCE), 'labs gallery')
   })
 })

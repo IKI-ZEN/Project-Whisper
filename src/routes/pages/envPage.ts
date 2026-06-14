@@ -133,7 +133,7 @@ ${navHtml('environments')}
     <textarea class="modal-code" id="embed-code" readonly></textarea>
     <div class="modal-row">
       <button id="embed-copy-btn">Copy code</button>
-      <button class="outline" onclick="closeModal('embed-modal')">Close</button>
+      <button class="outline" data-close="embed-modal">Close</button>
     </div>
   </div>
 </div>
@@ -142,7 +142,7 @@ ${navHtml('environments')}
   <div class="modal-box">
     <div class="modal-title">Usage Metrics</div>
     <div id="metrics-body"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
-    <div class="modal-row"><button class="outline" onclick="closeModal('metrics-modal')">Close</button></div>
+    <div class="modal-row"><button class="outline" data-close="metrics-modal">Close</button></div>
   </div>
 </div>
 <!-- Edit modal -->
@@ -160,7 +160,7 @@ ${navHtml('environments')}
     <div id="edit-status" style="font-size:12px;color:var(--muted);min-height:16px"></div>
     <div class="modal-row">
       <button id="edit-save-btn">Save Changes</button>
-      <button class="outline" onclick="closeModal('edit-modal')">Cancel</button>
+      <button class="outline" data-close="edit-modal">Cancel</button>
     </div>
   </div>
 </div>
@@ -171,7 +171,7 @@ ${navHtml('environments')}
     <p style="font-size:13px;color:var(--muted)">This permanently deletes the environment and all its conversation history. This action cannot be undone.</p>
     <div class="modal-row">
       <button class="danger" id="delete-confirm-btn">Yes, delete</button>
-      <button class="outline" onclick="closeModal('delete-modal')">Cancel</button>
+      <button class="outline" data-close="delete-modal">Cancel</button>
     </div>
   </div>
 </div>
@@ -423,10 +423,6 @@ document.getElementById('delete-confirm-btn').addEventListener('click', async fu
     if(!d.ok)throw new Error(d.error||'Delete failed')
     window.location.href='/environments'
   }catch(e){alert('Delete failed: '+String(e));btn.disabled=false;btn.textContent='Yes, delete'}
-})
-
-document.querySelectorAll('.modal-overlay').forEach(function(m){
-  m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open')})
 })
 
 document.getElementById('user-input').focus()

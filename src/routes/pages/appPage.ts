@@ -80,7 +80,7 @@ ${navHtml('apps')}
     <textarea class="modal-code" id="embed-code" readonly aria-label="Embed code (read-only)"></textarea>
     <div class="modal-row">
       <button id="embed-copy-btn">Copy code</button>
-      <button class="outline" onclick="closeModal('embed-modal')">Close</button>
+      <button class="outline" data-close="embed-modal">Close</button>
     </div>
   </div>
 </div>
@@ -91,7 +91,7 @@ ${navHtml('apps')}
     <div class="modal-title" id="metrics-title">Usage Metrics</div>
     <div id="metrics-body"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
     <div class="modal-row">
-      <button class="outline" onclick="closeModal('metrics-modal')">Close</button>
+      <button class="outline" data-close="metrics-modal">Close</button>
     </div>
   </div>
 </div>
@@ -129,7 +129,7 @@ ${navHtml('apps')}
     <div id="edit-status" style="font-size:12px;color:var(--muted);min-height:16px"></div>
     <div class="modal-row">
       <button id="edit-save-btn">Save Changes</button>
-      <button class="outline" onclick="closeModal('edit-modal')">Cancel</button>
+      <button class="outline" data-close="edit-modal">Cancel</button>
     </div>
   </div>
 </div>
@@ -141,7 +141,7 @@ ${navHtml('apps')}
     <p style="font-size:13px;color:var(--muted)">This permanently deletes the app and all its conversation history. This action cannot be undone.</p>
     <div class="modal-row">
       <button class="danger" id="delete-confirm-btn">Yes, delete</button>
-      <button class="outline" onclick="closeModal('delete-modal')">Cancel</button>
+      <button class="outline" data-close="delete-modal">Cancel</button>
     </div>
   </div>
 </div>
@@ -401,9 +401,6 @@ document.getElementById('delete-btn').addEventListener('click', confirmDelete)
 document.getElementById('embed-copy-btn').addEventListener('click', copyEmbed)
 document.getElementById('edit-save-btn').addEventListener('click', doEdit)
 document.getElementById('delete-confirm-btn').addEventListener('click', doDelete)
-document.querySelectorAll('.modal-overlay').forEach(function(m){
-  m.addEventListener('click', function(e){ if(e.target===m) m.classList.remove('open') })
-})
 
 init()
 </script>
