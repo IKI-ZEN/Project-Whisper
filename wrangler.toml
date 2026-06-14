@@ -44,7 +44,7 @@ name = "SEND_EMAIL"
 
 # ── KV Namespaces ─────────────────────────────────────────────────────────────
 # Run: wrangler kv:namespace create SANDBOX_REGISTRY
-# Run: wrangler kv:namespace create RATE_LIMITS
+# Run: wrangler kv:namespace create RATE_LIMITS_WHISPER
 # Then replace the placeholder ids below
 [[kv_namespaces]]
 binding = "SANDBOX_REGISTRY"

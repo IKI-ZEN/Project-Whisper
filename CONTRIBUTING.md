@@ -43,7 +43,7 @@ These commands provision the cloud resources that bindings in `wrangler.toml` po
 
 ```bash
 wrangler kv:namespace create SANDBOX_REGISTRY
-wrangler kv:namespace create RATE_LIMITS
+wrangler kv:namespace create RATE_LIMITS_WHISPER
 wrangler d1 create whisper
 wrangler r2 bucket create whisper-files
 wrangler queues create whisper-jobs

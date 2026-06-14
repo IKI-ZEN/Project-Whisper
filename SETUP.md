@@ -39,7 +39,7 @@ Run each command once and save the IDs it prints.
 ```bash
 # KV namespaces (sandbox registry + rate limit counters)
 npx wrangler kv:namespace create SANDBOX_REGISTRY
-npx wrangler kv:namespace create RATE_LIMITS
+npx wrangler kv:namespace create RATE_LIMITS_WHISPER
 
 # D1 database (SQLite — audit log, metrics, vault, probes, atlas, pipelines)
 npx wrangler d1 create whisper
@@ -69,9 +69,11 @@ preview_id = "<preview_id from SANDBOX_REGISTRY create>"
 
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "<id from RATE_LIMITS create>"
-preview_id = "<preview_id from RATE_LIMITS create>"
+id = "<id from RATE_LIMITS_WHISPER create>"
+preview_id = "<preview_id from RATE_LIMITS_WHISPER create>"
 ```
+
+> **Note:** The Cloudflare dashboard namespace name is `RATE_LIMITS_WHISPER` (for organisational clarity), but the Worker binding is `RATE_LIMITS` — paste the namespace ID into the `binding = "RATE_LIMITS"` entry.
 
 **D1 database:**
 
@@ -180,7 +182,7 @@ Log in at [dash.cloudflare.com](https://dash.cloudflare.com) and create each res
 
 Create two namespaces:
 - Name: `SANDBOX_REGISTRY` → save the **Namespace ID**
-- Name: `RATE_LIMITS` → save the **Namespace ID**
+- Name: `RATE_LIMITS_WHISPER` → save the **Namespace ID**
 
 Preview IDs: go into each namespace → Settings → copy the **Preview Namespace ID** (used for local `wrangler dev`).
 
@@ -228,8 +230,8 @@ preview_id = "<SANDBOX_REGISTRY preview namespace ID>"
 
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "<RATE_LIMITS namespace ID>"
-preview_id = "<RATE_LIMITS preview namespace ID>"
+id = "<RATE_LIMITS_WHISPER namespace ID>"
+preview_id = "<RATE_LIMITS_WHISPER preview namespace ID>"
 ```
 
 **D1 database:**
