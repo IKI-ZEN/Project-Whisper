@@ -16,12 +16,13 @@ Project Whisper is a multi-tenant AI application platform built on Cloudflare's 
 8. [Assertion Suites](#assertion-suites)
 9. [Evidence Vault](#evidence-vault)
 10. [Chat Environments](#chat-environments)
-11. [Prompt Library (Atlas)](#prompt-library-atlas)
-12. [App State & Storage](#app-state--storage)
-13. [Secure App Tokens](#secure-app-tokens)
-14. [Cost Tracking & Usage](#cost-tracking--usage)
-15. [Rate Limits](#rate-limits)
-16. [Response Envelope](#response-envelope)
+11. [Labs](#labs)
+12. [Prompt Library (Atlas)](#prompt-library-atlas)
+13. [App State & Storage](#app-state--storage)
+14. [Secure App Tokens](#secure-app-tokens)
+15. [Cost Tracking & Usage](#cost-tracking--usage)
+16. [Rate Limits](#rate-limits)
+17. [Response Envelope](#response-envelope)
 
 ---
 
@@ -158,7 +159,7 @@ Receive:
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/sandbox` | List all sandboxes |
+| `GET` | `/api/sandbox` | List all sandboxes. Filter with `?only=apps` (plain chat apps), `?only=envs` (environments), `?only=labs` (labs), or `?only=dashboards` (legacy). |
 | `GET` | `/api/sandbox/{id}` | Fetch config |
 | `PATCH` | `/api/sandbox/{id}` | Update name / description / model / systemPrompt / guardMode / ragEnabled |
 | `GET` | `/api/sandbox/{id}/history` | Conversation history (`?sessionId=...`) |
@@ -166,7 +167,7 @@ Receive:
 | `GET` | `/api/sandbox/{id}/fingerprint` | Config integrity hash + tampered flag |
 | `GET` | `/api/sandbox/{id}/export` | Signed config export (JSON) |
 | `POST` | `/api/sandbox/import` | Restore from export |
-| `POST` | `/api/sandbox/{id}/fork` | Clone config into a new sandbox (empty memory, " (copy)" name suffix) |
+| `POST` | `/api/sandbox/{id}/fork` | Clone config into a new sandbox (empty memory, " (copy)" name suffix). Response includes `appUrl` which resolves to `/env/{id}` for environment forks and `/app/{id}` for plain app forks — type flags (`fromEnv`, `whispererFeatures`) are preserved. |
 | `POST` | `/api/sandbox/{id}/session` | Issue a session token |
 | `DELETE` | `/api/sandbox/{id}` | Delete sandbox |
 
@@ -261,6 +262,7 @@ Generated files are served at `/build/{id}/{filename}`. An SVG thumbnail is gene
 | `GET` | `/api/v2/build/{id}/files` | List generated file names |
 | `GET` | `/api/v2/build/{id}/files/{filename}` | Fetch file content |
 | `GET` | `/api/v2/build/{id}/thumbnail` | Fetch SVG thumbnail |
+| `POST` | `/api/v2/build/{id}/deploy` | Deploy build to Cloudflare Pages (requires `CLOUDFLARE_API_TOKEN`) |
 | `DELETE` | `/api/v2/build/{id}` | Delete build + files |
 
 ---
@@ -890,10 +892,59 @@ Registers the exported config as a new environment. If `SIGNING_SECRET` is confi
 Environments appear in the standard sandbox list with `fromEnv: true`:
 
 ```
-GET /api/sandbox?fromEnv=true
+GET /api/sandbox?only=envs
 ```
 
 A dedicated gallery page is served at `GET /environments`.
+
+---
+
+## Labs
+
+A **Lab** is a multi-model comparison workspace with real-time side-by-side response columns, Jaccard consensus scoring, cost estimation, and conversation history. Labs share the `SandboxDO` primitive and are distinguished by `fromLab: true` in KV metadata.
+
+### Create a Lab
+
+```
+POST /api/environments
+Content-Type: application/json
+
+{
+  "description": "Compare reasoning quality across frontier models",
+  "envType": "general",
+  "envModels": ["anthropic:claude-sonnet-4-6", "openai:gpt-4o", "google:gemini-2.0-flash"],
+  "fromLab": true
+}
+```
+
+Or via the Vibe Builder at `/vibe.html` — select **Lab** mode to get an AI-generated configuration.
+
+The lab is immediately accessible at `GET /lab/{id}`.
+
+### Lab Types
+
+| `envType` | Behaviour in Lab |
+|---|---|
+| `general` | Standard chat comparison |
+| `coding` | Monospace input textarea |
+| `research` | RAG enabled — all columns use `/api/sandbox/{id}/stream` |
+| `structured` | All responses rendered as formatted JSON in a `<pre>` block |
+| `creative` | Temperature floored at 1.0 for creative output |
+| `agent` | Step-by-step reasoning focus |
+| `debate` | Adversarial framing |
+
+### Lab Operations
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/lab/{id}/fork` | Clone lab config into a new lab (empty history, same type + models) |
+| `GET` | `/api/lab/{id}/export` | Export full lab config as JSON |
+| `GET` | `/api/sandbox/{id}` | Fetch config (labs share the sandbox config endpoint) |
+| `PATCH` | `/api/sandbox/{id}` | Update name / description / systemPrompt / temperature / maxTokens |
+| `GET` | `/api/sandbox/{id}/metrics` | Usage metrics (same as sandbox metrics) |
+| `DELETE` | `/api/sandbox/{id}` | Delete lab |
+
+A dedicated gallery page for all labs is served at `GET /lab`.
 
 ---
 

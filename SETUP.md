@@ -39,7 +39,7 @@ Run each command once and save the IDs it prints.
 ```bash
 # KV namespaces (sandbox registry + rate limit counters)
 npx wrangler kv:namespace create SANDBOX_REGISTRY
-npx wrangler kv:namespace create RATE_LIMITS
+npx wrangler kv:namespace create RATE_LIMITS_WHISPER
 
 # D1 database (SQLite — audit log, metrics, vault, probes, atlas, pipelines)
 npx wrangler d1 create whisper
@@ -68,9 +68,9 @@ id = "<id from SANDBOX_REGISTRY create>"
 preview_id = "<preview_id from SANDBOX_REGISTRY create>"
 
 [[kv_namespaces]]
-binding = "RATE_LIMITS"
-id = "<id from RATE_LIMITS create>"
-preview_id = "<preview_id from RATE_LIMITS create>"
+binding = "RATE_LIMITS_WHISPER"
+id = "<id from RATE_LIMITS_WHISPER create>"
+preview_id = "<preview_id from RATE_LIMITS_WHISPER create>"
 ```
 
 **D1 database:**
@@ -132,9 +132,10 @@ The dev server starts at `http://localhost:8787`.
 | `http://localhost:8787/` | Chat |
 | `http://localhost:8787/vibe.html` | Vibe Builder |
 | `http://localhost:8787/tools.html` | AI Workbench |
-| `http://localhost:8787/environments` | Environments Gallery (agentic workspaces) |
-| `http://localhost:8787/lab` | Labs Gallery (multi-model comparison) |
 | `http://localhost:8787/apps` | Apps Gallery |
+| `http://localhost:8787/environments` | Environments Gallery |
+| `http://localhost:8787/lab` | Labs Gallery (multi-model comparison) |
+| `http://localhost:8787/builds` | Builds Gallery (generated apps) |
 | `http://localhost:8787/dashboard` | Dashboard |
 | `http://localhost:8787/api` | API health + endpoint map |
 
@@ -179,7 +180,7 @@ Log in at [dash.cloudflare.com](https://dash.cloudflare.com) and create each res
 
 Create two namespaces:
 - Name: `SANDBOX_REGISTRY` → save the **Namespace ID**
-- Name: `RATE_LIMITS` → save the **Namespace ID**
+- Name: `RATE_LIMITS_WHISPER` → save the **Namespace ID**
 
 Preview IDs: go into each namespace → Settings → copy the **Preview Namespace ID** (used for local `wrangler dev`).
 
@@ -226,9 +227,9 @@ id = "<SANDBOX_REGISTRY namespace ID>"
 preview_id = "<SANDBOX_REGISTRY preview namespace ID>"
 
 [[kv_namespaces]]
-binding = "RATE_LIMITS"
-id = "<RATE_LIMITS namespace ID>"
-preview_id = "<RATE_LIMITS preview namespace ID>"
+binding = "RATE_LIMITS_WHISPER"
+id = "<RATE_LIMITS_WHISPER namespace ID>"
+preview_id = "<RATE_LIMITS_WHISPER preview namespace ID>"
 ```
 
 **D1 database:**
@@ -368,7 +369,7 @@ These require a local Node.js install but are not needed to run or deploy the Wo
 ```bash
 npm install          # install dev deps (wrangler, typescript, tsx)
 npm run type-check   # tsc --noEmit — must exit 0 before committing
-npm test             # 184 unit tests via tsx
+npm test             # 470 unit tests via tsx
 ```
 
 ---
