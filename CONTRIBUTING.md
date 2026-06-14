@@ -62,6 +62,8 @@ wrangler d1 execute whisper --file=./migrations/0009_usage_cost.sql
 wrangler d1 execute whisper --file=./migrations/0010_pipelines_webhooks.sql
 wrangler d1 execute whisper --file=./migrations/0011_env_integration.sql
 wrangler d1 execute whisper --file=./migrations/0012_assertions_atlas_env.sql
+wrangler d1 execute whisper --file=./migrations/0013_error_log.sql
+wrangler d1 execute whisper --file=./migrations/0014_webhook_deliveries.sql
 ```
 
 After running the above, paste the returned `id` / `preview_id` values into the placeholder entries in `wrangler.toml`.
@@ -79,7 +81,7 @@ Email sending requires Cloudflare Email Routing to be enabled on your domain and
 Both must pass before every commit:
 
 ```bash
-npm test             # runs all 184 unit tests (src/**/*.test.ts) via tsx
+npm test             # runs all 470 unit tests (src/**/*.test.ts) via tsx
 npm run type-check   # tsc --noEmit — must also exit 0
 ```
 
@@ -94,7 +96,10 @@ The dev server serves several pages:
 | `http://localhost:8787/` | Chat |
 | `http://localhost:8787/vibe.html` | Vibe Builder |
 | `http://localhost:8787/tools.html` | AI Workbench (Whisperer, probes, vault, etc.) |
-| `http://localhost:8787/environments` | Environments gallery |
+| `http://localhost:8787/apps` | Apps Gallery |
+| `http://localhost:8787/environments` | Environments Gallery |
+| `http://localhost:8787/lab` | Labs Gallery (multi-model comparison) |
+| `http://localhost:8787/builds` | Builds Gallery (generated apps) |
 | `http://localhost:8787/dashboard` | Dashboard |
 
 No build step is needed — all pages are served as static assets or server-rendered by the Worker.
@@ -134,7 +139,7 @@ env.SANDBOX.get(env.SANDBOX.idFromName(sandboxId))
 env.SANDBOX.get(env.SANDBOX.newUniqueId())
 ```
 
-**DO calls use `doFetch()` with the `https://do/` pseudo-protocol.** `doFetch` is exported from `src/routes/sandbox.ts`. Do not construct raw `Request` objects against DO stubs manually.
+**DO calls use `doFetch()` with the `https://do/` pseudo-protocol.** `doFetch` is exported from `src/lib/do.ts`. Do not construct raw `Request` objects against DO stubs manually.
 
 **Use `newId()` from `src/lib/utils.ts` for ID generation** — not `crypto.randomUUID()` directly. This keeps ID generation in one place.
 
